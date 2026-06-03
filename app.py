@@ -15,8 +15,7 @@ def init_db():
     conn = sqlite3.connect('fleet_leads.db')
     c = conn.cursor()
     
-    # STABILIZATION FIX: Removed 'DROP TABLE' so users are never wiped on page refresh.
-    # Tables are created only if they don't already exist.
+    # Tables are created safely only if they do not exist
     c.execute('''CREATE TABLE IF NOT EXISTS users 
                  (username TEXT PRIMARY KEY, password TEXT, name TEXT, role TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS leads 
@@ -89,15 +88,12 @@ if not st.session_state['authenticated']:
                     st.success("Access granted. Loading feed...")
                     st.rerun()
                 else:
-                    st.error("Invalid credentials. Please check your spelling or re-register if your account was cleared during the update.")
+                    st.error("Invalid credentials. Please verify your spelling or re-register your profile.")
                 
     with signup_tab:
         st.markdown("### Register New Dealer Profile")
         new_name = st.text_input("Full Name (e.g., John Doe)", key="reg_name").strip()
-        
-        # Enforcing clean lowercase usernames to prevent case-sensitivity overlap bugs
         new_username = st.text_input("Choose a Username", key="reg_user").strip().lower()
-        
         new_password = st.text_input("Choose a Password", type="password", key="reg_pass")
         chosen_role = st.selectbox("Select Your Position", ["Sales Representative", "Dealer Principal"], key="reg_role")
         security_code = st.text_input("Dealership Authorization Code", type="password", key="reg_code")
@@ -115,19 +111,18 @@ if not st.session_state['authenticated']:
                 conn = sqlite3.connect('fleet_leads.db')
                 c = conn.cursor()
                 
-                # THE FIX: Query the database to explicitly block duplicate usernames
                 c.execute("SELECT username FROM users WHERE username=?", (new_username,))
                 existing_user = c.fetchone()
                 
                 if existing_user:
-                    st.error(f"🛑 The username '@{new_username}' is already registered to a salesperson. Please pick a different unique username.")
+                    st.error(f"🛑 The username '@{new_username}' is already taken. Please pick a different unique username.")
                     conn.close()
                 else:
                     c.execute("INSERT INTO users VALUES (?, ?, ?, ?)", 
                               (new_username, hashlib.sha256(new_password.encode()).hexdigest(), new_name, role_db_value))
                     conn.commit()
                     conn.close()
-                    st.success(f"🎉 Account successfully created for {new_name} as a {chosen_role}! You can now flip to the 'Sign In' tab and log in safely.")
+                    st.success(f"🎉 Account successfully created for {new_name} as a {chosen_role}! Switch to the 'Sign In' tab to log in.")
     st.stop()
 
 # ==========================================
@@ -146,66 +141,4 @@ if st.sidebar.button("Logout"):
 if st.session_state['role'] == 'dealer_principal':
     tab1, tab2, tab3 = st.tabs(["🔥 Available Daily Feed", "💼 My Claimed Accounts", "📊 Dealer Principal Command Overview"])
 else:
-    tab1, tab2 = st.tabs(["🔥 Available Daily Feed (First-Come, First-Served)", "💼 My Claimed Accounts"])
-
-# ---- TAB 1: UNASSIGNED LEADS ----
-with tab1:
-    conn = sqlite3.connect('fleet_leads.db')
-    df_unassigned = pd.read_sql_query("SELECT * FROM leads WHERE status='Unassigned' ORDER BY score DESC", conn)
-    conn.close()
-    
-    if df_unassigned.empty:
-        st.success("All daily corporate leads have been claimed!")
-    else:
-        for idx, row in df_unassigned.iterrows():
-            with st.container():
-                col1, col2, col3 = st.columns([1, 4, 1])
-                with col1:
-                    st.metric(label="Lead Score", value=f"{row['score']}/100")
-                with col2:
-                    st.subheader(f"{row['company']} — {row['location']}")
-                    st.markdown(f"**Target Persona:** {row['target']}")
-                    st.info(f"💡 **Buying Signal:** {row['signal']}")
-                with col3:
-                    st.write(" ")
-                    st.write(" ")
-                    if st.button("Claim Account", key=f"claim_{row['id']}"):
-                        conn = sqlite3.connect('fleet_leads.db')
-                        c = conn.cursor()
-                        c.execute("SELECT status FROM leads WHERE id=?", (row['id'],))
-                        if c.fetchone()[0] == 'Unassigned':
-                            c.execute("UPDATE leads SET status='Claimed', assigned_to=? WHERE id=?", (st.session_state['user'], row['id']))
-                            conn.commit()
-                            st.success(f"Successfully locked {row['company']}!")
-                            conn.close()
-                            st.rerun()
-                        else:
-                            st.error("Too late! Lead already claimed.")
-                            conn.close()
-                st.markdown("---")
-
-# ---- TAB 2: CLAIMED LEADS ----
-with tab2:
-    conn = sqlite3.connect('fleet_leads.db')
-    df_claimed = pd.read_sql_query("SELECT * FROM leads WHERE assigned_to=? AND status='Claimed'", conn, params=(st.session_state['user'],))
-    conn.close()
-    
-    if df_claimed.empty:
-        st.info("You haven't claimed any corporate leads yet today.")
-    else:
-        for idx, row in df_claimed.iterrows():
-            with st.expander(f"🏢 {row['company']} ({row['location']})"):
-                st.markdown(f"**Corporate Target Intelligence:** {row['signal']}")
-                st.markdown("### Operational Actions")
-                
-                note_text = st.text_area("Log Call or Meeting Summary", key=f"note_input_{row['id']}")
-                if st.button("Save Log Entry", key=f"save_{row['id']}"):
-                    if note_text:
-                        conn = sqlite3.connect('fleet_leads.db')
-                        c = conn.cursor()
-                        timestamp_str = datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
-                        c.execute("INSERT INTO lead_notes (lead_id, username, salesperson_name, note_text, timestamp) VALUES (?, ?, ?, ?, ?)",
-                                  (row['id'], st.session_state['user'], st.session_state['name'], note_text, timestamp_str))
-                        conn.commit()
-                        conn.close()
-                        st.
+    tab
