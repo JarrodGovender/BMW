@@ -141,4 +141,4 @@ if st.sidebar.button("Logout"):
 if st.session_state['role'] == 'dealer_principal':
     tab1, tab2, tab3 = st.tabs(["🔥 Available Daily Feed", "💼 My Claimed Accounts", "📊 Dealer Principal Command Overview"])
 else:
-    tab
+    tab1, tab2 = st.tabs(
