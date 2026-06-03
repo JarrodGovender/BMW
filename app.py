@@ -15,11 +15,8 @@ def init_db():
     conn = sqlite3.connect('fleet_leads.db')
     c = conn.cursor()
     
-    # THE FIX: Force drop old users table to clear the error from image_d7ee37.png
-    # This removes all old users so they can sign up again with their chosen roles.
-    c.execute("DROP TABLE IF EXISTS users")
-    
-    # Re-create fresh tables with the updated schema
+    # STABILIZATION FIX: Removed 'DROP TABLE' so users are never wiped on page refresh.
+    # Tables are created only if they don't already exist.
     c.execute('''CREATE TABLE IF NOT EXISTS users 
                  (username TEXT PRIMARY KEY, password TEXT, name TEXT, role TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS leads 
@@ -70,59 +67,67 @@ if not st.session_state['authenticated']:
     auth_tab, signup_tab = st.tabs(["🔒 Sign In", "📝 Create Sales Account"])
     
     with auth_tab:
-        login_username = st.text_input("Username", key="login_user")
+        login_username = st.text_input("Username", key="login_user").strip().lower()
         login_password = st.text_input("Password", type="password", key="login_pass")
         
         if st.button("Login", key="login_btn"):
-            conn = sqlite3.connect('fleet_leads.db')
-            c = conn.cursor()
-            hashed_input = hashlib.sha256(login_password.encode()).hexdigest()
-            c.execute("SELECT name, role FROM users WHERE username=? AND password=?", (login_username, hashed_input))
-            user_match = c.fetchone()
-            conn.close()
-            
-            if user_match:
-                st.session_state['authenticated'] = True
-                st.session_state['user'] = login_username
-                st.session_state['name'] = user_match[0]
-                st.session_state['role'] = user_match[1]
-                st.success("Access granted. Loading feed...")
-                st.rerun()
+            if not login_username or not login_password:
+                st.warning("Please enter both your username and password.")
             else:
-                st.error("Invalid credentials. If you haven't re-registered your account yet, switch tabs above.")
+                conn = sqlite3.connect('fleet_leads.db')
+                c = conn.cursor()
+                hashed_input = hashlib.sha256(login_password.encode()).hexdigest()
+                c.execute("SELECT name, role FROM users WHERE username=? AND password=?", (login_username, hashed_input))
+                user_match = c.fetchone()
+                conn.close()
+                
+                if user_match:
+                    st.session_state['authenticated'] = True
+                    st.session_state['user'] = login_username
+                    st.session_state['name'] = user_match[0]
+                    st.session_state['role'] = user_match[1]
+                    st.success("Access granted. Loading feed...")
+                    st.rerun()
+                else:
+                    st.error("Invalid credentials. Please check your spelling or re-register if your account was cleared during the update.")
                 
     with signup_tab:
         st.markdown("### Register New Dealer Profile")
-        new_name = st.text_input("Full Name (e.g., John Doe)", key="reg_name")
-        new_username = st.text_input("Choose a Username", key="reg_user")
+        new_name = st.text_input("Full Name (e.g., John Doe)", key="reg_name").strip()
+        
+        # Enforcing clean lowercase usernames to prevent case-sensitivity overlap bugs
+        new_username = st.text_input("Choose a Username", key="reg_user").strip().lower()
+        
         new_password = st.text_input("Choose a Password", type="password", key="reg_pass")
-        
-        # THE FIX: Dropdown to pick your role explicitly at registration phase
         chosen_role = st.selectbox("Select Your Position", ["Sales Representative", "Dealer Principal"], key="reg_role")
-        
         security_code = st.text_input("Dealership Authorization Code", type="password", key="reg_code")
         
         if st.button("Create Account", key="signup_btn"):
             if not new_name or not new_username or not new_password:
                 st.warning("Please fill in all profile fields.")
+            elif " " in new_username:
+                st.error("Usernames cannot contain spaces. Use letters or numbers only.")
             elif security_code != "SandtonBMW2026":
                 st.error("Incorrect Dealership Authorization Code.")
             else:
-                # Format role text to match internal app parameters
                 role_db_value = 'dealer_principal' if chosen_role == "Dealer Principal" else 'sales_rep'
                 
                 conn = sqlite3.connect('fleet_leads.db')
                 c = conn.cursor()
+                
+                # THE FIX: Query the database to explicitly block duplicate usernames
                 c.execute("SELECT username FROM users WHERE username=?", (new_username,))
-                if c.fetchone():
-                    st.error("This username is already taken.")
+                existing_user = c.fetchone()
+                
+                if existing_user:
+                    st.error(f"🛑 The username '@{new_username}' is already registered to a salesperson. Please pick a different unique username.")
                     conn.close()
                 else:
                     c.execute("INSERT INTO users VALUES (?, ?, ?, ?)", 
                               (new_username, hashlib.sha256(new_password.encode()).hexdigest(), new_name, role_db_value))
                     conn.commit()
                     conn.close()
-                    st.success(f"🎉 Account created successfully as {chosen_role}! Switch to the 'Sign In' tab to log in.")
+                    st.success(f"🎉 Account successfully created for {new_name} as a {chosen_role}! You can now flip to the 'Sign In' tab and log in safely.")
     st.stop()
 
 # ==========================================
@@ -138,7 +143,6 @@ if st.sidebar.button("Logout"):
     st.session_state['role'] = None
     st.rerun()
 
-# Dynamic Tab Configuration based on Authorization Role
 if st.session_state['role'] == 'dealer_principal':
     tab1, tab2, tab3 = st.tabs(["🔥 Available Daily Feed", "💼 My Claimed Accounts", "📊 Dealer Principal Command Overview"])
 else:
@@ -204,59 +208,4 @@ with tab2:
                                   (row['id'], st.session_state['user'], st.session_state['name'], note_text, timestamp_str))
                         conn.commit()
                         conn.close()
-                        st.success("Activity note successfully saved.")
-                        st.rerun()
-                
-                if st.button("Mark Account as Successfully Converted", key=f"close_{row['id']}"):
-                    conn = sqlite3.connect('fleet_leads.db')
-                    c = conn.cursor()
-                    c.execute("UPDATE leads SET status='Closed' WHERE id=?", (row['id'],))
-                    conn.commit()
-                    conn.close()
-                    st.rerun()
-
-# ---- TAB 3: DEALER PRINCIPAL MANAGEMENT EXCLUSIVE PANEL ----
-if st.session_state['role'] == 'dealer_principal':
-    with tab3:
-        st.header("👑 Dealership Performance & Master Activity Pipeline")
-        st.caption("Real-time team oversight overview")
-        
-        conn = sqlite3.connect('fleet_leads.db')
-        
-        col_m1, col_m2, col_m3 = st.columns(3)
-        total_leads = pd.read_sql_query("SELECT COUNT(*) as cnt FROM leads", conn)['cnt'][0]
-        claimed_leads = pd.read_sql_query("SELECT COUNT(*) as cnt FROM leads WHERE status='Claimed'", conn)['cnt'][0]
-        converted_leads = pd.read_sql_query("SELECT COUNT(*) as cnt FROM leads WHERE status='Closed'", conn)['cnt'][0]
-        
-        col_m1.metric("Total System Scoped Leads", total_leads)
-        col_m2.metric("Active Claims In Progress", claimed_leads)
-        col_m3.metric("Successful Fleet Conversions", converted_leads, delta=f"+{converted_leads} Deals")
-        
-        st.markdown("---")
-        
-        st.subheader("📋 Active Sales Assignments")
-        df_assignments = pd.read_sql_query('''
-            SELECT leads.company, leads.location, leads.target, leads.status, users.name as salesperson 
-            FROM leads 
-            LEFT JOIN users ON leads.assigned_to = users.username 
-            WHERE leads.status != 'Unassigned'
-        ''', conn)
-        
-        if df_assignments.empty:
-            st.info("No corporate leads have been claimed by the sales team yet today.")
-        else:
-            st.dataframe(df_assignments, use_container_width=True)
-            
-        st.markdown("---")
-        
-        st.subheader("💬 Live Sales Activity & Communication Feed")
-        df_master_notes = pd.read_sql_query("SELECT * FROM lead_notes ORDER BY timestamp DESC", conn)
-        conn.close()
-        
-        if df_master_notes.empty:
-            st.info("No outreach interaction logs have been submitted by sales reps yet.")
-        else:
-            for idx, note_row in df_master_notes.iterrows():
-                with st.chat_message("user"):
-                    st.markdown(f"**Salesperson:** {note_row['salesperson_name']} (`@{note_row['username']}`) logged an update at *{note_row['timestamp']}*")
-                    st.write(f"📝 *\"{note_row['note_text']}\"*")
+                        st.
