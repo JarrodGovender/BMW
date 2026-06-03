@@ -15,23 +15,21 @@ def init_db():
     conn = sqlite3.connect('fleet_leads.db')
     c = conn.cursor()
     
-    # 1. Create Tables (Updated with Roles and Notes Tracking)
+    # THE FIX: Force drop old users table to clear the error from image_d7ee37.png
+    # This removes all old users so they can sign up again with their chosen roles.
+    c.execute("DROP TABLE IF EXISTS users")
+    
+    # Re-create fresh tables with the updated schema
     c.execute('''CREATE TABLE IF NOT EXISTS users 
-                 (username TEXT PRIMARY KEY, password TEXT, name TEXT, role TEXT DEFAULT 'sales_rep')''')
+                 (username TEXT PRIMARY KEY, password TEXT, name TEXT, role TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS leads 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, company TEXT, location TEXT, 
                   signal TEXT, target TEXT, score INTEGER, status TEXT, assigned_to TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS lead_notes 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id INTEGER, username TEXT, 
                   salesperson_name TEXT, note_text TEXT, timestamp TEXT)''')
-    
-    # 2. Insert Default Dealer Principal if missing
-    c.execute("SELECT COUNT(*) FROM users WHERE username='principal1'")
-    if c.fetchone()[0] == 0:
-        hashed_dp_pw = hashlib.sha256("SandtonBoss2026".encode()).hexdigest()
-        c.execute("INSERT INTO users VALUES ('principal1', ?, 'Dealer Principal', 'dealer_principal')", (hashed_dp_pw,))
         
-    # 3. Insert mock daily corporate signals if table is empty
+    # Re-populate mock daily corporate signals if table is empty
     c.execute("SELECT COUNT(*) FROM leads")
     if c.fetchone()[0] == 0:
         mock_leads = [
@@ -87,17 +85,21 @@ if not st.session_state['authenticated']:
                 st.session_state['authenticated'] = True
                 st.session_state['user'] = login_username
                 st.session_state['name'] = user_match[0]
-                st.session_state['role'] = user_match[1] # Capturing User Role
+                st.session_state['role'] = user_match[1]
                 st.success("Access granted. Loading feed...")
                 st.rerun()
             else:
-                st.error("Invalid credentials.")
+                st.error("Invalid credentials. If you haven't re-registered your account yet, switch tabs above.")
                 
     with signup_tab:
         st.markdown("### Register New Dealer Profile")
         new_name = st.text_input("Full Name (e.g., John Doe)", key="reg_name")
         new_username = st.text_input("Choose a Username", key="reg_user")
         new_password = st.text_input("Choose a Password", type="password", key="reg_pass")
+        
+        # THE FIX: Dropdown to pick your role explicitly at registration phase
+        chosen_role = st.selectbox("Select Your Position", ["Sales Representative", "Dealer Principal"], key="reg_role")
+        
         security_code = st.text_input("Dealership Authorization Code", type="password", key="reg_code")
         
         if st.button("Create Account", key="signup_btn"):
@@ -106,6 +108,9 @@ if not st.session_state['authenticated']:
             elif security_code != "SandtonBMW2026":
                 st.error("Incorrect Dealership Authorization Code.")
             else:
+                # Format role text to match internal app parameters
+                role_db_value = 'dealer_principal' if chosen_role == "Dealer Principal" else 'sales_rep'
+                
                 conn = sqlite3.connect('fleet_leads.db')
                 c = conn.cursor()
                 c.execute("SELECT username FROM users WHERE username=?", (new_username,))
@@ -113,11 +118,11 @@ if not st.session_state['authenticated']:
                     st.error("This username is already taken.")
                     conn.close()
                 else:
-                    # Standard signups default strictly to 'sales_rep'
-                    c.execute("INSERT INTO users VALUES (?, ?, ?, 'sales_rep')", (new_username, hashlib.sha256(new_password.encode()).hexdigest(), new_name))
+                    c.execute("INSERT INTO users VALUES (?, ?, ?, ?)", 
+                              (new_username, hashlib.sha256(new_password.encode()).hexdigest(), new_name, role_db_value))
                     conn.commit()
                     conn.close()
-                    st.success("🎉 Account created! Switch to 'Sign In'.")
+                    st.success(f"🎉 Account created successfully as {chosen_role}! Switch to the 'Sign In' tab to log in.")
     st.stop()
 
 # ==========================================
@@ -210,7 +215,7 @@ with tab2:
                     conn.close()
                     st.rerun()
 
-# ---- THE FIX: TAB 3 (DEALER PRINCIPAL MANAGEMENT EXCLUSIVE PANEL) ----
+# ---- TAB 3: DEALER PRINCIPAL MANAGEMENT EXCLUSIVE PANEL ----
 if st.session_state['role'] == 'dealer_principal':
     with tab3:
         st.header("👑 Dealership Performance & Master Activity Pipeline")
@@ -218,7 +223,6 @@ if st.session_state['role'] == 'dealer_principal':
         
         conn = sqlite3.connect('fleet_leads.db')
         
-        # 1. Analytical Breakdown Grid
         col_m1, col_m2, col_m3 = st.columns(3)
         total_leads = pd.read_sql_query("SELECT COUNT(*) as cnt FROM leads", conn)['cnt'][0]
         claimed_leads = pd.read_sql_query("SELECT COUNT(*) as cnt FROM leads WHERE status='Claimed'", conn)['cnt'][0]
@@ -230,7 +234,6 @@ if st.session_state['role'] == 'dealer_principal':
         
         st.markdown("---")
         
-        # 2. Master Table: Who Has What Account
         st.subheader("📋 Active Sales Assignments")
         df_assignments = pd.read_sql_query('''
             SELECT leads.company, leads.location, leads.target, leads.status, users.name as salesperson 
@@ -246,7 +249,6 @@ if st.session_state['role'] == 'dealer_principal':
             
         st.markdown("---")
         
-        # 3. Live Master Audit Feed of Every Note Logged
         st.subheader("💬 Live Sales Activity & Communication Feed")
         df_master_notes = pd.read_sql_query("SELECT * FROM lead_notes ORDER BY timestamp DESC", conn)
         conn.close()
