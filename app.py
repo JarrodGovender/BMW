@@ -21,12 +21,6 @@ def init_db():
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, company TEXT, location TEXT, 
                   signal TEXT, target TEXT, score INTEGER, status TEXT, assigned_to TEXT)''')
     
-    # Insert a default salesperson if table is empty
-    c.execute("SELECT COUNT(*) FROM users")
-    if c.fetchone()[0] == 0:
-        hashed_pw = hashlib.sha256("Sandton2026".encode()).hexdigest()
-        c.execute("INSERT INTO users VALUES ('sales1', ?, 'Jarrod Govender')", (hashed_pw,))
-        
     # Insert mock daily corporate signals if table is empty
     c.execute("SELECT COUNT(*) FROM leads")
     if c.fetchone()[0] == 0:
@@ -61,27 +55,65 @@ if 'authenticated' not in st.session_state:
     st.session_state['name'] = None
 
 if not st.session_state['authenticated']:
-    st.title("🏢 BMW Sandton Fleet Platform Login")
-    st.caption("Standalone MVP Authentication Gateway")
+    st.title("🏢 BMW Sandton Fleet Platform Gateway")
+    st.caption("Standalone Account Access & Registration")
     
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+    # Created tabs to separate logging in and signing up cleanly
+    auth_tab, signup_tab = st.tabs(["🔒 Sign In", "📝 Create Sales Account"])
     
-    if st.button("Login"):
-        conn = sqlite3.connect('fleet_leads.db')
-        c = conn.cursor()
-        hashed_input = hashlib.sha256(password.encode()).hexdigest()
-        c.execute("SELECT name FROM users WHERE username=? AND password=?", (username, hashed_input))
-        user_match = c.fetchone()
-        conn.close()
+    # --- SIGN IN LOGIC ---
+    with auth_tab:
+        login_username = st.text_input("Username", key="login_user")
+        login_password = st.text_input("Password", type="password", key="login_pass")
         
-        if user_match:
-            st.session_state['authenticated'] = True
-            st.session_state['user'] = username
-            st.session_state['name'] = user_match[0]
-            st.rerun()
-        else:
-            st.error("Invalid Username or Password. Please check your credentials.")
+        if st.button("Login", key="login_btn"):
+            conn = sqlite3.connect('fleet_leads.db')
+            c = conn.cursor()
+            # Simple, highly secure MD5/SHA256 string matching for our database
+            hashed_input = hashlib.sha256(login_password.encode()).hexdigest()
+            c.execute("SELECT name FROM users WHERE username=? AND password=?", (login_username, hashed_input))
+            user_match = c.fetchone()
+            conn.close()
+            
+            if user_match:
+                st.session_state['authenticated'] = True
+                st.session_state['user'] = login_username
+                st.session_state['name'] = user_match[0]
+                st.success("Access granted. Loading feed...")
+                st.rerun()
+            else:
+                st.error("Invalid Username or Password. If you haven't created an account yet, click the 'Create Sales Account' tab above.")
+                
+    # --- SIGN UP LOGIC (THE FIX) ---
+    with signup_tab:
+        st.markdown("### Register New Dealer Profile")
+        new_name = st.text_input("Full Name (e.g., John Doe)", key="reg_name")
+        new_username = st.text_input("Choose a Username (Lowercase, no spaces)", key="reg_user")
+        new_password = st.text_input("Choose a Password", type="password", key="reg_pass")
+        
+        # Security invitation code to prevent random internet traffic from registering
+        security_code = st.text_input("Dealership Authorization Code", type="password", key="reg_code", help="Enter the secret key to clear account setup")
+        
+        if st.button("Create Account", key="signup_btn"):
+            if not new_name or not new_username or not new_password:
+                st.warning("Please fill in all profile fields.")
+            elif security_code != "SandtonBMW2026":
+                st.error("Incorrect Dealership Authorization Code. Account creation rejected.")
+            else:
+                conn = sqlite3.connect('fleet_leads.db')
+                c = conn.cursor()
+                # Verify username doesn't already exist
+                c.execute("SELECT username FROM users WHERE username=?", (new_username,))
+                if c.fetchone():
+                    st.error("This username is already taken by another sales rep.")
+                    conn.close()
+                else:
+                    # Securely hash the password string before inserting it into the SQL file
+                    hashed_new_pw = hashlib.sha256(new_password.encode()).hexdigest()
+                    c.execute("INSERT INTO users VALUES (?, ?, ?)", (new_username, hashed_new_pw, new_name))
+                    conn.commit()
+                    conn.close()
+                    st.success("🎉 Account created successfully! Switch to the 'Sign In' tab above to access your dashboard.")
     st.stop()
 
 # ==========================================
@@ -121,11 +153,9 @@ with tab1:
                 with col3:
                     st.write(" ")
                     st.write(" ")
-                    # Claim Button using pessimistic-style validation
                     if st.button("Claim Account", key=f"claim_{row['id']}"):
                         conn = sqlite3.connect('fleet_leads.db')
                         c = conn.cursor()
-                        # Verify the row status inside an isolated check
                         c.execute("SELECT status FROM leads WHERE id=?", (row['id'],))
                         current_status = c.fetchone()[0]
                         
@@ -155,7 +185,6 @@ with tab2:
                 st.markdown(f"**Corporate Target Intelligence:** {row['signal']}")
                 st.markdown("### Operational Actions")
                 
-                # Activity Tracking Input Box
                 note = st.text_area("Log Call or Meeting Summary", key=f"note_{row['id']}")
                 if st.button("Save Log Entry", key=f"save_{row['id']}"):
                     st.success(f"Activity note successfully saved for {row['company']}.")
