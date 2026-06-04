@@ -15,7 +15,8 @@ SAST = pytz.timezone('Africa/Johannesburg')
 @st.cache_resource
 def get_db_engine():
     db_secrets = st.secrets["connections"]["postgresql"]
-    connection_url = f"postgresql://{db_secrets['username']}:{db_secrets['password']}@{db_secrets['host']}:{db_secrets['port']}/{db_secrets['database']}"
+    # Explicit connection URL mapping for cloud database instances
+    connection_url = f"postgresql://{db_secrets['username']}:{db_secrets['password']}@{db_secrets['host']}:{db_secrets['port']}/{db_secrets['database']}?sslmode=require"
     return create_engine(connection_url, pool_pre_ping=True)
 
 def init_production_db():
