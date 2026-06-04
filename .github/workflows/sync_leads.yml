@@ -2,8 +2,8 @@ name: Hourly Gauteng Lead Ingest Pipeline
 
 on:
   schedule:
-    - cron: '0 4 * * *'
-  workflow_dispatch:
+    - cron: '0 4 * * *'  # Executes precisely at 06:00 AM South African Standard Time every morning
+  workflow_dispatch:     # Allows manually triggering via the button click
 
 jobs:
   scrape_and_inject:
@@ -23,6 +23,6 @@ jobs:
 
       - name: Execute Scraping Pipeline Run
         env:
-          SUPABASE_KEY: "YOUR_SUPABASE_ANON_OR_SERVICE_ROLE_KEY"
+          SUPABASE_KEY: "sb_publishable_9C4lD6aJd1h9cIq0SqVanA_6Yz_mvs_"
         run: |
           python scraper.py
