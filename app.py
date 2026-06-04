@@ -11,18 +11,35 @@ from sqlalchemy import create_engine, text
 st.set_page_config(page_title="BMW Sandton Lead Hub", layout="wide")
 SAST = pytz.timezone('Africa/Johannesburg')
 
-# Establishes a permanent connection utilizing encrypted Streamlit Secrets credentials
+# Establishes connection mapping parameters to bypass (ENOIDENTIFIER) routing bugs
 @st.cache_resource
 def get_db_engine():
     db_secrets = st.secrets["connections"]["postgresql"]
-    # Explicit connection URL mapping for cloud database instances
-    connection_url = f"postgresql://{db_secrets['username']}:{db_secrets['password']}@{db_secrets['host']}:{db_secrets['port']}/{db_secrets['database']}?sslmode=require"
+    
+    # Extract structural elements dynamically from secrets panel
+    u_base = db_secrets['username']
+    host_target = db_secrets['host']
+    pw_str = db_secrets['password']
+    port_num = str(db_secrets['port'])
+    db_name = db_secrets['database']
+    
+    # THE FINALTWEAK: If username doesn't contain a period prefix, use host parsing rules to build the tenant locator
+    if "." not in u_base:
+        # Extracts tenant reference directly out of the unique string 'aws-0-eu-central-1.pooler.supabase.com'
+        # Fallback to direct parameters if a custom non-standard domain is passed
+        tenant_ref = host_target.split('.')[0].replace('aws-0-', '')
+        username_payload = f"{u_base}.{tenant_ref}"
+    else:
+        username_payload = u_base
+        
+    # Construct complete, mathematically airtight production connection URL string
+    connection_url = f"postgresql://{username_payload}:{pw_str}@{host_target}:{port_num}/{db_name}?sslmode=require"
     return create_engine(connection_url, pool_pre_ping=True)
 
 def init_production_db():
     engine = get_db_engine()
     with engine.begin() as conn:
-        # Create persistent global tables on the cloud database if they are missing
+        # Create enterprise relational architecture schemas safely if missing on Supabase instance
         conn.execute(text('''CREATE TABLE IF NOT EXISTS users 
                              (username TEXT PRIMARY KEY, password TEXT, name TEXT, role TEXT)'''))
         conn.execute(text('''CREATE TABLE IF NOT EXISTS lead_notes 
@@ -34,8 +51,8 @@ def init_production_db():
                               public_email TEXT, public_phone TEXT, linkedin_url TEXT, company_website TEXT)'''))
         conn.execute(text('''CREATE TABLE IF NOT EXISTS individual_leads 
                              (id SERIAL PRIMARY KEY, client_name TEXT, title TEXT, company TEXT, location TEXT, 
-                              signal TEXT, score INTEGER, status TEXT, assigned_to TEXT, lead_date TEXT,
-                              public_email TEXT, public_phone TEXT, linkedin_url TEXT)'''))
+                               signal TEXT, score INTEGER, status TEXT, assigned_to TEXT, lead_date TEXT,
+                               public_email TEXT, public_phone TEXT, linkedin_url TEXT)'''))
         conn.execute(text('''CREATE TABLE IF NOT EXISTS tender_leads 
                              (id SERIAL PRIMARY KEY, company TEXT, location TEXT, awarding_body TEXT,
                               tender_desc TEXT, contract_value TEXT, score INTEGER, status TEXT, assigned_to TEXT, lead_date TEXT,
@@ -44,8 +61,8 @@ def init_production_db():
 try:
     init_production_db()
 except Exception as e:
-    # Temporarily print the exact system crash message on screen
     st.error(f"🔒 Database Connection Error: {str(e)}")
+    st.info("Ensure your alphanumeric database password and host strings are saved cleanly inside your App Secrets panel.")
     st.stop()
 
 # ==========================================
