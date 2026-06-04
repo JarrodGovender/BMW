@@ -3,7 +3,8 @@ import pandas as pd
 import hashlib
 from datetime import datetime
 import pytz
-from sqlalchemy import URL
+from sqlalchemy import create_engine
+from sqlalchemy.engine import URL
 
 # ==========================================
 # 1. INITIALIZATION & PRODUCTION DB CONNECTION
@@ -14,6 +15,10 @@ SAST = pytz.timezone('Africa/Johannesburg')
 # Establishes a permanent connection utilizing encrypted Streamlit Secrets credentials
 @st.cache_resource
 def get_db_engine():
+    # Explicitly import both components to resolve the naming error completely
+    from sqlalchemy import create_engine
+    from sqlalchemy.engine import URL
+    
     db_secrets = st.secrets["connections"]["postgresql"]
     
     # Build a structured connection object to guarantee tenant resolution
