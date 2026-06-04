@@ -2,18 +2,18 @@ name: Hourly Gauteng Lead Ingest Pipeline
 
 on:
   schedule:
-    - cron: '0 4 * * *'  # Executes precisely at 06:00 AM South African Standard Time every morning
-  workflow_dispatch:     # Allows manually triggering via the button click
+    - cron: '0 4 * * *'
+  workflow_dispatch:
 
 jobs:
   scrape_and_inject:
     runs-on: ubuntu-latest
     steps:
       - name: Codebase Extraction
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python Environment
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
