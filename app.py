@@ -3,7 +3,7 @@ import pandas as pd
 import hashlib
 from datetime import datetime
 import pytz
-from sqlalchemy import create_engine, text
+from sqlalchemy import URL
 
 # ==========================================
 # 1. INITIALIZATION & PRODUCTION DB CONNECTION
@@ -16,14 +16,16 @@ SAST = pytz.timezone('Africa/Johannesburg')
 def get_db_engine():
     db_secrets = st.secrets["connections"]["postgresql"]
     
-    username = db_secrets['username']
-    password = db_secrets['password']
-    host = db_secrets['host']
-    port = str(db_secrets['port'])
-    database = db_secrets['database']
-    
-    # Standard connection URL mapping ensuring absolute cloud synchronization
-    connection_url = f"postgresql://{username}:{password}@{host}:{port}/{database}?sslmode=require"
+    # Build a structured connection object to guarantee tenant resolution
+    connection_url = URL.create(
+        drivername="postgresql+psycopg2",
+        username=db_secrets['username'],
+        password=db_secrets['password'],
+        host=db_secrets['host'],
+        port=int(db_secrets['port']),
+        database=db_secrets['database'],
+        query={"sslmode": "require"}
+    )
     return create_engine(connection_url, pool_pre_ping=True)
 
 def init_production_db():
