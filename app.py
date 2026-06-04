@@ -32,8 +32,7 @@ def init_db():
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, client_name TEXT, title TEXT, company TEXT, location TEXT, 
                   signal TEXT, score INTEGER, status TEXT, assigned_to TEXT)''')
         
-    # THE FIX: Dynamically alter existing tables if the 'lead_date' column is missing 
-    # This prevents the pandas.errors.DatabaseError from image_4ed727.png
+    # Dynamically alter existing tables if the 'lead_date' column is missing 
     try:
         c.execute("SELECT lead_date FROM leads LIMIT 1")
     except sqlite3.OperationalError:
@@ -216,4 +215,119 @@ with tab1:
                     st.markdown("---")
                     
     else: # Individual Selection Panel
-        df_unassigned_ind =
+        # FIXED LINE 219: Re-established complete pandas SQL query assignment
+        df_unassigned_ind = pd.read_sql_query("SELECT * FROM individual_leads WHERE status='Unassigned' AND lead_date=? ORDER BY score DESC", conn, params=(filter_date_str,))
+        conn.close()
+        
+        if df_unassigned_ind.empty:
+            st.info(f"No new unassigned individual leads found generated on {filter_date_str}.")
+        else:
+            for idx, row in df_unassigned_ind.iterrows():
+                with st.container():
+                    col1, col2, col3 = st.columns([1, 4, 1])
+                    with col1:
+                        st.metric(label="Score", value=f"{row['score']}/100")
+                    with col2:
+                        st.subheader(f"Prospect: {row['client_name']}")
+                        st.markdown(f"**Position:** {row['title']} at *{row['company']}* ({row['location']}) | 📅 *Generated: {row['lead_date']}*")
+                        st.info(f"💎 **Growth/HNW Signal:** {row['signal']}")
+                    with col3:
+                        st.write(" ")
+                        st.write(" ")
+                        if st.button("Claim Client Lead", key=f"claim_ind_{row['id']}"):
+                            conn = sqlite3.connect('fleet_leads.db')
+                            with conn:
+                                conn.execute("UPDATE individual_leads SET status='Claimed', assigned_to=? WHERE id=?", (st.session_state['user'], row['id']))
+                            st.success("Individual lead claimed!")
+                            st.rerun()
+                    st.markdown("---")
+
+# ---- TAB 2: CLAIMED LEADS INTERACTION PANELS ----
+with tab2:
+    conn = sqlite3.connect('fleet_leads.db')
+    my_corp = pd.read_sql_query("SELECT * FROM leads WHERE assigned_to=? AND status='Claimed'", conn, params=(st.session_state['user'],))
+    my_ind = pd.read_sql_query("SELECT * FROM individual_leads WHERE assigned_to=? AND status='Claimed'", conn, params=(st.session_state['user'],))
+    conn.close()
+    
+    st.subheader("🏢 My Claimed Corporate Fleet Accounts")
+    if my_corp.empty:
+        st.caption("No active corporate fleet claims.")
+    else:
+        for idx, row in my_corp.iterrows():
+            with st.expander(f"Company: {row['company']} ({row['location']})"):
+                st.write(f"**Signal Details:** {row['signal']}")
+                note_text = st.text_area("Log Corporate Outreach Note", key=f"note_corp_{row['id']}")
+                if st.button("Save Fleet Note", key=f"save_c_{row['id']}"):
+                    if note_text:
+                        conn = sqlite3.connect('fleet_leads.db')
+                        timestamp_str = datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
+                        conn.execute("INSERT INTO lead_notes (lead_id, lead_type, username, salesperson_name, note_text, timestamp) VALUES (?, 'corporate', ?, ?, ?, ?)",
+                                     (row['id'], st.session_state['user'], st.session_state['name'], note_text, timestamp_str))
+                        conn.commit()
+                        conn.close()
+                        st.success("Note saved.")
+                        st.rerun()
+                if st.button("Mark Fleet Converted", key=f"close_c_{row['id']}"):
+                    conn = sqlite3.connect('fleet_leads.db')
+                    conn.execute("UPDATE leads SET status='Closed' WHERE id=?", (row['id'],))
+                    conn.commit()
+                    conn.close()
+                    st.rerun()
+
+    st.markdown("---")
+    st.subheader("🚗 My Claimed Individual Private Client Accounts")
+    if my_ind.empty:
+        st.caption("No active individual private client claims.")
+    else:
+        for idx, row in my_ind.iterrows():
+            with st.expander(f"Prospect: {row['client_name']} — {row['title']} at {row['company']}"):
+                st.write(f"**Signal Details:** {row['signal']}")
+                note_text_ind = st.text_area("Log Private Client Outreach Note", key=f"note_ind_{row['id']}")
+                if st.button("Save Client Note", key=f"save_i_{row['id']}"):
+                    if note_text_ind:
+                        conn = sqlite3.connect('fleet_leads.db')
+                        timestamp_str = datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
+                        conn.execute("INSERT INTO lead_notes (lead_id, lead_type, username, salesperson_name, note_text, timestamp) VALUES (?, 'individual', ?, ?, ?, ?)",
+                                     (row['id'], st.session_state['user'], st.session_state['name'], note_text_ind, timestamp_str))
+                        conn.commit()
+                        conn.close()
+                        st.success("Note saved.")
+                        st.rerun()
+                if st.button("Mark Sale Won 🔑", key=f"close_i_{row['id']}"):
+                    conn = sqlite3.connect('fleet_leads.db')
+                    c = conn.cursor()
+                    c.execute("UPDATE individual_leads SET status='Closed' WHERE id=?", (row['id'],))
+                    conn.commit()
+                    conn.close()
+                    st.rerun()
+
+# ---- TAB 3: DEALER PRINCIPAL MANAGEMENT OVERVIEW ----
+if st.session_state['role'] == 'dealer_principal':
+    with tab3:
+        st.header("👑 Dealership Performance & Master Activity Pipeline")
+        
+        conn = sqlite3.connect('fleet_leads.db')
+        
+        col_m1, col_m2, col_m3 = st.columns(3)
+        c_leads = pd.read_sql_query("SELECT COUNT(*) as cnt FROM leads", conn)['cnt'][0]
+        i_leads = pd.read_sql_query("SELECT COUNT(*) as cnt FROM individual_leads", conn)['cnt'][0]
+        
+        c_closed = pd.read_sql_query("SELECT COUNT(*) as cnt FROM leads WHERE status='Closed'", conn)['cnt'][0]
+        i_closed = pd.read_sql_query("SELECT COUNT(*) as cnt FROM individual_leads WHERE status='Closed'", conn)['cnt'][0]
+        
+        col_m1.metric("Total Tracked Opportunities", c_leads + i_leads)
+        col_m2.metric("Fleet Conversions (B2B)", c_closed)
+        col_m3.metric("Private Deliveries (B2C)", i_closed, delta=f"+{c_closed + i_closed} Total Units")
+        
+        st.markdown("---")
+        st.subheader("💬 Live Master Communications Audit Log")
+        df_master_notes = pd.read_sql_query("SELECT * FROM lead_notes ORDER BY timestamp DESC", conn)
+        conn.close()
+        
+        if df_master_notes.empty:
+            st.info("No sales rep communication activity has been logged today yet.")
+        else:
+            for idx, note_row in df_master_notes.iterrows():
+                with st.chat_message("user"):
+                    st.markdown(f"**{note_row['salesperson_name']}** (`@{note_row['username']}`) handled a **{note_row['lead_type'].upper()}** profile at *{note_row['timestamp']}*")
+                    st.write(f"📝 *\"{note_row['note_text']}\"*")
