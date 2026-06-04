@@ -43,7 +43,8 @@ def init_production_db():
 try:
     init_production_db()
 except Exception as e:
-    st.error("🔒 Database Connection Error: {str(e)} ")
+    # Temporarily print the exact system crash message on screen
+    st.error(f"🔒 Database Connection Error: {str(e)}")
     st.stop()
 
 # ==========================================
