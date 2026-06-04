@@ -1,62 +1,103 @@
 import os
-import sqlite3
-import requests
-from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
-from sqlalchemy import create_engine, text
+from supabase import create_client
 
 SAST = pytz.timezone('Africa/Johannesburg')
 today_str = datetime.now(SAST).strftime('%Y-%m-%d')
 
-# Configure database link inside runner environment
-DB_URL = os.environ.get("DATABASE_URL")
-if not DB_URL:
-    print("❌ ERROR: DATABASE_URL environment variable is missing.")
+SB_URL = "https://ofvsqtdoezesycsstkkh.supabase.co"
+SB_KEY = os.environ.get("SUPABASE_KEY")
+
+if not SB_KEY:
+    print("❌ ERROR: SUPABASE_KEY environment variable is missing.")
     exit(1)
 
-engine = create_engine(DB_URL)
+supabase = create_client(SB_URL, SB_KEY)
 
 def run_scrapers():
-    print(f"🚀 Initializing Automated Gauteng Scraping Sequence: {today_str}")
+    print(f"🚀 Initializing Automated Gauteng API Ingest: {today_str}")
     
-    # ==========================================
-    # WORKER VECTOR A: AUTOMATED JSE SENS SCRAPER
-    # ==========================================
-    print("📡 Querying live corporate market disclosures...")
-    # Production note: Hooking directly to public news feeds or financial RSS wrappers
-    # Here is where the programmatic extraction parses incoming strings:
+    # 🏢 Vector A: JSE Corporate Feed (Omitting 'id' and 'status' to let Supabase defaults handle them)
     live_sens_records = [
-        ("Discovery Limited", "Sandton, Johannesburg", "JSE SENS Announcement: Operational structural adjustments. Consolidating field consulting units into a unified Gauteng regional hub, generating travel fleet demand.", "Fleet Procurement Manager", 93, "procurement@discovery.co.za", "+27 11 529 2888", "https://linkedin.com/company/discovery-limited", "https://discovery.co.za"),
-        ("Sasol Limited", "Rosebank, Johannesburg", "JSE SENS Announcement: Capital allocation approval for clean-energy logistics expansion along the Witwatersrand corridor.", "Supply Chain Director", 90, "fleet.services@sasol.com", "+27 11 441 3111", "https://linkedin.com/company/sasol", "https://sasol.com")
+        {
+            "company": "Discovery Limited", 
+            "location": "Sandton, Johannesburg", 
+            "signal": "JSE SENS Announcement: Operational structural adjustments. Consolidating field consulting units into a unified Gauteng regional hub, generating travel fleet demand.", 
+            "target": "Fleet Procurement Manager", 
+            "score": 93, 
+            "lead_date": today_str, 
+            "public_email": "procurement@discovery.co.za", 
+            "public_phone": "+27 11 529 2888", 
+            "linkedin_url": "https://linkedin.com/company/discovery-limited", 
+            "company_website": "https://discovery.co.za"
+        },
+        {
+            "company": "Sasol Limited", 
+            "location": "Rosebank, Johannesburg", 
+            "signal": "JSE SENS Announcement: Capital allocation approval for clean-energy logistics expansion along the Witwatersrand corridor.", 
+            "target": "Supply Chain Director", 
+            "score": 90, 
+            "lead_date": today_str, 
+            "public_email": "fleet.services@sasol.com", 
+            "public_phone": "+27 11 441 3111", 
+            "linkedin_url": "https://linkedin.com/company/sasol", 
+            "company_website": "https://sasol.com"
+        }
     ]
     
-    with engine.begin() as conn:
-        for item in live_sens_records:
-            exists = conn.execute(text("SELECT COUNT(*) FROM leads WHERE company=:c AND signal=:s"), {"c": item[0], "s": item[2]}).scalar()
-            if exists == 0:
-                conn.execute(text('''INSERT INTO leads (company, location, signal, target, score, status, assigned_to, lead_date, public_email, public_phone, linkedin_url, company_website) 
-                                     VALUES (:company, :loc, :sig, :tar, :score, 'Unassigned', None, :d, :em, :ph, :li, :web)'''),
-                             {"company": item[0], "loc": item[1], "sig": item[2], "tar": item[3], "score": item[4], "d": today_str, "em": item[5], "ph": item[6], "li": item[7], "web": item[8]})
-                print(f"✅ Ingested Corporate Lead: {item[0]}")
+    print("📡 Syncing Corporate Fleet Table...")
+    for row in live_sens_records:
+        try:
+            check = supabase.table("leads").select("company").eq("company", row["company"]).eq("signal", row["signal"]).execute()
+            if not check.data:
+                supabase.table("leads").insert(row).execute()
+                print(f"✅ Ingested Corporate Lead: {row['company']}")
+            else:
+                print(f"ℹ️ Lead already exists for: {row['company']}")
+        except Exception as error:
+            print(f"⚠️ Error processing corporate row for {row['company']}: {str(error)}")
 
-    # ==========================================
-    # WORKER VECTOR B: GOVERNMENT TENDER AWARDS
-    # ==========================================
-    print("🏛️ Scraping National eTender and provincial procurement channels...")
+    # 🏛️ Vector B: Government Tenders
     mock_tenders = [
-        ("Siza Infrastructure Ltd", "Midrand Hub, Johannesburg", "Gauteng Dept of Roads & Transport", "Awarded contract for Phase 2 provincial highway arterial maintenance. Immediate vehicle onboarding footprint required.", "R 42,500,000", 95, "logistics@sizainfra.co.za", "+27 11 555 0943", "https://linkedin.com/company/siza-infrastructure", "https://sizainfra.co.za"),
-        ("Mokoena Security Force", "Pretoria Central", "City of Tshwane Municipality", "Awarded regional critical infrastructure guarding contract. Operational footprint scaling up across 14 municipal sites.", "R 18,900,000", 91, "tenders@mokoenasec.co.za", "+27 12 555 0115", "https://linkedin.com/company/mokoena-security", "https://mokoenasec.co.za")
+        {
+            "company": "Siza Infrastructure Ltd", 
+            "location": "Midrand Hub, Johannesburg", 
+            "awarding_body": "Gauteng Dept of Roads & Transport", 
+            "tender_desc": "Awarded contract for Phase 2 provincial highway arterial maintenance. Immediate vehicle onboarding footprint required.", 
+            "contract_value": "R 42,500,000", 
+            "score": 95, 
+            "lead_date": today_str, 
+            "public_email": "logistics@sizainfra.co.za", 
+            "public_phone": "+27 11 555 0943", 
+            "linkedin_url": "https://linkedin.com/company/siza-infrastructure", 
+            "company_website": "https://sizainfra.co.za"
+        },
+        {"company": "Mokoena Security Force", 
+         "location": "Pretoria Central", 
+         "awarding_body": "City of Tshwane Municipality", 
+         "tender_desc": "Awarded regional critical infrastructure guarding contract. Operational footprint scaling up across 14 municipal sites.", 
+         "contract_value": "R 18,900,000", 
+         "score": 91, 
+         "lead_date": today_str, 
+         "public_email": "tenders@mokoenasec.co.za", 
+         "public_phone": "+27 12 555 0115", 
+         "linkedin_url": "https://linkedin.com/company/mokoena-security", 
+         "company_website": "https://mokoenasec.co.za"
+        }
     ]
     
-    with engine.begin() as conn:
-        for tender in mock_tenders:
-            exists = conn.execute(text("SELECT COUNT(*) FROM tender_leads WHERE company=:c AND tender_desc=:t"), {"c": tender[0], "t": tender[3]}).scalar()
-            if exists == 0:
-                conn.execute(text('''INSERT INTO tender_leads (company, location, awarding_body, tender_desc, contract_value, score, status, assigned_to, lead_date, public_email, public_phone, linkedin_url, company_website) 
-                                     VALUES (:c, :l, :ab, :td, :cv, :s, 'Unassigned', None, :d, :em, :ph, :li, :web)'''),
-                             {"c": tender[0], "l": tender[1], "ab": tender[2], "td": tender[3], "cv": tender[4], "s": tender[5], "d": today_str, "em": tender[6], "ph": tender[7], "li": tender[8], "web": tender[9]})
-                print(f"✅ Ingested Government Tender Award: {tender[0]}")
+    print("📡 Syncing Tender Leads Table...")
+    for tender in mock_tenders:
+        try:
+            check = supabase.table("tender_leads").select("company").eq("company", tender["company"]).eq("tender_desc", tender["tender_desc"]).execute()
+            if not check.data:
+                supabase.table("tender_leads").insert(tender).execute()
+                print(f"✅ Ingested Government Tender Award: {tender['company']}")
+            else:
+                print(f"ℹ️ Tender already exists for: {tender['company']}")
+        except Exception as error:
+            print(f"⚠️ Error processing tender row for {tender['company']}: {str(error)}")
 
 if __name__ == "__main__":
     run_scrapers()
