@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 
 # ==========================================
@@ -15,42 +15,48 @@ def init_db():
     conn = sqlite3.connect('fleet_leads.db')
     c = conn.cursor()
     
-    # 1. Create basic system tables safely if they do not exist
+    # 1. System structural tables
     c.execute('''CREATE TABLE IF NOT EXISTS users 
                  (username TEXT PRIMARY KEY, password TEXT, name TEXT, role TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS lead_notes 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id INTEGER, lead_type TEXT, username TEXT, 
                   salesperson_name TEXT, note_text TEXT, timestamp TEXT)''')
     
-    # 2. Pipeline Table A: Corporate Fleet Leads (B2B)
+    # 2. Pipeline Table A: Corporate Fleet Leads (Added lead_date)
     c.execute('''CREATE TABLE IF NOT EXISTS leads 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, company TEXT, location TEXT, 
-                  signal TEXT, target TEXT, score INTEGER, status TEXT, assigned_to TEXT)''')
+                  signal TEXT, target TEXT, score INTEGER, status TEXT, assigned_to TEXT, lead_date TEXT)''')
                   
-    # 3. Pipeline Table B: Individual Luxury Leads (B2C)
+    # 3. Pipeline Table B: Individual Luxury Leads (Added lead_date)
     c.execute('''CREATE TABLE IF NOT EXISTS individual_leads 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, client_name TEXT, title TEXT, company TEXT, location TEXT, 
-                  signal TEXT, score INTEGER, status TEXT, assigned_to TEXT)''')
+                  signal TEXT, score INTEGER, status TEXT, assigned_to TEXT, lead_date TEXT)''')
         
-    # Re-populate corporate leads if empty
+    # Dynamically generate dates relative to the active running session day
+    today_str = datetime.now(SAST).strftime('%Y-%m-%d')
+    yesterday_str = (datetime.now(SAST) - timedelta(days=1)).strftime('%Y-%m-%d')
+    
+    # Re-populate corporate fleet leads if empty (Expanded to entire Gauteng region)
     c.execute("SELECT COUNT(*) FROM leads")
     if c.fetchone()[0] == 0:
         mock_corporate = [
-            ("Vanguard Financial Group", "Sandton Central", "Office Hub Consolidation: Moving 220 executives to a single facility. ESG mandate requires high-end PHEV/EV corporate fleet updates.", "Procurement Director", 96, "Unassigned", None),
-            ("Apex Logistics Solutions", "Linbro Park", "Hiring Velocity: Scaled up 4 regional client managers requiring premium corporate travel vehicles.", "Fleet Supervisor", 91, "Unassigned", None),
-            ("Siza Infrastructure", "Midrand Hub", "Capital Expansion: Awarded massive logistics contract. Expanding executive oversight vehicle pool.", "Head of Supply Chain", 88, "Unassigned", None)
+            ("Vanguard Financial Group", "Sandton Central, Johannesburg", "Office Hub Consolidation: Moving 220 executives to a single facility. ESG mandate requires high-end PHEV/EV corporate fleet updates.", "Procurement Director", 96, "Unassigned", None, today_str),
+            ("Apex Logistics Solutions", "Linbro Park, Sandton", "Hiring Velocity: Scaled up 4 regional client managers requiring premium corporate travel vehicles.", "Fleet Supervisor", 91, "Unassigned", None, today_str),
+            ("Gauteng Tech Holdings", "Bryanston, Johannesburg", "Company recently secured a massive capital expansion funding round. Fleet upgrade strategy pending.", "Operations Manager", 89, "Unassigned", None, yesterday_str),
+            ("Tshwane Freight Logistics", "Pretoria Industrial", "Expanding distribution fleet across northern Gauteng corridors. Sourcing utility vehicles.", "Logistics Coordinator", 84, "Unassigned", None, yesterday_str)
         ]
-        c.executemany("INSERT INTO leads (company, location, signal, target, score, status, assigned_to) VALUES (?,?,?,?,?,?,?)", mock_corporate)
+        c.executemany("INSERT INTO leads (company, location, signal, target, score, status, assigned_to, lead_date) VALUES (?,?,?,?,?,?,?,?)", mock_corporate)
         
-    # Re-populate individual luxury leads if empty
+    # Re-populate individual leads if empty (Expanded to include Middle Management across Gauteng)
     c.execute("SELECT COUNT(*) FROM individual_leads")
     if c.fetchone()[0] == 0:
         mock_individual = [
-            ("Sipho Modise", "Newly Appointed Managing Partner", "Sandton Legal Consultants", "Sandton, Gauteng", "Promoted from Senior Associate to Senior Managing Partner. Relocating to head office.", 94, "Unassigned", None),
-            ("Elena Rosenberg", "Chief Financial Officer", "Gauteng Tech Holdings", "Bryanston", "Company recently secured a massive capital expansion funding round. Lifestyle shift marker active.", 89, "Unassigned", None),
-            ("Dr. Thabo Mnisi", "Chief of Surgery", "Medi-Clinic Group Hub", "Randburg", "Appointed Regional Director of Medical Operations across Johannesburg North facilities.", 87, "Unassigned", None)
+            ("Sipho Modise", "Newly Appointed Managing Partner", "Sandton Legal Consultants", "Sandton, Gauteng", "Promoted from Senior Associate to Senior Managing Partner. Relocating to head office.", 94, "Unassigned", None, today_str),
+            ("Mark van der Merwe", "Senior IT Operations Manager (Middle Management)", "Fintech Solutions SA", "Pretoria East", "Promoted to Regional Infrastructure Lead. Upgrading personal commute allowance.", 82, "Unassigned", None, today_str),
+            ("Naidoo Pillay", "Department Head of Logistics (Middle Management)", "E-Commerce Express", "Kempton Park", "Received annual performance incentive benchmark. Actively researching premium sports sedans.", 80, "Unassigned", None, yesterday_str),
+            ("Dr. Thabo Mnisi", "Chief of Surgery", "Medi-Clinic Group Hub", "Randburg, Johannesburg", "Appointed Regional Director of Medical Operations across Johannesburg North facilities.", 87, "Unassigned", None, yesterday_str)
         ]
-        c.executemany("INSERT INTO individual_leads (client_name, title, company, location, signal, score, status, assigned_to) VALUES (?,?,?,?,?,?,?,?)", mock_individual)
+        c.executemany("INSERT INTO individual_leads (client_name, title, company, location, signal, score, status, assigned_to, lead_date) VALUES (?,?,?,?,?,?,?,?,?)", mock_individual)
         
     conn.commit()
     conn.close()
@@ -132,7 +138,6 @@ if not st.session_state['authenticated']:
                     st.error(f"🛑 The username '@{new_username}' is already taken.")
                     conn.close()
                 else:
-                    # FIXED LINE 135: Fully encapsulated write string inside closed parens
                     hashed_pw = hashlib.sha256(new_password.encode()).hexdigest()
                     c.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (new_username, hashed_pw, new_name, role_db_value))
                     conn.commit()
@@ -153,25 +158,32 @@ if st.sidebar.button("Logout"):
     st.session_state['role'] = None
     st.rerun()
 
-# Dynamic Master Tabs Setup
 if st.session_state['role'] == 'dealer_principal':
     tab1, tab2, tab3 = st.tabs(["🔥 Available Daily Feed", "💼 My Claimed Accounts", "📊 Dealer Principal Command Overview"])
 else:
     tab1, tab2 = st.tabs(["🔥 Available Daily Feed (First-Come, First-Served)", "💼 My Claimed Accounts"])
 
-# ---- TAB 1: AVAILABLE DAILY FEED ----
+# ---- TAB 1: AVAILABLE DAILY FEED WITH NEW DATE FILTER ----
 with tab1:
-    lead_section = st.radio("Select Target Section", ["🏢 Corporate Fleet Leads (B2B)", "🚗 Individual Luxury Leads (B2C)"], horizontal=True)
-    st.markdown("---")
+    lead_section = st.radio("Select Target Section", ["🏢 Corporate Fleet Leads (B2B)", "🚗 Individual Leads (B2C)"], horizontal=True)
     
+    # THE FIX: Added interactive filter UI directly at the head of the feed
+    st.markdown("🔍 **Filter Feed Pipeline**")
+    f_col1, f_col2 = st.columns([1, 3])
+    with f_col1:
+        selected_date = st.date_input("Filter by Generation Date", datetime.now(SAST))
+    filter_date_str = selected_date.strftime('%Y-%m-%d')
+    
+    st.markdown("---")
     conn = sqlite3.connect('fleet_leads.db')
     
     if lead_section == "🏢 Corporate Fleet Leads (B2B)":
-        df_unassigned = pd.read_sql_query("SELECT * FROM leads WHERE status='Unassigned' ORDER BY score DESC", conn)
+        # Modified Query to target specific date bounds dynamically
+        df_unassigned = pd.read_sql_query("SELECT * FROM leads WHERE status='Unassigned' AND lead_date=? ORDER BY score DESC", conn, params=(filter_date_str,))
         conn.close()
         
         if df_unassigned.empty:
-            st.success("All daily corporate leads have been claimed!")
+            st.info(f"No new unassigned corporate fleet leads found generated on {filter_date_str}.")
         else:
             for idx, row in df_unassigned.iterrows():
                 with st.container():
@@ -180,7 +192,7 @@ with tab1:
                         st.metric(label="Score", value=f"{row['score']}/100")
                     with col2:
                         st.subheader(f"{row['company']} — {row['location']}")
-                        st.markdown(f"**Target Title:** {row['target']}")
+                        st.markdown(f"**Target Title:** {row['target']} | 📅 *Generated: {row['lead_date']}*")
                         st.info(f"💡 **Corporate Signal:** {row['signal']}")
                     with col3:
                         st.write(" ")
@@ -193,12 +205,13 @@ with tab1:
                             st.rerun()
                     st.markdown("---")
                     
-    else: # Individual Luxury Selection
-        df_unassigned_ind = pd.read_sql_query("SELECT * FROM individual_leads WHERE status='Unassigned' ORDER BY score DESC", conn)
+    else: # Individual Selection Panel
+        # Modified Query to filter individual targets by date bounds dynamically
+        df_unassigned_ind = pd.read_sql_query("SELECT * FROM individual_leads WHERE status='Unassigned' AND lead_date=? ORDER BY score DESC", conn, params=(filter_date_str,))
         conn.close()
         
         if df_unassigned_ind.empty:
-            st.success("All daily individual luxury leads have been claimed!")
+            st.info(f"No new unassigned individual leads found generated on {filter_date_str}.")
         else:
             for idx, row in df_unassigned_ind.iterrows():
                 with st.container():
@@ -206,9 +219,9 @@ with tab1:
                     with col1:
                         st.metric(label="Score", value=f"{row['score']}/100")
                     with col2:
-                        st.subheader(f"Executive Prospect: {row['client_name']}")
-                        st.markdown(f"**Position:** {row['title']} at *{row['company']}* ({row['location']})")
-                        st.info(f"💎 **Career/HNW Signal:** {row['signal']}")
+                        st.subheader(f"Prospect: {row['client_name']}")
+                        st.markdown(f"**Position:** {row['title']} at *{row['company']}* ({row['location']}) | 📅 *Generated: {row['lead_date']}*")
+                        st.info(f"💎 **Growth/HNW Signal:** {row['signal']}")
                     with col3:
                         st.write(" ")
                         st.write(" ")
@@ -273,14 +286,13 @@ with tab2:
                         st.rerun()
                 if st.button("Mark Sale Won 🔑", key=f"close_i_{row['id']}"):
                     conn = sqlite3.connect('fleet_leads.db')
-                    # FIXED LOGIC: Changed bare cursor call to connected instance target
                     c = conn.cursor()
                     c.execute("UPDATE individual_leads SET status='Closed' WHERE id=?", (row['id'],))
                     conn.commit()
                     conn.close()
                     st.rerun()
 
-# ---- TAB 3: DEALER PRINCIPAL MANAGEMENT MANAGEMENT OVERVIEW ----
+# ---- TAB 3: DEALER PRINCIPAL MANAGEMENT OVERVIEW ----
 if st.session_state['role'] == 'dealer_principal':
     with tab3:
         st.header("👑 Dealership Performance & Master Activity Pipeline")
