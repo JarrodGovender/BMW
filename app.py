@@ -43,7 +43,7 @@ def init_production_db():
 try:
     init_production_db()
 except Exception as e:
-    st.error("🔒 Database Connection Error. Verify that your connection parameters are added to your Streamlit App Secrets panel.")
+    st.error("🔒 Database Connection Error: {str(e)} ")
     st.stop()
 
 # ==========================================
