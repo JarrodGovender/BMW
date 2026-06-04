@@ -22,7 +22,7 @@ jobs:
           pip install requests beautifulsoup4 sqlalchemy psycopg2-binary pytz
 
       - name: Execute Scraping Pipeline Run
-       env:
-          DATABASE_URL: "postgresql://postgres.ofvsqtdoezesycsstkkh:9jnH7dzx5B9dmdE3@aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require"
+env:
+          DATABASE_URL: "postgresql://postgres:9jnH7dzx5B9dmdE3@db.ofvsqtdoezesycsstkkh.supabase.co:5432/postgres?sslmode=require"
         run: |
           python scraper.py
