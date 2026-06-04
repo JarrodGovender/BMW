@@ -1,0 +1,28 @@
+name: Hourly Gauteng Lead Ingest Pipeline
+
+on:
+  schedule:
+    - cron: '0 4 * * *'  # Executes precisely at 04:00 UTC (06:00 AM South African Standard Time) every morning
+  workflow_dispatch:     # Allows you to click a button in GitHub and trigger it manually instantly
+
+jobs:
+  scrape_and_inject:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Codebase Extraction
+        uses: actions/checkout@v3
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v4
+        with:
+          python-python: '3.11'
+
+      - name: Install Production Requirements
+        run: |
+          pip install requests beautifulsoup4 sqlalchemy psycopg2-binary pytz
+
+      - name: Execute Scraping Pipeline Run
+        env:
+          DATABASE_URL: "postgresql://postgres:9jnH7dzx5B9dmdE3@db.ofvsqtdoezesycsstkkh.supabase.co:5432/postgres"
+        run: |
+          python scraper.py
