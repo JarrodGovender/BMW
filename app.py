@@ -11,26 +11,20 @@ from sqlalchemy import create_engine, text
 st.set_page_config(page_title="BMW Sandton Lead Hub", layout="wide")
 SAST = pytz.timezone('Africa/Johannesburg')
 
-# Establishes connection mapping parameters to bypass (ENOIDENTIFIER) routing bugs
+# Establishes a clean, direct production connection to your Supabase instance
 @st.cache_resource
 def get_db_engine():
     db_secrets = st.secrets["connections"]["postgresql"]
     
-    # Extract structural elements dynamically from secrets panel
-    u_base = db_secrets['username']
-    host_target = db_secrets['host']
-    pw_str = db_secrets['password']
-    port_num = str(db_secrets['port'])
-    db_name = db_secrets['database']
+    username = db_secrets['username']
+    password = db_secrets['password']
+    host = db_secrets['host']
+    port = str(db_secrets['port'])
+    database = db_secrets['database']
     
-    # THE FINALTWEAK: If username doesn't contain a period prefix, use host parsing rules to build the tenant locator
-    if "." not in u_base:
-        # Extracts tenant reference directly out of the unique string 'aws-0-eu-central-1.pooler.supabase.com'
-        # Fallback to direct parameters if a custom non-standard domain is passed
-        tenant_ref = host_target.split('.')[0].replace('aws-0-', '')
-        username_payload = f"{u_base}.{tenant_ref}"
-    else:
-        username_payload = u_base
+    # Air-tight direct PostgreSQL connection URL format
+    connection_url = f"postgresql://{username}:{password}@{host}:{port}/{database}?sslmode=require"
+    return create_engine(connection_url, pool_pre_ping=True)
         
     # Construct complete, mathematically airtight production connection URL string
     connection_url = f"postgresql://{username_payload}:{pw_str}@{host_target}:{port_num}/{db_name}?sslmode=require"
