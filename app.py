@@ -11,7 +11,6 @@ from sqlalchemy import create_engine, text
 st.set_page_config(page_title="BMW Sandton Lead Hub", layout="wide")
 SAST = pytz.timezone('Africa/Johannesburg')
 
-# Establishes a clean, direct production connection to your Supabase instance
 # Establishes a permanent connection utilizing encrypted Streamlit Secrets credentials
 @st.cache_resource
 def get_db_engine():
@@ -23,11 +22,8 @@ def get_db_engine():
     port = str(db_secrets['port'])
     database = db_secrets['database']
     
+    # Standard connection URL mapping ensuring absolute cloud synchronization
     connection_url = f"postgresql://{username}:{password}@{host}:{port}/{database}?sslmode=require"
-    return create_engine(connection_url, pool_pre_ping=True)
-        
-    # Construct complete, mathematically airtight production connection URL string
-    connection_url = f"postgresql://{username_payload}:{pw_str}@{host_target}:{port_num}/{db_name}?sslmode=require"
     return create_engine(connection_url, pool_pre_ping=True)
 
 def init_production_db():
@@ -56,7 +52,7 @@ try:
     init_production_db()
 except Exception as e:
     st.error(f"🔒 Database Connection Error: {str(e)}")
-    st.info("Ensure your alphanumeric database password and host strings are saved cleanly inside your App Secrets panel.")
+    st.info("Ensure your alphanumeric database password and your explicit username format (postgres.your_reference_id) are saved cleanly inside your App Secrets panel.")
     st.stop()
 
 # ==========================================
