@@ -23,6 +23,6 @@ jobs:
 
       - name: Execute Scraping Pipeline Run
 env:
-          DATABASE_URL: "postgresql://postgres.ofvsqtdoezesycsstkkh:9jnH7dzx5B9dmdE3@aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require"
+          DATABASE_URL: "postgresql://postgres.ofvsqtdoezesycsstkkh:9jnH7dzx5B9dmdE3@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=require"
         run: |
           python scraper.py
