@@ -12,6 +12,7 @@ st.set_page_config(page_title="BMW Sandton Lead Hub", layout="wide")
 SAST = pytz.timezone('Africa/Johannesburg')
 
 # Establishes a clean, direct production connection to your Supabase instance
+# Establishes a permanent connection utilizing encrypted Streamlit Secrets credentials
 @st.cache_resource
 def get_db_engine():
     db_secrets = st.secrets["connections"]["postgresql"]
@@ -22,7 +23,6 @@ def get_db_engine():
     port = str(db_secrets['port'])
     database = db_secrets['database']
     
-    # Air-tight direct PostgreSQL connection URL format
     connection_url = f"postgresql://{username}:{password}@{host}:{port}/{database}?sslmode=require"
     return create_engine(connection_url, pool_pre_ping=True)
         
