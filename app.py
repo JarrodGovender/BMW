@@ -52,10 +52,12 @@ st.markdown("""
             color: #FFFFFF !important;            /* Force crisp white text on button base */
             border-radius: 0px !important;         /* Geometric corners */
             border: 1px solid #000000 !important;
+            padding: 0.75rem 2rem !important;
             font-weight: 500 !important;
             font-size: 0.85rem !important;
             letter-spacing: 1.5px !important;     /* Luxury tracking */
             text-transform: uppercase !important;  /* Corporate naming style */
+            width: 100%;
             transition: all 0.2s ease-in-out !important;
         }
         
@@ -118,6 +120,26 @@ st.markdown("""
         h1, h2, h3, h4, label {
             color: #262626 !important;
         }
+        
+        /* =========================================================
+           ✨ HIGH-PREMIUM BMW BRAND LOGO HEADER SPACING & CENTERING ✨
+           ========================================================= */
+        .bmw-logo-centered-header {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            gap: 24px !important; /* Sharp, tight, professional spacing */
+            width: 100% !important;
+            margin: 0 auto !important;
+            padding-bottom: 10px !important;
+        }
+        .bmw-logo-left-header {
+            display: flex !important;
+            justify-content: flex-start !important;
+            align-items: center !important;
+            gap: 18px !important; /* Clean layout header spacing */
+            width: 100% !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -161,15 +183,21 @@ if st.session_state['authenticated']:
     # ------------------------------------------
     # VIEW A: AUTHENTICATED PARTNER WORKSPACE
     # ------------------------------------------
-    header_col1, header_col2, header_col3 = st.columns([2.5, 4, 1.5])
+    header_col1, header_col2 = st.columns([3, 1])
     with header_col1:
-        logo_sub1, logo_sub2 = st.columns(2)
-        logo_sub1.image(BMW_LOGO_URL, width=60)
-        logo_sub2.image(M_SPORT_LOGO_URL, width=70)
+        # Injected high-end flat left-aligned inline layout
+        st.markdown(f"""
+            <div class='bmw-logo-left-header'>
+                <img src='{BMW_LOGO_URL}' width='50' style='height: auto;'>
+                <img src='{M_SPORT_LOGO_URL}' width='65' style='height: auto; margin-top: 4px;'>
+                <div style='margin-left: 10px;'>
+                    <h3 style='margin: 0; padding: 0; font-size: 1.4rem; font-weight: 400; letter-spacing: 0.5px;'>BMW CORPORATE FLEET ENGINE</h3>
+                    <p style='margin: 0; padding: 0; font-size: 0.75rem; color: #666666; letter-spacing: 1px;'>GAUTENG DEALERSHIP PIPELINE NETWORK • PRODUCTION WORKSPACE NODE</p>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
     with header_col2:
-        st.subheader("BMW CORPORATE FLEET ENGINE")
-        st.caption("GAUTENG DEALERSHIP PIPELINE NETWORK • PRODUCTION WORKSPACE NODE")
-    with header_col3:
+        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
         if st.button("🚪 LOGOUT", key="header_logout_btn"):
             st.session_state['authenticated'] = False
             st.session_state['user'] = None
@@ -177,6 +205,7 @@ if st.session_state['authenticated']:
             st.session_state['role'] = None
             st.rerun()
 
+    st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(f"LOGGED IN AS: **{st.session_state['name'].upper()}** ({st.session_state['role'].replace('_', ' ').upper()})")
     st.markdown("---")
 
@@ -362,18 +391,20 @@ else:
     # ------------------------------------------
     # VIEW B: GATEWAY INTERFACE (SIGN IN / UP)
     # ------------------------------------------
-    gate_col1, gate_col2, gate_col3 = st.columns([2, 3, 2])
+    gate_col1, gate_col2, gate_col3 = st.columns([1.5, 3, 1.5])
     with gate_col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        # Structured corporate dual badge array
-        logo_g1, logo_g2 = st.columns([1, 1.2])
-        logo_g1.image(BMW_LOGO_URL, width=90)
-        with logo_g2:
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.image(M_SPORT_LOGO_URL, width=105)
+        
+        # 🌟 RAW HTML INLINE FLEX OVERRIDE FOR PERFECT CENTERING AND SPACING AS SEEN IN image_a9645e.png
+        st.markdown(f"""
+            <div class='bmw-logo-centered-header'>
+                <img src='{BMW_LOGO_URL}' width='82' style='height: auto; display: block;'>
+                <img src='{M_SPORT_LOGO_URL}' width='98' style='height: auto; display: block; margin-top: 6px;'>
+            </div>
+        """, unsafe_allow_html=True)
             
-        st.markdown("<h2 style='text-align: center; font-weight: 300; letter-spacing: 1px; margin-top:20px;'>BMW ENTERPRISE SYSTEM</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; font-size:0.85rem; color:#666666; letter-spacing:1px;'>GAUTENG FLEET LOGISTICS PORTAL</p>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; font-weight: 300; letter-spacing: 1px; margin-top:25px; margin-bottom: 0;'>BMW ENTERPRISE SYSTEM</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; font-size:0.85rem; color:#666666; letter-spacing:1px; margin-top: 5px;'>GAUTENG FLEET LOGISTICS PORTAL</p>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
     
         auth_tab, signup_tab = st.tabs(["🔒 SECURE SIGN IN", "📝 CREATE ACCESS ACCOUNT"])
