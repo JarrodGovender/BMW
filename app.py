@@ -365,7 +365,6 @@ if st.session_state['authenticated']:
                 cleaned_stock = df_stock.dropna(subset=[df_stock.columns[0]]).copy()
                 cleaned_stock.columns = ["STOCK SEGMENT CHANNEL", "UNITS ON HAND", "INVESTMENT VALUE (ZAR)"]
                 
-                # Format metrics directly to avoid data table styling bugs on legacy packages
                 cleaned_stock["UNITS ON HAND"] = cleaned_stock["UNITS ON HAND"].map(lambda x: f"{int(x):,}" if pd.notna(x) else "0")
                 cleaned_stock["INVESTMENT VALUE (ZAR)"] = cleaned_stock["INVESTMENT VALUE (ZAR)"].map(lambda x: f"R {float(x):,.2f}" if pd.notna(x) else "R 0.00")
                 
