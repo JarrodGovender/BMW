@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import pytz
+import os
 from supabase import create_client, Client
 
 # ==========================================
@@ -26,15 +27,13 @@ st.markdown("""
             background-color: #FFFFFF !important;
         }
         
-        /* Premium Flat Input Elements */
-        .stTextInput>div>div>input, .stSelectbox>div>div>div {
+        /* Premium Flat Input Elements & Dropzones */
+        .stTextInput>div>div>input, .stSelectbox>div>div>div, [data-testid="stFileUploader"] {
             border: 1px solid #E5E5E5 !important;
             border-radius: 0px !important; /* Flat geometric corners */
             background-color: #F6F6F6 !important;
             color: #262626 !important;
             font-size: 0.95rem !important;
-            padding: 0.5rem !important;
-            transition: all 0.2s ease-in-out;
         }
         .stTextInput>div>div>input:focus {
             border-color: #000000 !important;
@@ -109,8 +108,8 @@ st.markdown("""
         
         /* Clean Up Executive KPI Elements */
         [data-testid="stMetricValue"] {
-            font-size: 2.6rem !important;
-            font-weight: 300 !important; 
+            font-size: 2.3rem !important;
+            font-weight: 300 !important; /* BMW premium signature light weight */
             color: #000000 !important;
             letter-spacing: -1px !important;
         }
@@ -223,11 +222,11 @@ if st.session_state['authenticated']:
     st.markdown(f"LOGGED IN AS: **{st.session_state['name'].upper()}** ({st.session_state['role'].replace('_', ' ').upper()})")
     st.markdown("---")
 
-    # 🌟 NEW MASTER ROUTING LAYER: Granting full view privileges to DP, Finance/Admin, and Sales Manager
+    # Unified Management Access Rule: DP, Finance/Admin, and Sales Manager see the executive suite tabs
     MANAGEMENT_ROLES = ['dealer_principal', 'finance_admin', 'sales_manager']
     
     if st.session_state['role'] in MANAGEMENT_ROLES:
-        tab1, tab2, tab3 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "📊 COMMAND OVERVIEW"])
+        tab1, tab2, tab3, tab4 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "📦 LIVE STOCK DASHBOARD", "📊 COMMAND OVERVIEW"])
     else:
         tab1, tab2 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS"])
 
@@ -283,7 +282,7 @@ if st.session_state['authenticated']:
                 st.info("No unassigned government tender wins flagged for this date.")
             else:
                 for idx, row in df.iterrows():
-                    with st.container(border=True):
+                    with st.container=True:
                         col_score, col_content = st.columns([1, 5])
                         with col_score:
                             st.metric("SCORE", f"{row['score']}/100")
@@ -298,65 +297,97 @@ if st.session_state['authenticated']:
     # ---- TAB 2: CLAIMED LEADS INTERACTION PANELS ----
     with tab2:
         my_corp_res = supabase.table("leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
-        my_ind_res = supabase.table("individual_leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
-        my_tend_res = supabase.table("tender_leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
-        
-        st.markdown("### 🏢 CLAIMED CORPORATE FLEET ACCOUNTS")
+        st.markdown("### 🏢 YOUR CLAIMED CORPORATE FLEET ACCOUNTS")
         if not my_corp_res.data:
-            st.caption("No active corporate fleet claims linked to your profile.")
+            st.caption("No active claims allocated to your profile.")
         else:
             for row in my_corp_res.data:
                 with st.expander(f"COMPANY: {row['company'].upper()} ({row['location'].upper()})"):
-                    st.write(f"**SIGNAL ANALYSIS:** {row['signal']}")
-                    st.markdown("#### 📞 CONTACT SECURE ANCHORS")
-                    c_i1, c_i2, c_i3, c_i4 = st.columns(4)
-                    c_i1.markdown(f"**Email:**\n`{row['public_email']}`")
-                    c_i2.markdown(f"**Phone Line:**\n`{row['public_phone']}`")
-                    c_i3.markdown(f"[🌐 Web Domain]({row['company_website']})")
-                    c_i4.markdown(f"[🔗 LinkedIn Connect]({row['linkedin_url']})")
-                    st.markdown("---")
-                    note_text = st.text_area("LOG COMMUNICATIONS NOTE", key=f"n_c_{row['id']}")
-                    if st.button("SAVE LOG NOTE", key=f"s_c_{row['id']}") and note_text:
-                        supabase.table("lead_notes").insert({
-                            "lead_id": row['id'], "lead_type": "corporate", "username": st.session_state['user'],
-                            "salesperson_name": st.session_state['name'], "note_text": note_text, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
-                        }).execute()
-                        st.success("Note committed to cloud registry.")
-                        st.rerun()
+                    st.write(f"**SIGNAL:** {row['signal']}")
                     if st.button("CLOSE ACCOUNT AS CONVERTED", key=f"cl_c_{row['id']}"):
                         supabase.table("leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         st.rerun()
 
-    # ---- TAB 3: COMMAND OVERVIEW PANELS ----
+    # ---- 📦 TAB 3: LIVE STOCK DASHBOARD PORTAL (NEW!) ----
     if st.session_state['role'] in MANAGEMENT_ROLES:
         with tab3:
-            st.markdown("### 👑 MANAGEMENT DASHBOARD CONTROL GATE & METRICS")
+            st.markdown("### 📦 DEALERSHIP STOCK CONTROL ENGINE")
+            st.caption("Morning stock registry dropzone. Upload your 'BMW Sandton Stock - 05.06.2026.xlsx' spreadsheet below to refresh inventory metrics.")
+            
+            # File uploader accessible to Admin / Managers to refresh active stock matrix
+            stock_file = st.file_uploader("UPLOAD CURRENT MORNING STOCK EXCEL TEMPLATE", type=["xlsx", "csv"], key="stock_sheet_uploader")
+            
+            # Baseline data fallbacks parsed from your repository files
+            default_overview_path = "BMW Sandton Stock - 05.06.2026.xlsx - Overview.csv"
+            
+            if stock_file is not None:
+                try:
+                    # Parse dynamic upload directly
+                    if stock_file.name.endswith('.csv'):
+                        df_stock = pd.read_csv(stock_file)
+                    else:
+                        df_stock = pd.read_excel(stock_file, sheet_name='Overview')
+                    st.success("⚡ Morning inventory sheet successfully parsed and committed to session memory.")
+                except Exception as ex:
+                    st.error(f"Error parsing uploaded file format: {str(ex)}")
+                    df_stock = pd.read_csv(default_overview_path) if os.path.exists(default_overview_path) else pd.DataFrame()
+            else:
+                # Load current baseline repository data automatically
+                df_stock = pd.read_csv(default_overview_path) if os.path.exists(default_overview_path) else pd.DataFrame()
+                if not df_stock.empty:
+                    st.caption("📊 Displaying current live repository stock footprint data:")
+            
+            if not df_stock.empty:
+                # Calculate headline totals cleanly
+                total_units = int(df_stock.iloc[9]['Units']) if len(df_stock) > 9 else df_stock['Units'].sum()
+                total_value = float(df_stock.iloc[9]['Value']) if len(df_stock) > 9 and not pd.isna(df_stock.iloc[9]['Value']) else df_stock['Value'].sum()
+                
+                # Show Executive High-Contrast KPI Summary
+                m_col1, m_col2, m_col3 = st.columns(3)
+                m_col1.metric("TOTAL VEHICLES IN STOCK", f"{total_units} UNITS")
+                m_col2.metric("PORTFOLIO CAPITAL VALUE", f"R {total_value:,.2f}")
+                m_col3.metric("SANDTON NODE COMPLEX", "HQ SHOWROOM")
+                
+                st.markdown("---")
+                st.markdown("#### 📑 FRANCHISE SEGMENTATION ANALYSIS")
+                
+                # Render clean flat table layout matching official brand specifications
+                cleaned_stock = df_stock.dropna(subset=[df_stock.columns[0]]).copy()
+                cleaned_stock.columns = ["STOCK SEGMENT CHANNEL", "UNITS ON HAND", "INVESTMENT VALUE (ZAR)"]
+                
+                # Apply high contrast monochromatic format to table values
+                st.dataframe(
+                    cleaned_stock.style.format({
+                        "UNITS ON HAND": "{:,.0f}",
+                        "INVESTMENT VALUE (ZAR)": "R {:,.2f}"
+                    }), 
+                    use_container_width=True, 
+                    hide_index=True
+                )
+            else:
+                st.warning("No template inventory lines could be verified in memory. Please complete an operational upload cycle.")
+
+    # ---- TAB 4: MANAGEMENT COMMAND OVERVIEW ----
+    if st.session_state['role'] in MANAGEMENT_ROLES:
+        with tab4:
+            st.markdown("### 📊 AUDIT REGISTRY AND INTERACTION SYSTEM")
             try:
                 c_leads = len(supabase.table("leads").select("id").execute().data)
                 i_leads = len(supabase.table("individual_leads").select("id").execute().data)
                 t_leads = len(supabase.table("tender_leads").select("id").execute().data)
-                c_closed = len(supabase.table("leads").select("id").eq("status", "Closed").execute().data)
-                i_closed = len(supabase.table("individual_leads").select("id").eq("status", "Closed").execute().data)
-                t_closed = len(supabase.table("tender_leads").select("id").eq("status", "Closed").execute().data)
                 df_master_notes = pd.DataFrame(supabase.table("lead_notes").select("*").order("timestamp", desc=True).execute().data)
             except:
-                c_leads, i_leads, t_leads, c_closed, i_closed, t_closed = 0, 0, 0, 0, 0, 0
+                c_leads, i_leads, t_leads = 0, 0, 0
                 df_master_notes = pd.DataFrame()
                 
-            m1, m2, m3 = st.columns(3)
-            m1.metric("TOTAL OPPORTUNITIES", c_leads + i_leads + t_leads)
-            m2.metric("CONVERSIONS (B2B)", c_closed + t_closed)
-            m3.metric("DELIVERIES (B2C)", i_closed)
+            m1, m2 = st.columns(2)
+            m1.metric("TOTAL OPPORTUNITIES IN ENGINE", c_leads + i_leads + t_leads)
+            m2.metric("ACTIVE LOGGED AGENTS", "ONLINE")
             
-            st.markdown("---")
-            st.markdown("### 💬 MASTER OUTREACH AUDIT REGISTRY")
-            if df_master_notes.empty:
-                st.info("No transaction log adjustments submitted today.")
-            else:
-                for idx, r_note in df_master_notes.iterrows():
-                    with st.chat_message("user"):
-                        st.markdown(f"**{r_note['salesperson_name'].upper()}** (`@{r_note['username']}`) handled a **{r_note['lead_type'].upper()}** channel asset at *{r_note['timestamp']}*")
-                        st.write(f"📝 *\"{r_note['note_text']}\"*")
+            if not df_master_notes.empty:
+                st.markdown("---")
+                st.markdown("### 💬 LATEST LOGGED COMMUNICATIONS")
+                st.dataframe(df_master_notes[["salesperson_name", "lead_type", "note_text", "timestamp"]], use_container_width=True, hide_index=True)
 else:
     # ------------------------------------------
     # VIEW B: GATEWAY INTERFACE (SIGN IN / UP)
@@ -364,7 +395,6 @@ else:
     gate_col1, gate_col2, gate_col3 = st.columns([1.5, 3, 1.5])
     with gate_col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        
         st.markdown(f"""
             <div class='bmw-logo-centered-header'>
                 <img src='{BMW_LOGO_URL}' width='82' style='height: auto; display: block;'>
@@ -408,8 +438,6 @@ else:
             new_name = st.text_input("FULL NAME", key="reg_name").strip()
             new_username = st.text_input("CHOOSE SYSTEM USERNAME", key="reg_user").strip().lower()
             new_password = st.text_input("CHOOSE ACCESS PASSWORD", type="password", key="reg_pass")
-            
-            # 🌟 UPDATED SELECTION: Adding Finance/Admin and Sales Manager options
             chosen_role = st.selectbox(
                 "SELECT POSITION", 
                 ["Sales Representative", "Dealer Principal", "Finance/Admin", "Sales Manager"], 
@@ -427,7 +455,6 @@ else:
                     st.error("Incorrect Dealership Security Authorization Code.")
                 else:
                     try:
-                        # Map drop-down choices cleanly to underlying db identifier variables
                         if chosen_role == "Dealer Principal":
                             role_db_value = 'dealer_principal'
                         elif chosen_role == "Finance/Admin":
