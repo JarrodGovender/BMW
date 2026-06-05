@@ -24,7 +24,6 @@ def safe_rerun():
 
 # ====================================================================
 # OFFICIAL BMW DIGITAL DESIGN IDENTITY CSS INJECTION
-# Reference: https://www.bmw.co.za/en/index.html flat luxury architecture
 # ====================================================================
 st.markdown("""
     <style>
@@ -37,7 +36,7 @@ st.markdown("""
         /* Premium Flat Input Elements & Dropzones */
         .stTextInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea {
             border: 1px solid #E5E5E5 !important;
-            border-radius: 0px !important; /* Flat geometric corners */
+            border-radius: 0px !important; 
             background-color: #F6F6F6 !important;
             color: #262626 !important;
             font-size: 0.95rem !important;
@@ -48,9 +47,7 @@ st.markdown("""
             box-shadow: none !important;
         }
         
-        /* =========================================================
-           🚨 WATERPROOF BUTTON TEXT & FIXED NORMAL SIZE CONTAINER FIX 🚨
-           ========================================================= */
+        /* Premium Flat Buttons */
         div.stButton {
             width: auto !important;
             max-width: 240px !important; 
@@ -88,11 +85,6 @@ st.markdown("""
             border-color: #262626 !important;
         }
         
-        div.stButton > button:hover *,
-        div.stButton > button:focus * {
-            color: #FFFFFF !important;
-        }
-        
         /* Clean Up Executive KPI Elements */
         [data-testid="stMetricValue"] {
             font-size: 2.3rem !important;
@@ -124,14 +116,6 @@ st.markdown("""
         h1, h2, h3, h4, label {
             color: #262626 !important;
         }
-        
-        .bmw-logo-left-header {
-            display: flex !important;
-            justify-content: flex-start !important;
-            align-items: center !important;
-            gap: 18px !important; 
-            width: 100% !important;
-        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -147,55 +131,31 @@ except Exception as e:
     st.error(f"🔒 Secure API Hook Connection Error: {str(e)}")
     st.stop()
 
-# ==========================================
-# 2. OPERATIONAL TIME GUARD (10PM - 6AM LOCKOUT)
-# ==========================================
+# Operational Hour Compliance Guard
 now_sast = datetime.now(SAST)
-current_hour = now_sast.hour
-
-if current_hour >= 22 or current_hour < 6:
+if now_sast.hour >= 22 or now_sast.hour < 6:
     st.error("🛑 **Access Denied: System Offline.**")
-    st.info("To maintain security and compliance boundaries, the BMW Sandton Corporate Fleet Engine locks out all access between **22:00 PM and 06:00 AM SAST**.")
     st.stop()
 
-# ==========================================
-# 3. AUTHENTICATION SESSION STATE
-# ==========================================
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
     st.session_state['user'] = None
     st.session_state['name'] = None
     st.session_state['role'] = None
 
-# ==========================================
-# 4. CORE PLATFORM ROUTING ROUTER
-# ==========================================
 if st.session_state['authenticated']:
-    # ------------------------------------------
-    # VIEW A: AUTHENTICATED PARTNER WORKSPACE
-    # ------------------------------------------
-    header_col1, header_col2 = st.columns([4, 1])
-    with header_col1:
-        st.markdown(f"""
-            <div class='bmw-logo-left-header'>
-                <img src='{BMW_LOGO_URL}' width='50' style='height: auto;'>
-                <img src='{M_SPORT_LOGO_URL}' width='65' style='height: auto; margin-top: 4px;'>
-                <div style='margin-left: 10px;'>
-                    <h3 style='margin: 0; padding: 0; font-size: 1.4rem; font-weight: 400; letter-spacing: 0.5px;'>BMW SANDTON</h3>
-                    <p style='margin: 0; padding: 0; font-size: 0.75rem; color: #666666; letter-spacing: 1px;'>SALES LEADS PORTAL • PRODUCTION WORKSPACE NODE</p>
-                </div>
+    # Authenticated Workspace Layout Header
+    st.markdown(f"""
+        <div style='display: flex; align-items: center; gap: 18px;'>
+            <img src='{BMW_LOGO_URL}' width='50'>
+            <img src='{M_SPORT_LOGO_URL}' width='65' style='height: auto; margin-top: 4px;'>
+            <div>
+                <h3 style='margin: 0; font-weight: 400;'>BMW SANDTON</h3>
+                <p style='margin: 0; font-size: 0.75rem; color: #666666; letter-spacing: 1px;'>SALES LEADS PORTAL • PRODUCTION WORKSPACE NODE</p>
             </div>
-        """, unsafe_allow_html=True)
-    with header_col2:
-        st.markdown("<div style='text-align: right;'>", unsafe_allow_html=True)
-        if st.button("🚪 LOGOUT", key="header_logout_btn"):
-            st.session_state['authenticated'] = False
-            st.session_state['user'] = None
-            st.session_state['name'] = None
-            st.session_state['role'] = None
-            safe_rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
+        </div>
+    """, unsafe_allow_html=True)
+    
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(f"LOGGED IN AS: **{st.session_state['name'].upper()}** ({st.session_state['role'].replace('_', ' ').upper()})")
     st.markdown("---")
@@ -207,48 +167,50 @@ if st.session_state['authenticated']:
     else:
         tab1, tab2, tab3 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM"])
 
-    # ---- TAB 1 & 2: LEADS FEEDS GENERATOR ----
-    with tab1:
-        st.info("Daily opportunity network channels active.")
-    with tab2:
-        st.caption("Profile specific claims registry matrix.")
+    with tab1: st.info("Daily opportunity network channels active.")
+    with tab2: st.caption("Profile specific claims registry matrix.")
 
-    # ---- 🚗 TAB 3: USED CAR STOCK MODULE ----
+    # ---- 🚗 TAB 3: USED CAR STOCK MODULE WITH FRANCHISE INTEGRITY ----
     with tab3:
         st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
-        st.caption("Single source of truth inventory registry synchronized with Supabase.")
+        st.caption("Single source of truth inventory registry organized by official franchise grouping lines.")
         
-        # Admin text data paste area
+        # Admin Terminal Upload Zone
         if st.session_state['role'] == 'finance_admin':
             with st.expander("🛠️ ADMIN CONSOLE: BULK CAR STOCK TERMINAL", expanded=False):
                 st.markdown("#### Paste Spreadsheet Data Rows Below")
-                raw_paste_data = st.text_area("PASTE RAW DATA ROWS HERE", height=250, placeholder="109237\tX4 xDrive20d Sport A\t30/01/2026...")
+                raw_paste_data = st.text_area("PASTE RAW DATA ROWS HERE", height=250, placeholder="Franchise: B - BMW\n109237\tX4 xDrive20d Sport A...")
                 
                 if st.button("PROCESS AND OVERWRITE INVENTORY", key="process_stock_paste_btn"):
                     if raw_paste_data.strip():
                         try:
-                            # Split input lines cleanly
-                            lines = raw_paste_data.strip().split('\n')
+                            lines = raw_paste_data.split('\n')
                             records_processed = 0
                             
-                            # Clean old rows first to prevent garbage build-up
+                            # Standard tracker variable to remember the current franchise header block state
+                            current_franchise = "General Used Stock"
+                            
+                            # Clean table memory safely
                             supabase.table("used_car_stock").delete().neq("vsb_no", "placeholder_wipe").execute()
                             
                             for line in lines:
-                                if not line.strip():
+                                cleaned_line = line.strip()
+                                if not cleaned_line:
                                     continue
                                     
-                                # Auto-detect copy dividers (TABS or commas)
-                                parts = line.split('\t') if '\t' in line else line.split(',')
+                                # 🧠 INTEL BLOCK: Catch the franchise header string text block change dynamically
+                                if "franchise:" in cleaned_line.lower():
+                                    current_franchise = cleaned_line.replace('Franchise:', '').strip()
+                                    continue
+                                    
+                                parts = cleaned_line.split('\t') if '\t' in cleaned_line else cleaned_line.split(',')
                                 
-                                # 🛡️ CRITICAL INTELLIGENCE GUARD: Only accept actual data blocks starting with a numerical VSB number
+                                # Process rows starting with a numeric VSB indicator
                                 if len(parts) >= 2 and parts[0].strip().isdigit():
                                     vsb = parts[0].strip()
                                     desc = parts[1].strip()
                                     into_stk = parts[2].strip() if len(parts) > 2 else ''
                                     
-                                    # Fallback index mapping checks to isolate specific target indices safely
-                                    # Total calculation falls back to parsing position index 10 directly
                                     try:
                                         val = float(parts[10].strip().replace(' ', '').replace(' ', '').replace(',', '')) if len(parts) > 10 else 0.00
                                     except:
@@ -259,24 +221,24 @@ if st.session_state['authenticated']:
                                     except:
                                         days = 0
                                         
-                                    loc = parts[12].strip() if len(parts) > 12 else 'Sandton'
+                                    loc = parts[12].strip() if len(parts) > 12 else current_franchise
                                     chassis = parts[13].strip() if len(parts) > 13 else ''
                                     
-                                    # 🛠️ FIXED: Switched insertion mode to use explicit upsert to override primary keys securely
+                                    # Insert vehicle line and append the active franchise block classification
                                     supabase.table("used_car_stock").upsert({
                                         "vsb_no": vsb, "description": desc, "into_stock": into_stk,
                                         "days_in_stock": days, "total_value": val, "location": loc, "chassis_no": chassis
                                     }).execute()
                                     records_processed += 1
                                     
-                            st.success(f"🎉 Inventory refreshed successfully. {records_processed} valid used vehicle entries committed to cloud storage.")
+                            st.success(f"🎉 Stock refreshed successfully. {records_processed} units assigned to their respective franchises inside cloud engine.")
                             safe_rerun()
                         except Exception as parse_ex:
-                            st.error(f"Data mapping mismatch: {str(parse_ex)}")
+                            st.error(f"Data processing failed: {str(parse_ex)}")
                     else:
-                        st.warning("Please populate the data terminal with text matrix lines before submitting.")
+                        st.warning("Please populate the data terminal before submitting.")
 
-        # ---- DYNAMIC CATALOG RE-INDEX FOR ALL TEAM VIEWS ----
+        # ---- THE LIVE VIEW WITH DYNAMIC FRANCHISE GROUP FILTERING ----
         try:
             stock_res = supabase.table("used_car_stock").select("vsb_no, description, into_stock, days_in_stock, total_value, location").order("days_in_stock", desc=True).execute()
             df_live_stock = pd.DataFrame(stock_res.data) if stock_res.data else pd.DataFrame()
@@ -284,40 +246,52 @@ if st.session_state['authenticated']:
             df_live_stock = pd.DataFrame()
 
         if not df_live_stock.empty:
-            # Aggregate dashboard metrics safely from clean table numbers
-            cnt_units = len(df_live_stock)
-            sum_capital = df_live_stock['total_value'].sum()
-            avg_age = df_live_stock['days_in_stock'].mean()
+            # Map location database field string back to UI labels cleanly
+            df_live_stock.columns = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "FRANCHISE DIVISION"]
             
+            # Extract unique franchises available in dataset for the dropdown filter layout
+            franchise_list = ["ALL FRANCHISES"] + sorted(list(df_live_stock["FRANCHISE DIVISION"].unique()))
+            
+            col_filter1, col_filter2 = st.columns([1, 2])
+            with col_filter1:
+                selected_franchise = st.selectbox("SELECT FRANCHISE DIVISION", franchise_list, key="franchise_selector_dropdown")
+            with col_filter2:
+                search_query = st.text_input("🔍 SEARCH CATALOG (Type Model name or VSB Number)", "").strip().lower()
+            
+            # Apply dynamic filters sequentially
+            filtered_df = df_live_stock.copy()
+            if selected_franchise != "ALL FRANCHISES":
+                filtered_df = filtered_df[filtered_df["FRANCHISE DIVISION"] == selected_franchise]
+                
+            if search_query:
+                filtered_df = filtered_df[
+                    filtered_df['VEHICLE DESCRIPTION'].astype(str).str.lower().str.contains(search_query) |
+                    filtered_df['VSB NUMBER'].astype(str).str.lower().str.contains(search_query)
+                ]
+                
+            # Compute operational summary KPIs dynamically based on current selections
+            cnt_units = len(filtered_df)
+            sum_capital = filtered_df['CAPITAL VAL (ZAR)'].sum()
+            avg_age = filtered_df['DAYS ON FLOOR'].mean() if cnt_units > 0 else 0
+            
+            st.markdown("<br>", unsafe_allow_html=True)
             s_col1, s_col2, s_col3 = st.columns(3)
-            s_col1.metric("USED VEHICLES AVAILABLE", f"{cnt_units:,} UNITS")
-            s_col2.metric("STOCKHOLDING CAPITAL VALUE", f"R {sum_capital:,.2f}")
-            s_col3.metric("AVERAGE AGE IN STOCK", f"{int(avg_age)} DAYS")
+            s_col1.metric("UNITS IN SELECTION", f"{cnt_units:,} VEHICLES")
+            s_col2.metric("SELECTION BOOK VALUE", f"R {sum_capital:,.2f}")
+            s_col3.metric("AVERAGE SELECTION FLOOR AGE", f"{int(avg_age)} DAYS")
             
             st.markdown("---")
-            search_query = st.text_input("🔍 LIVE SEARCH CAR INVENTORY (Type Model or VSB No)", "").strip().lower()
             
-            if search_query:
-                filtered_stock = df_live_stock[
-                    df_live_stock['description'].astype(str).str.lower().str.contains(search_query) |
-                    df_live_stock['vsb_no'].astype(str).str.lower().str.contains(search_query)
-                ].copy()
-            else:
-                filtered_stock = df_live_stock.copy()
-                
-            # 🛠️ FIXED: Explicit column definitions precisely matching the database query size to resolve length mismatches
-            filtered_stock.columns = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "SHOWROOM SITE"]
-            
-            # Pure formatting conversion loops
-            filtered_stock["CAPITAL VAL (ZAR)"] = filtered_stock["CAPITAL VAL (ZAR)"].map(lambda x: f"R {float(x):,.2f}")
-            st.table(filtered_stock)
+            # Render clean web display matrix values
+            display_df = filtered_df.copy()
+            display_df["CAPITAL VAL (ZAR)"] = display_df["CAPITAL VAL (ZAR)"].map(lambda x: f"R {float(x):,.2f}")
+            st.table(display_df[["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "FRANCHISE DIVISION"]])
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
-    # ---- TAB 4: MANAGEMENT CONTROL PANELS ----
+    # ---- TAB 4: COMMAND CONTROLS ----
     if st.session_state['role'] in MANAGEMENT_ROLES:
-        with tab4:
-            st.markdown("### 📊 AUDIT MONITOR NODE")
+        with tab4: st.markdown("### 📊 AUDIT MONITOR NODE")
 else:
     # Gateway Authorization Interface Layer
     gate_col1, gate_col2, gate_col3 = st.columns([1.5, 3, 1.5])
