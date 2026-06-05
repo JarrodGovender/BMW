@@ -10,8 +10,9 @@ from supabase import create_client, Client
 st.set_page_config(page_title="BMW Sandton Lead Hub", layout="wide")
 SAST = pytz.timezone('Africa/Johannesburg')
 
-# Public CDN URL for the modern official BMW transparent logo asset
+# Public CDN URLs for Official BMW and M Sport Logo Assets
 BMW_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg"
+M_SPORT_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/b/b3/BMW_M_logo.svg"
 
 # ====================================================================
 # OFFICIAL BMW DIGITAL DESIGN IDENTITY CSS INJECTION
@@ -41,28 +42,35 @@ st.markdown("""
             box-shadow: none !important;
         }
         
-        /* Official BMW Monochromatic Premium Action Buttons */
-        div.stButton > button:first-child {
-            background-color: #000000 !important; /* Absolute Black Base */
-            color: #FFFFFF !important;
-            border-radius: 0px !important; /* Sharp corners */
+        /* =========================================================
+           🚨 WATERPROOF BUTTON TEXT FIX: FORCING CRISP WHITE TEXT 🚨
+           ========================================================= */
+        div.stButton > button, 
+        div.stButton > button:first-child,
+        div.stButton > button * {
+            background-color: #000000 !important; /* Absolute Black Background */
+            color: #FFFFFF !important;            /* Force crisp white text on button base */
+            border-radius: 0px !important;         /* Geometric corners */
             border: 1px solid #000000 !important;
-            padding: 0.75rem 2rem !important;
             font-weight: 500 !important;
             font-size: 0.85rem !important;
-            letter-spacing: 1.5px !important; /* Luxury tracking */
-            text-transform: uppercase !important; /* Corporate naming style */
-            width: 100%;
-            transition: all 0.2s ease-in-out;
+            letter-spacing: 1.5px !important;     /* Luxury tracking */
+            text-transform: uppercase !important;  /* Corporate naming style */
+            transition: all 0.2s ease-in-out !important;
         }
-        div.stButton > button:first-child:hover {
+        
+        /* Force text to stay white during all micro-interactions */
+        div.stButton > button:hover,
+        div.stButton > button:hover *,
+        div.stButton > button:focus,
+        div.stButton > button:focus * {
             background-color: #262626 !important;
             border-color: #262626 !important;
-            color: #FFFFFF !important;
-            cursor: pointer;
+            color: #FFFFFF !important; /* Keeps text fully visible */
         }
-        div.stButton > button:first-child:active {
-            transform: scale(0.99);
+        
+        div.stButton > button:active {
+            transform: scale(0.99) !important;
         }
         
         /* Structural Framed Lead Cards */
@@ -106,8 +114,8 @@ st.markdown("""
             font-weight: 600 !important;
         }
         
-        /* Set standard font colors for subheaders and text */
-        h1, h2, h3, h4, p, span, label {
+        /* Standard structural typography overrides */
+        h1, h2, h3, h4, label {
             color: #262626 !important;
         }
     </style>
@@ -153,14 +161,16 @@ if st.session_state['authenticated']:
     # ------------------------------------------
     # VIEW A: AUTHENTICATED PARTNER WORKSPACE
     # ------------------------------------------
-    header_col1, header_col2, header_col3 = st.columns([1, 5, 2])
+    header_col1, header_col2, header_col3 = st.columns([2.5, 4, 1.5])
     with header_col1:
-        st.image(BMW_LOGO_URL, width=70)
+        logo_sub1, logo_sub2 = st.columns(2)
+        logo_sub1.image(BMW_LOGO_URL, width=60)
+        logo_sub2.image(M_SPORT_LOGO_URL, width=70)
     with header_col2:
         st.subheader("BMW CORPORATE FLEET ENGINE")
         st.caption("GAUTENG DEALERSHIP PIPELINE NETWORK • PRODUCTION WORKSPACE NODE")
     with header_col3:
-        if st.button("🚪 SECURE LOGOUT", key="header_logout_btn"):
+        if st.button("🚪 LOGOUT", key="header_logout_btn"):
             st.session_state['authenticated'] = False
             st.session_state['user'] = None
             st.session_state['name'] = None
@@ -266,7 +276,7 @@ if st.session_state['authenticated']:
                         st.rerun()
 
         st.markdown("---")
-        st.markdown("### 🚗 MY CLAIMED PRIVATE Luxury CLIENTS")
+        st.markdown("### 🚗 MY CLAIMED PRIVATE LUXURY CLIENTS")
         if not my_ind_res.data:
             st.caption("No active individual accounts claimed.")
         else:
@@ -355,9 +365,14 @@ else:
     gate_col1, gate_col2, gate_col3 = st.columns([2, 3, 2])
     with gate_col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        # Corporate light-mode welcome anchor
-        st.image(BMW_LOGO_URL, width=110)
-        st.markdown("<h2 style='text-align: center; font-weight: 300; letter-spacing: 1px;'>BMW ENTERPRISE SYSTEM</h2>", unsafe_allow_html=True)
+        # Structured corporate dual badge array
+        logo_g1, logo_g2 = st.columns([1, 1.2])
+        logo_g1.image(BMW_LOGO_URL, width=90)
+        with logo_g2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.image(M_SPORT_LOGO_URL, width=105)
+            
+        st.markdown("<h2 style='text-align: center; font-weight: 300; letter-spacing: 1px; margin-top:20px;'>BMW ENTERPRISE SYSTEM</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; font-size:0.85rem; color:#666666; letter-spacing:1px;'>GAUTENG FLEET LOGISTICS PORTAL</p>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
     
@@ -403,7 +418,7 @@ else:
                 elif " " in new_username:
                     st.error("Usernames cannot incorporate empty spacing gaps.")
                 elif security_code != "SandtonBMW2026":
-                    st.error("Invalid Dealership Security Authorization Code.")
+                    st.error("Incorrect Dealership Security Authorization Code.")
                 else:
                     try:
                         role_db_value = 'dealer_principal' if chosen_role == "Dealer Principal" else 'sales_rep'
