@@ -19,24 +19,17 @@ jobs:
 
       - name: Install Production Requirements
         run: |
-          pip install requests beautifulsoup4 supabase pytz
+          pip install requests beautifulsoup4 supabase pytz pandas
 
       - name: Execute Scraping Pipeline Run
         env:
           SUPABASE_KEY: "sb_publishable_9C4lD6aJd1h9cIq0SqVanA_6Yz_mvs_"
         run: |
           python scraper.py
-# ... your existing setup steps above ...
 
-      - name: Run Main Lead Scraper
+      - name: Execute Commercial Real Estate Ingest Run
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python scraper.py  # Or whatever your main file is named
-
-      # 🌟 PASTE STEP 3 DIRECTLY HERE:
-      - name: Run Commercial Real Estate Lead Ingest
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python cre_scraper.py
+          SUPABASE_URL: "https://gffororcnwexymymitqi.supabase.co"
+          SUPABASE_KEY: "sb_publishable_9C4lD6aJd1h9cIq0SqVanA_6Yz_mvs_"
+        run: |
+          python cre_scraper.py
