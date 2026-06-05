@@ -51,7 +51,6 @@ st.markdown("""
         /* =========================================================
            🚨 WATERPROOF BUTTON TEXT & FIXED NORMAL SIZE CONTAINER FIX 🚨
            ========================================================= */
-        /* Completely contains the Streamlit block wrapper from expanding */
         div.stButton {
             width: auto !important;
             max-width: 240px !important; 
@@ -59,25 +58,23 @@ st.markdown("""
             margin-top: 0.5rem !important;
         }
         
-        /* TARGETS THE BUTTON CANVAS ONLY */
         div.stButton > button, 
         div.stButton > button:first-child {
-            background-color: #000000 !important; /* Absolute Black Background */
-            border-radius: 0px !important;         /* Sharp geometric edges */
+            background-color: #000000 !important; 
+            border-radius: 0px !important;         
             border: 1px solid #000000 !important;
             padding: 0.6rem 0rem !important;       
             font-weight: 500 !important;
             font-size: 0.8rem !important;
-            letter-spacing: 1.5px !important;     /* Premium text tracking */
-            text-transform: uppercase !important;  /* Corporate styling */
-            width: 240px !important;               /* FIXED CLEAN DIMENSIONS */
+            letter-spacing: 1.5px !important;     
+            text-transform: uppercase !important;  
+            width: 240px !important;               
             max-width: 240px !important;
             height: 42px !important;
             display: block !important;
             transition: all 0.2s ease-in-out !important;
         }
         
-        /* TARGETS INNER TEXT LAYERS SEPARATELY */
         div.stButton > button * {
             color: #FFFFFF !important;
             width: auto !important;
@@ -103,7 +100,7 @@ st.markdown("""
         /* Clean Up Executive KPI Elements */
         [data-testid="stMetricValue"] {
             font-size: 2.3rem !important;
-            font-weight: 300 !important; /* BMW premium signature light weight */
+            font-weight: 300 !important; 
             color: #000000 !important;
             letter-spacing: -1px !important;
         }
@@ -351,22 +348,48 @@ if st.session_state['authenticated']:
                     st.caption("📊 Displaying current live repository stock footprint data:")
             
             if not df_stock.empty:
-                total_units = int(df_stock.iloc[9]['Units']) if len(df_stock) > 9 else df_stock['Units'].sum()
-                total_value = float(df_stock.iloc[9]['Value']) if len(df_stock) > 9 and not pd.isna(df_stock.iloc[9]['Value']) else df_stock['Value'].sum()
+                # 🧠 WATERPROOF FIX: Isolate the final summary row dynamically instead of hardcoding index positions
+                data_rows = df_stock[df_stock.iloc[:, 0].notna() & (~df_stock.iloc[:, 0].astype(str).str.lower().str.contains('total'))].copy()
+                summary_rows = df_stock[df_stock.iloc[:, 0].isna() | (df_stock.iloc[:, 0].astype(str).str.lower().str.contains('total'))].copy()
+                
+                try:
+                    if not summary_rows.empty:
+                        total_units = int(float(summary_rows.iloc[0].iloc[1]))
+                        total_value = float(summary_rows.iloc[0].iloc[2])
+                    else:
+                        total_units = int(pd.to_numeric(data_rows.iloc[:, 1], errors='coerce').sum())
+                        total_value = float(pd.to_numeric(data_rows.iloc[:, 2], errors='coerce').sum())
+                except:
+                    total_units = 0
+                    total_value = 0.0
                 
                 m_col1, m_col2, m_col3 = st.columns(3)
-                m_col1.metric("TOTAL VEHICLES IN STOCK", f"{total_units} UNITS")
+                m_col1.metric("TOTAL VEHICLES IN STOCK", f"{total_units:,} UNITS")
                 m_col2.metric("PORTFOLIO CAPITAL VALUE", f"R {total_value:,.2f}")
                 m_col3.metric("SANDTON NODE COMPLEX", "HQ SHOWROOM")
                 
                 st.markdown("---")
                 st.markdown("#### 📑 FRANCHISE SEGMENTATION ANALYSIS")
                 
-                cleaned_stock = df_stock.dropna(subset=[df_stock.columns[0]]).copy()
+                # Dynamic copy creation using extracted data rows
+                cleaned_stock = data_rows.copy()
                 cleaned_stock.columns = ["STOCK SEGMENT CHANNEL", "UNITS ON HAND", "INVESTMENT VALUE (ZAR)"]
                 
-                cleaned_stock["UNITS ON HAND"] = cleaned_stock["UNITS ON HAND"].map(lambda x: f"{int(x):,}" if pd.notna(x) else "0")
-                cleaned_stock["INVESTMENT VALUE (ZAR)"] = cleaned_stock["INVESTMENT VALUE (ZAR)"].map(lambda x: f"R {float(x):,.2f}" if pd.notna(x) else "R 0.00")
+                # Waterproof string conversion formatting fallback handlers
+                def safe_int_format(val):
+                    try:
+                        return f"{int(float(str(val).replace(',', ''))):,}"
+                    except:
+                        return "0"
+
+                def safe_float_format(val):
+                    try:
+                        return f"R {float(str(val).replace(',', '').replace('R', '').strip()):,.2f}"
+                    except:
+                        return "R 0.00"
+                
+                cleaned_stock["UNITS ON HAND"] = cleaned_stock["UNITS ON HAND"].apply(safe_int_format)
+                cleaned_stock["INVESTMENT VALUE (ZAR)"] = cleaned_stock["INVESTMENT VALUE (ZAR)"].apply(safe_float_format)
                 
                 st.table(cleaned_stock)
             else:
