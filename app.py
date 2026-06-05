@@ -24,6 +24,7 @@ def safe_rerun():
 
 # ====================================================================
 # OFFICIAL BMW DIGITAL DESIGN IDENTITY CSS INJECTION
+# Reference: https://www.bmw.co.za/en/index.html flat luxury architecture
 # ====================================================================
 st.markdown("""
     <style>
@@ -34,13 +35,13 @@ st.markdown("""
         }
         
         /* Premium Flat Input Elements & Dropzones */
-        .stTextInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea {
+        .stTextInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea, .stMultiSelect>div {
             border: 1px solid #E5E5E5 !important;
-            border-radius: 0px !important; 
+            border-radius: 0px !important; /* Flat geometric corners */
             background-color: #F6F6F6 !important;
             color: #262626 !important;
             font-size: 0.95rem !important;
-            padding: 0.5rem !important;
+            padding: 0.2rem 0.5rem !important;
             transition: all 0.2s ease-in-out;
         }
         .stTextInput>div>div>input:focus {
@@ -344,7 +345,7 @@ if st.session_state['authenticated']:
                         supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         safe_rerun()
 
-    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH STRING CLEANUP ----
+    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH FRANCHISE MULTI-SELECT FILTER ----
     with tab3:
         st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
         st.caption("Single source of truth inventory registry organized and separated by official franchise division lines.")
@@ -371,14 +372,12 @@ if st.session_state['authenticated']:
                                 if not cleaned_line:
                                     continue
                                     
-                                # 🧠 INTEL BLOCK: Catch franchise name updates directly & apply strict trailing whitespace strip
                                 if "franchise:" in cleaned_line.lower():
                                     current_franchise = cleaned_line.split(':', 1)[1].strip()
                                     continue
                                     
                                 parts = cleaned_line.split('\t') if '\t' in cleaned_line else cleaned_line.split(',')
                                 
-                                # Isolate rows matching numeric primary VSB key metrics
                                 if len(parts) >= 2 and parts[0].strip().isdigit():
                                     vsb = parts[0].strip()
                                     desc = parts[1].strip()
@@ -396,7 +395,6 @@ if st.session_state['authenticated']:
                                         
                                     chassis = parts[13].strip() if len(parts) > 13 else ''
                                     
-                                    # 🚨 DYNAMIC STRIP: Ensure franchise group name runs completely clean of whitespaces into location row
                                     supabase.table("used_car_stock").upsert({
                                         "vsb_no": vsb, "description": desc, "into_stock": into_stk,
                                         "days_in_stock": days, "total_value": val, "location": current_franchise.strip(), "chassis_no": chassis
@@ -419,8 +417,6 @@ if st.session_state['authenticated']:
 
         if not df_live_stock.empty:
             df_live_stock.columns = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "FRANCHISE DIVISION"]
-            
-            # 🚨 CLEAN ENTRIES IN DATAFRAME FOR RENDERING COMPLIANCE
             df_live_stock["FRANCHISE DIVISION"] = df_live_stock["FRANCHISE DIVISION"].astype(str).str.strip()
             
             # Global Metrics Summarized Across All Inventory
@@ -434,20 +430,51 @@ if st.session_state['authenticated']:
             s_col3.metric("TOTAL AVERAGE FLOOR AGE", f"{int(total_age_global)} DAYS")
             
             st.markdown("---")
-            search_query = st.text_input("🔍 LIVE GLOBAL VEHICLE SEARCH (Type Model name or VSB Number across all categories)", "").strip().lower()
             
-            # Apply sequential search filters if typed
+            # Extract clean unique franchise options list directly for the multi-select box
+            unique_franchises_options = sorted(list(df_live_stock["FRANCHISE DIVISION"].unique()))
+            # Remove edge noise headers if they pop up
+            unique_franchises_options = [f for f in unique_franchises_options if f.strip() != "LHP" and f.strip()]
+            
+            col_filter1, col_filter2 = st.columns([2, 2])
+            with col_filter1:
+                # 🌟 MULTI-SELECT UPGRADE: Allows choosing multiple franchises simultaneously.
+                selected_franchises = st.multiselect(
+                    "FILTER BY FRANCHISE DIVISION(S) (Leave blank to display all)", 
+                    options=unique_franchises_options, 
+                    key="franchise_multi_selector"
+                )
+            with col_filter2:
+                search_query = st.text_input("🔍 LIVE GLOBAL VEHICLE SEARCH (Type Model name or VSB Number)", "").strip().lower()
+            
+            # Apply sequential multi-filter matching
             filtered_df = df_live_stock.copy()
+            if selected_franchises:
+                filtered_df = filtered_df[filtered_df["FRANCHISE DIVISION"].isin(selected_franchises)]
+                
             if search_query:
                 filtered_df = filtered_df[
                     filtered_df['VEHICLE DESCRIPTION'].astype(str).str.lower().str.contains(search_query) |
                     filtered_df['VSB NUMBER'].astype(str).str.lower().str.contains(search_query)
                 ]
             
-            # Group lists sequentially using clean text names
-            unique_franchises = sorted(list(filtered_df["FRANCHISE DIVISION"].unique()))
+            # Compute real-time updates based purely on current selections
+            cnt_units = len(filtered_df)
+            sum_capital = filtered_df['CAPITAL VAL (ZAR)'].sum()
+            avg_age = filtered_df['DAYS ON FLOOR'].mean() if cnt_units > 0 else 0
             
-            for franchise in unique_franchises:
+            st.markdown("<br>", unsafe_allow_html=True)
+            f_col1, f_col2, f_col3 = st.columns(3)
+            f_col1.metric("SELECTED VISIBLE UNITS", f"{cnt_units:,} VEHICLES")
+            f_col2.metric("SELECTED BOOK VALUE", f"R {sum_capital:,.2f}")
+            f_col3.metric("SELECTED AVERAGE FLOOR AGE", f"{int(avg_age)} DAYS")
+            
+            st.markdown("---")
+            
+            # Determine looping headers based on selection arrays
+            loop_franchises = sorted(list(filtered_df["FRANCHISE DIVISION"].unique())) if not selected_franchises else selected_franchises
+            
+            for franchise in loop_franchises:
                 if franchise.strip() == "LHP" or not franchise.strip():
                     continue
                     
