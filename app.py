@@ -43,42 +43,51 @@ st.markdown("""
         }
         
         /* =========================================================
-           🚨 DECISIVE FIX: STRICT MAX-WIDTH CONSTRAINT ON BUTTONS 🚨
+           🚨 DECISIVE FIX: FIXED WIDTH BASE WITH CLEAN INNER TEXT 🚨
            ========================================================= */
         /* Completely contains the Streamlit block wrapper from expanding */
         div.stButton {
             width: auto !important;
-            max-width: 220px !important; /* Hard ceiling to prevent block stretching */
+            max-width: 240px !important; 
             display: inline-block !important;
             margin-top: 0.5rem !important;
         }
         
-        /* Forces the native button to maintain normal premium proportions */
+        /* TARGETS THE BUTTON CANVAS ONLY - No staircase styling anomalies */
         div.stButton > button, 
-        div.stButton > button:first-child,
-        div.stButton > button * {
+        div.stButton > button:first-child {
             background-color: #000000 !important; /* Absolute Black Background */
-            color: #FFFFFF !important;            /* Force crisp white text */
             border-radius: 0px !important;         /* Sharp geometric edges */
             border: 1px solid #000000 !important;
-            padding: 0.6rem 1.5rem !important;     /* Clean corporate breathing room */
+            padding: 0.6rem 0rem !important;       /* Balanced padding baseline */
             font-weight: 500 !important;
             font-size: 0.8rem !important;
             letter-spacing: 1.5px !important;     /* Premium text tracking */
             text-transform: uppercase !important;  /* Corporate styling */
-            width: 220px !important;               /* EXACT FIXED SIZE FOR ALL INTERACTIVE TRIGGERS */
-            max-width: 220px !important;
+            width: 240px !important;               /* FIXED CLEAN DIMENSIONS */
+            max-width: 240px !important;
+            height: 42px !important;
             display: block !important;
             transition: all 0.2s ease-in-out !important;
         }
         
-        /* Keep text color locked on white through hover and focus tracking loops */
+        /* TARGETS INNER TEXT LAYERS SEPARATELY - Forcing clean text colors */
+        div.stButton > button * {
+            color: #FFFFFF !important;
+            width: auto !important;
+            max-width: none !important;
+            display: inline-block !important;
+        }
+        
+        /* Keep text color locked on white through hover and focus loops */
         div.stButton > button:hover,
-        div.stButton > button:hover *,
-        div.stButton > button:focus,
-        div.stButton > button:focus * {
+        div.stButton > button:focus {
             background-color: #262626 !important;
             border-color: #262626 !important;
+        }
+        
+        div.stButton > button:hover *,
+        div.stButton > button:focus * {
             color: #FFFFFF !important;
         }
         
@@ -204,7 +213,6 @@ if st.session_state['authenticated']:
             </div>
         """, unsafe_allow_html=True)
     with header_col2:
-        # Pushes button alignment to flush right corner container smoothly
         st.markdown("<div style='text-align: right;'>", unsafe_allow_html=True)
         if st.button("🚪 LOGOUT", key="header_logout_btn"):
             st.session_state['authenticated'] = False
@@ -238,7 +246,6 @@ if st.session_state['authenticated']:
             else:
                 for idx, row in df.iterrows():
                     with st.container(border=True):
-                        # 🌟 RESTRUCTURED GRID ARRAY TO ELIMINATE RECTANGLE STRETCH SEEN IN image_a8fee7.png
                         col_score, col_content = st.columns([1, 5])
                         with col_score:
                             st.metric("SCORE", f"{row['score']}/100")
@@ -246,7 +253,6 @@ if st.session_state['authenticated']:
                             st.markdown(f"### {row['company'].upper()} — {row['location'].upper()}")
                             st.markdown(f"**TARGET PERSONA:** {row['target']}  |  📅 *GENERATED: {row['lead_date']}*")
                             st.info(f"💡 {row['signal']}")
-                            # Placed directly beneath the metadata at normal inline dimensions
                             if st.button("CLAIM ACCOUNT", key=f"claim_c_{row['id']}"):
                                 supabase.table("leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
                                 st.rerun()
@@ -412,6 +418,7 @@ else:
     with gate_col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
         
+        # HTML inline flex layout for perfect horizontal logo alignment
         st.markdown(f"""
             <div class='bmw-logo-centered-header'>
                 <img src='{BMW_LOGO_URL}' width='82' style='height: auto; display: block;'>
