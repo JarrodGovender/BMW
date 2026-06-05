@@ -36,7 +36,7 @@ st.markdown("""
         /* Premium Flat Input Elements & Dropzones */
         .stTextInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea, .stMultiSelect>div {
             border: 1px solid #E5E5E5 !important;
-            border-radius: 0px !important; 
+            border-radius: 0px !important; /* Flat geometric corners */
             background-color: #F6F6F6 !important;
             color: #262626 !important;
             font-size: 0.95rem !important;
@@ -483,12 +483,11 @@ if st.session_state['authenticated']:
                     for _, row in franchise_df.iterrows():
                         days = int(row["DAYS ON FLOOR"])
                         
-                        # 🛠️ TARGET UPDATE: NEW STOCK badge in the ageing column
                         if days <= 3:
                             days_badge = "🔥 NEW STOCK"
-                        elif days >= 90:
+                        elif days >= 121:
                             days_badge = f"🚨 {days} DAYS (Critical Ageing: Max Prov)"
-                        elif days >= 60:
+                        elif days >= 91:
                             days_badge = f"⚠️ {days} DAYS (Approaching max prov)"
                         else:
                             days_badge = f"{days} Days"
