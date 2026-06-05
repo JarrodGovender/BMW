@@ -34,13 +34,15 @@ st.markdown("""
             background-color: #FFFFFF !important;
         }
         
-        /* Premium Flat Input Elements & Dropzones */
-        .stTextInput>div>div>input, .stSelectbox>div>div>div, [data-testid="stFileUploader"] {
+        /* Premium Flat Input Elements */
+        .stTextInput>div>div>input, .stSelectbox>div>div>div {
             border: 1px solid #E5E5E5 !important;
             border-radius: 0px !important; /* Flat geometric corners */
             background-color: #F6F6F6 !important;
             color: #262626 !important;
             font-size: 0.95rem !important;
+            padding: 0.5rem !important;
+            transition: all 0.2s ease-in-out;
         }
         .stTextInput>div>div>input:focus {
             border-color: #000000 !important;
@@ -51,6 +53,7 @@ st.markdown("""
         /* =========================================================
            🚨 WATERPROOF BUTTON TEXT & FIXED NORMAL SIZE CONTAINER FIX 🚨
            ========================================================= */
+        /* Completely contains the Streamlit block wrapper from expanding */
         div.stButton {
             width: auto !important;
             max-width: 240px !important; 
@@ -58,23 +61,25 @@ st.markdown("""
             margin-top: 0.5rem !important;
         }
         
+        /* TARGETS THE BUTTON CANVAS ONLY */
         div.stButton > button, 
         div.stButton > button:first-child {
-            background-color: #000000 !important; 
-            border-radius: 0px !important;         
+            background-color: #000000 !important; /* Absolute Black Background */
+            border-radius: 0px !important;         /* Sharp geometric edges */
             border: 1px solid #000000 !important;
             padding: 0.6rem 0rem !important;       
             font-weight: 500 !important;
             font-size: 0.8rem !important;
-            letter-spacing: 1.5px !important;     
-            text-transform: uppercase !important;  
-            width: 240px !important;               
+            letter-spacing: 1.5px !important;     /* Premium text tracking */
+            text-transform: uppercase !important;  /* Corporate styling */
+            width: 240px !important;               /* FIXED CLEAN DIMENSIONS */
             max-width: 240px !important;
             height: 42px !important;
             display: block !important;
             transition: all 0.2s ease-in-out !important;
         }
         
+        /* TARGETS INNER TEXT LAYERS SEPARATELY */
         div.stButton > button * {
             color: #FFFFFF !important;
             width: auto !important;
@@ -99,8 +104,8 @@ st.markdown("""
         
         /* Clean Up Executive KPI Elements */
         [data-testid="stMetricValue"] {
-            font-size: 2.3rem !important;
-            font-weight: 300 !important; 
+            font-size: 2.6rem !important;
+            font-weight: 300 !important; /* BMW signature light weights */
             color: #000000 !important;
             letter-spacing: -1px !important;
         }
@@ -216,7 +221,7 @@ if st.session_state['authenticated']:
     MANAGEMENT_ROLES = ['dealer_principal', 'finance_admin', 'sales_manager']
     
     if st.session_state['role'] in MANAGEMENT_ROLES:
-        tab1, tab2, tab3, tab4 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "📦 LIVE STOCK DASHBOARD", "📊 COMMAND OVERVIEW"])
+        tab1, tab2, tab3 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "📊 COMMAND OVERVIEW"])
     else:
         tab1, tab2 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS"])
 
@@ -323,99 +328,36 @@ if st.session_state['authenticated']:
                         supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         safe_rerun()
 
-    # ---- 📦 TAB 3: LIVE STOCK DASHBOARD PORTAL ----
+    # ---- TAB 3: COMMAND OVERVIEW PANELS ----
     if st.session_state['role'] in MANAGEMENT_ROLES:
         with tab3:
-            st.markdown("### 📦 DEALERSHIP STOCK CONTROL ENGINE")
-            st.caption("Morning stock registry upload zone. Upload your daily 'BMW Sandton Stock - 05.06.2026.xlsx' spreadsheet below to refresh inventory metrics.")
-            
-            stock_file = st.file_uploader("UPLOAD CURRENT MORNING STOCK EXCEL TEMPLATE", type=["xlsx", "csv"], key="stock_sheet_uploader")
-            default_overview_path = "BMW Sandton Stock - 05.06.2026.xlsx - Overview.csv"
-            
-            if stock_file is not None:
-                try:
-                    if stock_file.name.endswith('.csv'):
-                        df_stock = pd.read_csv(stock_file)
-                    else:
-                        df_stock = pd.read_excel(stock_file, sheet_name='Overview')
-                    st.success("⚡ Morning inventory sheet successfully parsed and committed to session memory.")
-                except Exception as ex:
-                    st.error(f"Error parsing uploaded file format: {str(ex)}")
-                    df_stock = pd.read_csv(default_overview_path) if os.path.exists(default_overview_path) else pd.DataFrame()
-            else:
-                df_stock = pd.read_csv(default_overview_path) if os.path.exists(default_overview_path) else pd.DataFrame()
-                if not df_stock.empty:
-                    st.caption("📊 Displaying current live repository stock footprint data:")
-            
-            if not df_stock.empty:
-                # 🧠 WATERPROOF FIX: Isolate the final summary row dynamically instead of hardcoding index positions
-                data_rows = df_stock[df_stock.iloc[:, 0].notna() & (~df_stock.iloc[:, 0].astype(str).str.lower().str.contains('total'))].copy()
-                summary_rows = df_stock[df_stock.iloc[:, 0].isna() | (df_stock.iloc[:, 0].astype(str).str.lower().str.contains('total'))].copy()
-                
-                try:
-                    if not summary_rows.empty:
-                        total_units = int(float(summary_rows.iloc[0].iloc[1]))
-                        total_value = float(summary_rows.iloc[0].iloc[2])
-                    else:
-                        total_units = int(pd.to_numeric(data_rows.iloc[:, 1], errors='coerce').sum())
-                        total_value = float(pd.to_numeric(data_rows.iloc[:, 2], errors='coerce').sum())
-                except:
-                    total_units = 0
-                    total_value = 0.0
-                
-                m_col1, m_col2, m_col3 = st.columns(3)
-                m_col1.metric("TOTAL VEHICLES IN STOCK", f"{total_units:,} UNITS")
-                m_col2.metric("PORTFOLIO CAPITAL VALUE", f"R {total_value:,.2f}")
-                m_col3.metric("SANDTON NODE COMPLEX", "HQ SHOWROOM")
-                
-                st.markdown("---")
-                st.markdown("#### 📑 FRANCHISE SEGMENTATION ANALYSIS")
-                
-                # Dynamic copy creation using extracted data rows
-                cleaned_stock = data_rows.copy()
-                cleaned_stock.columns = ["STOCK SEGMENT CHANNEL", "UNITS ON HAND", "INVESTMENT VALUE (ZAR)"]
-                
-                # Waterproof string conversion formatting fallback handlers
-                def safe_int_format(val):
-                    try:
-                        return f"{int(float(str(val).replace(',', ''))):,}"
-                    except:
-                        return "0"
-
-                def safe_float_format(val):
-                    try:
-                        return f"R {float(str(val).replace(',', '').replace('R', '').strip()):,.2f}"
-                    except:
-                        return "R 0.00"
-                
-                cleaned_stock["UNITS ON HAND"] = cleaned_stock["UNITS ON HAND"].apply(safe_int_format)
-                cleaned_stock["INVESTMENT VALUE (ZAR)"] = cleaned_stock["INVESTMENT VALUE (ZAR)"].apply(safe_float_format)
-                
-                st.table(cleaned_stock)
-            else:
-                st.warning("No template inventory lines could be verified in memory. Please complete an operational upload cycle.")
-
-    # ---- TAB 4: MANAGEMENT COMMAND OVERVIEW ----
-    if st.session_state['role'] in MANAGEMENT_ROLES:
-        with tab4:
-            st.markdown("### 📊 AUDIT REGISTRY AND INTERACTION SYSTEM")
+            st.markdown("### 👑 MANAGEMENT DASHBOARD CONTROL GATE & METRICS")
             try:
                 c_leads = len(supabase.table("leads").select("id").execute().data)
                 i_leads = len(supabase.table("individual_leads").select("id").execute().data)
                 t_leads = len(supabase.table("tender_leads").select("id").execute().data)
+                c_closed = len(supabase.table("leads").select("id").eq("status", "Closed").execute().data)
+                i_closed = len(supabase.table("individual_leads").select("id").eq("status", "Closed").execute().data)
+                t_closed = len(supabase.table("tender_leads").select("id").eq("status", "Closed").execute().data)
                 df_master_notes = pd.DataFrame(supabase.table("lead_notes").select("*").order("timestamp", desc=True).execute().data)
             except:
-                c_leads, i_leads, t_leads = 0, 0, 0
+                c_leads, i_leads, t_leads, c_closed, i_closed, t_closed = 0, 0, 0, 0, 0, 0
                 df_master_notes = pd.DataFrame()
                 
-            m1, m2 = st.columns(2)
-            m1.metric("TOTAL OPPORTUNITIES IN ENGINE", c_leads + i_leads + t_leads)
-            m2.metric("ACTIVE LOGGED AGENTS", "ONLINE")
+            m1, m2, m3 = st.columns(3)
+            m1.metric("TOTAL OPPORTUNITIES", c_leads + i_leads + t_leads)
+            m2.metric("CONVERSIONS (B2B)", c_closed + t_closed)
+            m3.metric("DELIVERIES (B2C)", i_closed)
             
-            if not df_master_notes.empty:
-                st.markdown("---")
-                st.markdown("### 💬 LATEST LOGGED COMMUNICATIONS")
-                st.dataframe(df_master_notes[["salesperson_name", "lead_type", "note_text", "timestamp"]], use_container_width=True)
+            st.markdown("---")
+            st.markdown("### 💬 MASTER OUTREACH AUDIT REGISTRY")
+            if df_master_notes.empty:
+                st.info("No transaction log adjustments submitted today.")
+            else:
+                for idx, r_note in df_master_notes.iterrows():
+                    with st.chat_message("user"):
+                        st.markdown(f"**{r_note['salesperson_name'].upper()}** (`@{r_note['username']}`) handled a **{r_note['lead_type'].upper()}** channel asset at *{r_note['timestamp']}*")
+                        st.write(f"📝 *\"{r_note['note_text']}\"*")
 else:
     # ------------------------------------------
     # VIEW B: GATEWAY INTERFACE (SIGN IN / UP)
