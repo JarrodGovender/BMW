@@ -133,6 +133,32 @@ st.markdown("""
             letter-spacing: 0.5px;
             text-transform: uppercase;
         }
+
+        /* =========================================================
+           🚨 DECISIVE FIX: HIDE BLANK Pandas INDEX ROW NUMBERS 🚨
+           ========================================================= */
+        /* Hides the empty index upper-left corner cell header */
+        .stTable thead tr th:first-child {
+            display: none !important;
+        }
+        /* Hides the row number elements inside the table rows */
+        .stTable tbody tr th {
+            display: none !important;
+        }
+
+        /* =========================================================
+           🚨 DECISIVE FIX: CENTER ALIGN DATES & FLOOR DAYS 🚨
+           ========================================================= */
+        /* Targets column header cells 3 and 4 (Into Stock Date & Days on Floor) */
+        .stTable thead tr th:nth-child(4),
+        .stTable thead tr th:nth-child(5) {
+            text-align: center !important;
+        }
+        /* Targets body data content cells 3 and 4 to force center alignment values */
+        .stTable tbody tr td:nth-child(3),
+        .stTable tbody tr td:nth-child(4) {
+            text-align: center !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -361,6 +387,7 @@ if st.session_state['authenticated']:
                             records_processed = 0
                             current_franchise = "General Used Stock"
                             
+                            # Force clean data tables
                             supabase.table("used_car_stock").delete().gt("days_in_stock", -1).execute()
                             supabase.table("used_car_stock").delete().eq("days_in_stock", 0).execute()
                             
@@ -465,6 +492,7 @@ if st.session_state['authenticated']:
                     
                     render_df = franchise_df.copy()
                     render_df["CAPITAL VAL (ZAR)"] = render_df["CAPITAL VAL (ZAR)"].map(lambda x: f"R {float(x):,.2f}")
+                    # Standard display output
                     st.table(render_df[["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"]])
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
@@ -482,7 +510,6 @@ if st.session_state['authenticated']:
             except:
                 df_summary = pd.DataFrame()
                 
-            # 🚨 WATERPROOF ANCHORS RULE: We map explicit masks to prevent rows dropping when empty
             categories_def = [
                 ("Used BMW", lambda df: df["location"].str.lower().str.contains("b -") | df["location"].str.lower().str.contains("i -")),
                 ("Used MINI", lambda df: df["location"].str.lower().str.contains("m -")),
@@ -502,18 +529,15 @@ if st.session_state['authenticated']:
                     units = len(cat_df)
                     val_sum = cat_df["total_value"].sum()
                     
-                    # Compute aging bucket criteria safely
                     v_30_60 = cat_df[(cat_df["days_in_stock"] >= 30) & (cat_df["days_in_stock"] <= 60)]["total_value"].sum()
                     v_61_90 = cat_df[(cat_df["days_in_stock"] >= 61) & (cat_df["days_in_stock"] <= 90)]["total_value"].sum()
                     v_91_120 = cat_df[(cat_df["days_in_stock"] >= 91) & (cat_df["days_in_stock"] <= 120)]["total_value"].sum()
                     v_121_plus = cat_df[cat_df["days_in_stock"] >= 121]["total_value"].sum()
                 else:
-                    # 🚀 FAIL-SAFE REVERT: Default all calculation parameters instantly to 0 if table dataset is empty
                     units = 0
                     val_sum = 0.00
                     v_30_60 = v_61_90 = v_91_120 = v_121_plus = 0.00
                 
-                # Apply corporate write-back variables smoothly
                 p_2_5 = v_30_60 * 0.025
                 p_5_0 = v_61_90 * 0.050
                 p_7_5 = v_91_120 * 0.075
