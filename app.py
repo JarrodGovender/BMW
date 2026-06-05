@@ -97,7 +97,22 @@ if 'authenticated' not in st.session_state:
     st.session_state['name'] = None
     st.session_state['role'] = None
 
-if not st.session_state['authenticated']:
+# Line 100 (Your existing authenticated section check)
+if st.session_state['authenticated']:
+    
+    # 🌟 Add 4 spaces to the front of all these lines below:
+    header_col1, header_col2 = st.columns([4, 1])
+    with header_col1:
+        st.title("BMW Corporate Fleet Engine")
+        st.caption("Gauteng Dealership Pipeline Network • Production Workspace Node")
+    with header_col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🚪 Secure Logout"):
+            st.session_state['authenticated'] = False
+            st.session_state['user'] = None
+            st.session_state['name'] = None
+            st.session_state['role'] = None
+            st.rerun()
     # Corporate Platform Header Array
 header_col1, header_col2 = st.columns([4, 1])
 with header_col1:
