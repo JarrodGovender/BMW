@@ -24,6 +24,7 @@ def safe_rerun():
 
 # ====================================================================
 # OFFICIAL BMW DIGITAL DESIGN IDENTITY CSS INJECTION
+# Reference: https://www.bmw.co.za/en/index.html flat luxury architecture
 # ====================================================================
 st.markdown("""
     <style>
@@ -50,7 +51,7 @@ st.markdown("""
         }
         
         /* =========================================================
-           🚨 WATERPROOF BUTTON TEXT & FIXED NORMAL SIZE CONTAINER FIX 🚨
+           🚨 WATERPROOF BUTTON TEXT & FIXED CLEAN VISUAL CONTAINERS 🚨
            ========================================================= */
         div.stButton {
             width: auto !important;
@@ -94,7 +95,7 @@ st.markdown("""
             color: #FFFFFF !important;
         }
         
-        /* Clean Up Executive KPI Elements */
+        /* Executive KPI Layout Tweak */
         [data-testid="stMetricValue"] {
             font-size: 2.3rem !important;
             font-weight: 300 !important; 
@@ -132,6 +133,18 @@ st.markdown("""
             align-items: center !important;
             gap: 18px !important; 
             width: 100% !important;
+        }
+        
+        /* Custom styling override for table group separation headers */
+        .franchise-header-banner {
+            background-color: #F6F6F6 !important;
+            padding: 10px 15px !important;
+            border-left: 4px solid #000000 !important;
+            margin-top: 25px !important;
+            margin-bottom: 10px !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -203,7 +216,6 @@ if st.session_state['authenticated']:
 
     MANAGEMENT_ROLES = ['dealer_principal', 'finance_admin', 'sales_manager']
     
-    # Injection Layout Rules: Stock dashboard tab is available across all authentication levels
     if st.session_state['role'] in MANAGEMENT_ROLES:
         tab1, tab2, tab3, tab4 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "📊 COMMAND OVERVIEW"])
     else:
@@ -358,10 +370,10 @@ if st.session_state['authenticated']:
                         supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         safe_rerun()
 
-    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE ----
+    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH FRANCHISE SEPARATION ----
     with tab3:
         st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
-        st.caption("Single source of truth inventory registry organized by official franchise grouping boundaries.")
+        st.caption("Single source of truth inventory registry organized and separated by official franchise division lines.")
         
         # Admin Terminal Zone: Locked strictly to Finance/Admin roles
         if st.session_state['role'] == 'finance_admin':
@@ -384,7 +396,7 @@ if st.session_state['authenticated']:
                                 if not cleaned_line:
                                     continue
                                     
-                                # Catch franchise name updates directly
+                                # 🧠 INTEL BLOCK: Catch franchise name updates directly (e.g., "Franchise: B - BMW")
                                 if "franchise:" in cleaned_line.lower():
                                     current_franchise = cleaned_line.split(':', 1)[1].strip()
                                     continue
@@ -431,38 +443,52 @@ if st.session_state['authenticated']:
 
         if not df_live_stock.empty:
             df_live_stock.columns = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "FRANCHISE DIVISION"]
-            franchise_list = ["ALL FRANCHISES"] + sorted(list(df_live_stock["FRANCHISE DIVISION"].unique()))
             
-            col_filter1, col_filter2 = st.columns([1, 2])
-            with col_filter1:
-                selected_franchise = st.selectbox("FILTER BY FRANCHISE DIVISION", franchise_list, key="franchise_selector_dropdown")
-            with col_filter2:
-                search_query = st.text_input("🔍 SEARCH CATALOG (Type Model name or VSB Number)", "").strip().lower()
+            # Global Metrics Summarized Across All Inventory
+            total_units_global = len(df_live_stock)
+            total_value_global = df_live_stock['CAPITAL VAL (ZAR)'].sum()
+            total_age_global = df_live_stock['DAYS ON FLOOR'].mean()
             
+            s_col1, s_col2, s_col3 = st.columns(3)
+            s_col1.metric("TOTAL VEHICLES AVAILABLE", f"{total_units_global:,} UNITS")
+            s_col2.metric("TOTAL STOCKHOLDING CAPITAL", f"R {total_value_global:,.2f}")
+            s_col3.metric("TOTAL AVERAGE FLOOR AGE", f"{int(total_age_global)} DAYS")
+            
+            st.markdown("---")
+            search_query = st.text_input("🔍 LIVE GLOBAL VEHICLE SEARCH (Type Model name or VSB Number across all categories)", "").strip().lower()
+            
+            # Apply sequential search filters if typed
             filtered_df = df_live_stock.copy()
-            if selected_franchise != "ALL FRANCHISES":
-                filtered_df = filtered_df[filtered_df["FRANCHISE DIVISION"] == selected_franchise]
-                
             if search_query:
                 filtered_df = filtered_df[
                     filtered_df['VEHICLE DESCRIPTION'].astype(str).str.lower().str.contains(search_query) |
                     filtered_df['VSB NUMBER'].astype(str).str.lower().str.contains(search_query)
                 ]
+            
+            # 🌟 FRANCHISE SEPARATION VIEW ENGINE: Render vehicles grouped under isolated clean web tables
+            unique_franchises = sorted(list(filtered_df["FRANCHISE DIVISION"].unique()))
+            
+            for franchise in unique_franchises:
+                franchise_df = filtered_df[filtered_df["FRANCHISE DIVISION"] == franchise].copy()
                 
-            cnt_units = len(filtered_df)
-            sum_capital = filtered_df['CAPITAL VAL (ZAR)'].sum()
-            avg_age = filtered_df['DAYS ON FLOOR'].mean() if cnt_units > 0 else 0
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            s_col1, s_col2, s_col3 = st.columns(3)
-            s_col1.metric("UNITS IN SELECTION", f"{cnt_units:,} VEHICLES")
-            s_col2.metric("SELECTION BOOK VALUE", f"R {sum_capital:,.2f}")
-            s_col3.metric("AVERAGE SELECTION FLOOR AGE", f"{int(avg_age)} DAYS")
-            
-            st.markdown("---")
-            display_df = filtered_df.copy()
-            display_df["CAPITAL VAL (ZAR)"] = display_df["CAPITAL VAL (ZAR)"].map(lambda x: f"R {float(x):,.2f}")
-            st.table(display_df[["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "FRANCHISE DIVISION"]])
+                if not franchise_df.empty:
+                    # Calculate Franchise specific subtotals
+                    f_units = len(franchise_df)
+                    f_value = franchise_df['CAPITAL VAL (ZAR)'].sum()
+                    
+                    # Custom CSS Styled Heading Header row separating each Franchise group cleanly
+                    st.markdown(f"""
+                        <div class='franchise-header-banner'>
+                            🏢 FRANCHISE DIVISION: {franchise.upper()} &nbsp;|&nbsp; 
+                            <span style='font-weight: 300; text-transform: none;'>({f_units} Units — Subtotal: R {f_value:,.2f})</span>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Convert number values to clean currency formats before rendering table
+                    render_df = franchise_df.copy()
+                    render_df["CAPITAL VAL (ZAR)"] = render_df["CAPITAL VAL (ZAR)"].map(lambda x: f"R {float(x):,.2f}")
+                    
+                    st.table(render_df[["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"]])
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
