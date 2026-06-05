@@ -282,7 +282,7 @@ if st.session_state['authenticated']:
                 st.info("No unassigned government tender wins flagged for this date.")
             else:
                 for idx, row in df.iterrows():
-                    with st.container=True:
+                    with st.container(border=True):  # 🌟 FIXED SYNTAX ERROR HERE
                         col_score, col_content = st.columns([1, 5])
                         with col_score:
                             st.metric("SCORE", f"{row['score']}/100")
@@ -308,21 +308,17 @@ if st.session_state['authenticated']:
                         supabase.table("leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         st.rerun()
 
-    # ---- 📦 TAB 3: LIVE STOCK DASHBOARD PORTAL (NEW!) ----
+    # ---- 📦 TAB 3: LIVE STOCK DASHBOARD PORTAL ----
     if st.session_state['role'] in MANAGEMENT_ROLES:
         with tab3:
             st.markdown("### 📦 DEALERSHIP STOCK CONTROL ENGINE")
             st.caption("Morning stock registry dropzone. Upload your 'BMW Sandton Stock - 05.06.2026.xlsx' spreadsheet below to refresh inventory metrics.")
             
-            # File uploader accessible to Admin / Managers to refresh active stock matrix
             stock_file = st.file_uploader("UPLOAD CURRENT MORNING STOCK EXCEL TEMPLATE", type=["xlsx", "csv"], key="stock_sheet_uploader")
-            
-            # Baseline data fallbacks parsed from your repository files
             default_overview_path = "BMW Sandton Stock - 05.06.2026.xlsx - Overview.csv"
             
             if stock_file is not None:
                 try:
-                    # Parse dynamic upload directly
                     if stock_file.name.endswith('.csv'):
                         df_stock = pd.read_csv(stock_file)
                     else:
@@ -332,17 +328,14 @@ if st.session_state['authenticated']:
                     st.error(f"Error parsing uploaded file format: {str(ex)}")
                     df_stock = pd.read_csv(default_overview_path) if os.path.exists(default_overview_path) else pd.DataFrame()
             else:
-                # Load current baseline repository data automatically
                 df_stock = pd.read_csv(default_overview_path) if os.path.exists(default_overview_path) else pd.DataFrame()
                 if not df_stock.empty:
                     st.caption("📊 Displaying current live repository stock footprint data:")
             
             if not df_stock.empty:
-                # Calculate headline totals cleanly
                 total_units = int(df_stock.iloc[9]['Units']) if len(df_stock) > 9 else df_stock['Units'].sum()
                 total_value = float(df_stock.iloc[9]['Value']) if len(df_stock) > 9 and not pd.isna(df_stock.iloc[9]['Value']) else df_stock['Value'].sum()
                 
-                # Show Executive High-Contrast KPI Summary
                 m_col1, m_col2, m_col3 = st.columns(3)
                 m_col1.metric("TOTAL VEHICLES IN STOCK", f"{total_units} UNITS")
                 m_col2.metric("PORTFOLIO CAPITAL VALUE", f"R {total_value:,.2f}")
@@ -351,11 +344,9 @@ if st.session_state['authenticated']:
                 st.markdown("---")
                 st.markdown("#### 📑 FRANCHISE SEGMENTATION ANALYSIS")
                 
-                # Render clean flat table layout matching official brand specifications
                 cleaned_stock = df_stock.dropna(subset=[df_stock.columns[0]]).copy()
                 cleaned_stock.columns = ["STOCK SEGMENT CHANNEL", "UNITS ON HAND", "INVESTMENT VALUE (ZAR)"]
                 
-                # Apply high contrast monochromatic format to table values
                 st.dataframe(
                     cleaned_stock.style.format({
                         "UNITS ON HAND": "{:,.0f}",
