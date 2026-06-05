@@ -237,7 +237,6 @@ if st.session_state['authenticated']:
                 st.info("No unassigned corporate fleet leads found for this date.")
             else:
                 for idx, row in df.iterrows():
-                    # 🛠️ UNIVERSAL FIX: Removed legacy parameter layouts to ensure compatibility
                     with st.container():
                         col_score, col_content = st.columns([1, 5])
                         with col_score:
@@ -276,7 +275,7 @@ if st.session_state['authenticated']:
                 st.info("No unassigned government tender wins flagged for this date.")
             else:
                 for idx, row in df.iterrows():
-                    with st.container(): # 🛠️ UNIVERSAL FIX: Removed legacy parameter layouts here
+                    with st.container(): 
                         col_score, col_content = st.columns([1, 5])
                         with col_score:
                             st.metric("SCORE", f"{row['score']}/100")
@@ -286,7 +285,6 @@ if st.session_state['authenticated']:
                             st.info(f"🏛️ {row['tender_desc']}")
                             if st.button("CLAIM TENDER", key=f"claim_t_{row['id']}"):
                                 supabase.table("tender_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
-                                m_col3.metric("SANDTON NODE COMPLEX", "HQ SHOWROOM")
                                 st.rerun()
 
     # ---- TAB 2: CLAIMED LEADS INTERACTION PANELS ----
