@@ -10,6 +10,60 @@ from supabase import create_client, Client
 st.set_page_config(page_title="BMW Sandton Lead Hub", layout="wide")
 SAST = pytz.timezone('Africa/Johannesburg')
 
+# Premium BMW Corporate Brand Identity CSS Injection
+st.markdown("""
+    <style>
+        /* Modernize input boxes, selectors, and tabs */
+        .stTextInput>div>div>input, .stSelectbox>div>div>div {
+            border: 1px solid #2D3748 !important;
+            border-radius: 4px !important;
+            background-color: #121824 !important;
+            transition: all 0.3s ease;
+        }
+        .stTextInput>div>div>input:focus {
+            border-color: #06469D !important;
+            box-shadow: 0 0 0 1px #06469D !important;
+        }
+        
+        /* Transform buttons into sharp, premium tactical triggers */
+        div.stButton > button:first-child {
+            background-color: #06469D !important;
+            color: white !important;
+            border-radius: 4px !important;
+            border: none !important;
+            padding: 0.6rem 2rem !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.5px !important;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            width: 100%;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+        div.stButton > button:first-child:hover {
+            background-color: #1D63B8 !important;
+            cursor: pointer;
+        }
+        div.stButton > button:first-child:active {
+            transform: scale(0.98);
+        }
+        
+        /* Clean up executive KPI metrics block */
+        [data-testid="stMetricValue"] {
+            font-size: 2.4rem !important;
+            font-weight: 700 !important;
+            color: #FFFFFF !important;
+            letter-spacing: -0.5px;
+        }
+        
+        /* Style card containers */
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            background-color: #161C26 !important;
+            border: 1px solid #232B3B !important;
+            border-radius: 6px !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 @st.cache_resource
 def get_supabase_client() -> Client:
     # Authenticate cleanly using the standard secure HTTPS web layer
