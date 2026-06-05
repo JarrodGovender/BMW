@@ -43,7 +43,7 @@ st.markdown("""
         }
         
         /* =========================================================
-           🚨 WATERPROOF BUTTON TEXT FIX: FORCING CRISP WHITE TEXT 🚨
+           🚨 SHARP FIX: ADJUSTING BUTTON DIMENSIONS & WRAPPING 🚨
            ========================================================= */
         div.stButton > button, 
         div.stButton > button:first-child,
@@ -52,12 +52,15 @@ st.markdown("""
             color: #FFFFFF !important;            /* Force crisp white text on button base */
             border-radius: 0px !important;         /* Geometric corners */
             border: 1px solid #000000 !important;
-            padding: 0.75rem 2rem !important;
+            padding: 0.75rem 2.5rem !important;    /* Clean luxury corporate breathing room */
             font-weight: 500 !important;
             font-size: 0.85rem !important;
             letter-spacing: 1.5px !important;     /* Luxury tracking */
             text-transform: uppercase !important;  /* Corporate naming style */
-            width: 100%;
+            width: auto !important;                /* DROPS THE HUGE FULL-WIDTH RECTANGLE BLOCK */
+            min-width: 240px !important;           /* Fixed stable structure width */
+            display: block !important;
+            margin: 0 left !important;
             transition: all 0.2s ease-in-out !important;
         }
         
@@ -121,14 +124,12 @@ st.markdown("""
             color: #262626 !important;
         }
         
-        /* =========================================================
-           ✨ HIGH-PREMIUM BMW BRAND LOGO HEADER SPACING & CENTERING ✨
-           ========================================================= */
+        /* High-Premium brand logo header spacing configurations */
         .bmw-logo-centered-header {
             display: flex !important;
             justify-content: center !important;
             align-items: center !important;
-            gap: 24px !important; /* Sharp, tight, professional spacing */
+            gap: 24px !important; 
             width: 100% !important;
             margin: 0 auto !important;
             padding-bottom: 10px !important;
@@ -137,7 +138,7 @@ st.markdown("""
             display: flex !important;
             justify-content: flex-start !important;
             align-items: center !important;
-            gap: 18px !important; /* Clean layout header spacing */
+            gap: 18px !important; 
             width: 100% !important;
         }
     </style>
@@ -185,7 +186,6 @@ if st.session_state['authenticated']:
     # ------------------------------------------
     header_col1, header_col2 = st.columns([3, 1])
     with header_col1:
-        # Injected high-end flat left-aligned inline layout
         st.markdown(f"""
             <div class='bmw-logo-left-header'>
                 <img src='{BMW_LOGO_URL}' width='50' style='height: auto;'>
@@ -395,7 +395,7 @@ else:
     with gate_col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
         
-        # 🌟 RAW HTML INLINE FLEX OVERRIDE FOR PERFECT CENTERING AND SPACING AS SEEN IN image_a9645e.png
+        # HTML inline flex layout for perfect horizontal logo alignment
         st.markdown(f"""
             <div class='bmw-logo-centered-header'>
                 <img src='{BMW_LOGO_URL}' width='82' style='height: auto; display: block;'>
