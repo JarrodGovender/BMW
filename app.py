@@ -131,6 +131,15 @@ st.markdown("""
             color: #262626 !important;
         }
         
+        .bmw-logo-centered-header {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            gap: 24px !important; 
+            width: 100% !important;
+            margin: 0 auto !important;
+            padding-bottom: 10px !important;
+        }
         .bmw-logo-left-header {
             display: flex !important;
             justify-content: flex-start !important;
@@ -228,7 +237,7 @@ if st.session_state['authenticated']:
                 st.info("No unassigned corporate fleet leads found for this date.")
             else:
                 for idx, row in df.iterrows():
-                    # 🛠️ FIXED: Removed legacy function arguments to prevent container rendering loops
+                    # 🛠️ UNIVERSAL FIX: Removed legacy parameter layouts to ensure compatibility
                     with st.container():
                         col_score, col_content = st.columns([1, 5])
                         with col_score:
@@ -267,7 +276,7 @@ if st.session_state['authenticated']:
                 st.info("No unassigned government tender wins flagged for this date.")
             else:
                 for idx, row in df.iterrows():
-                    with st.container():  # 🛠️ FIXED: Closed open syntax and removed legacy parameters here
+                    with st.container(): # 🛠️ UNIVERSAL FIX: Removed legacy parameter layouts here
                         col_score, col_content = st.columns([1, 5])
                         with col_score:
                             st.metric("SCORE", f"{row['score']}/100")
@@ -277,6 +286,7 @@ if st.session_state['authenticated']:
                             st.info(f"🏛️ {row['tender_desc']}")
                             if st.button("CLAIM TENDER", key=f"claim_t_{row['id']}"):
                                 supabase.table("tender_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
+                                m_col3.metric("SANDTON NODE COMPLEX", "HQ SHOWROOM")
                                 st.rerun()
 
     # ---- TAB 2: CLAIMED LEADS INTERACTION PANELS ----
@@ -297,7 +307,7 @@ if st.session_state['authenticated']:
     if st.session_state['role'] in MANAGEMENT_ROLES:
         with tab3:
             st.markdown("### 📦 DEALERSHIP STOCK CONTROL ENGINE")
-            st.caption("Morning stock registry dropzone. Upload your 'BMW Sandton Stock - 05.06.2026.xlsx' spreadsheet below to refresh inventory metrics.")
+            st.caption("Morning stock registry dropzone. Upload your daily 'BMW Sandton Stock - 05.06.2026.xlsx' spreadsheet below to refresh inventory metrics.")
             
             stock_file = st.file_uploader("UPLOAD CURRENT MORNING STOCK EXCEL TEMPLATE", type=["xlsx", "csv"], key="stock_sheet_uploader")
             default_overview_path = "BMW Sandton Stock - 05.06.2026.xlsx - Overview.csv"
@@ -337,8 +347,7 @@ if st.session_state['authenticated']:
                         "UNITS ON HAND": "{:,.0f}",
                         "INVESTMENT VALUE (ZAR)": "R {:,.2f}"
                     }), 
-                    use_container_width=True, 
-                    hide_index=True
+                    use_container_width=True
                 )
             else:
                 st.warning("No template inventory lines could be verified in memory. Please complete an operational upload cycle.")
@@ -363,7 +372,7 @@ if st.session_state['authenticated']:
             if not df_master_notes.empty:
                 st.markdown("---")
                 st.markdown("### 💬 LATEST LOGGED COMMUNICATIONS")
-                st.dataframe(df_master_notes[["salesperson_name", "lead_type", "note_text", "timestamp"]], use_container_width=True, hide_index=True)
+                st.dataframe(df_master_notes[["salesperson_name", "lead_type", "note_text", "timestamp"]], use_container_width=True)
 else:
     # ------------------------------------------
     # VIEW B: GATEWAY INTERFACE (SIGN IN / UP)
