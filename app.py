@@ -24,7 +24,6 @@ def safe_rerun():
 
 # ====================================================================
 # OFFICIAL BMW DIGITAL DESIGN IDENTITY CSS INJECTION
-# Reference: https://www.bmw.co.za/en/index.html flat luxury architecture
 # ====================================================================
 st.markdown("""
     <style>
@@ -362,7 +361,7 @@ if st.session_state['authenticated']:
                             records_processed = 0
                             current_franchise = "General Used Stock"
                             
-                            # Force clean data tables
+                            # Wipe out all existing entries
                             supabase.table("used_car_stock").delete().gt("days_in_stock", -1).execute()
                             supabase.table("used_car_stock").delete().eq("days_in_stock", 0).execute()
                             
@@ -472,65 +471,89 @@ if st.session_state['authenticated']:
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
-    # ---- TAB 4: COMMAND OVERVIEW & EXECUTIVE MATRIX SUMMARY ----
+    # ---- TAB 4: COMMAND OVERVIEW & EXECUTIVE MATRIX SUMMARIES ----
     if st.session_state['role'] in MANAGEMENT_ROLES:
         with tab4:
             st.markdown("### 👑 MANAGEMENT COMMAND OVERVIEW & AUDITS")
             
-            # 📊 EXECUTIVE STOCK BOOK SUMMARY MATRIX (Replicating image_990eff.png)
-            st.markdown("#### 📊 DEALERSHIP USED car stock summary overview")
-            
+            # --- OVERVIEW A: STOCK STOCKROOM DATA SUMMARY ---
+            st.markdown("#### 📊 DEALERSHIP USED CAR STOCK SUMMARY OVERVIEW")
             try:
-                raw_res = supabase.table("used_car_stock").select("total_value, location").execute()
+                raw_res = supabase.table("used_car_stock").select("total_value, days_in_stock, location").execute()
                 df_summary = pd.DataFrame(raw_res.data) if raw_res.data else pd.DataFrame()
             except:
                 df_summary = pd.DataFrame()
                 
             if not df_summary.empty:
-                # Isolate strings and assign classifications cleanly based on user layout parameters
                 df_summary["location"] = df_summary["location"].astype(str).str.strip()
                 
-                # Define mapping masks for each franchise cohort bucket
+                # Define grouping masks
                 bmw_mask = df_summary["location"].str.lower().str.contains("b -") | df_summary["location"].str.lower().str.contains("i -")
                 mini_mask = df_summary["location"].str.lower().str.contains("m -")
                 mc_mask = df_summary["location"].str.lower().str.contains("a -") | df_summary["location"].str.lower().str.contains("c -")
                 tier_mask = df_summary["location"].str.lower().str.contains("z -")
                 
-                # Build list dictionaries for compiling data elements into matrix frame
                 summary_matrix_data = [
-                    {
-                        "Category": "Used BMW",
-                        "Units": len(df_summary[bmw_mask]),
-                        "Value": df_summary[bmw_mask]["total_value"].sum()
-                    },
-                    {
-                        "Category": "Used MINI",
-                        "Units": len(df_summary[mini_mask]),
-                        "Value": df_summary[mini_mask]["total_value"].sum()
-                    },
-                    {
-                        "Category": "Used MC",
-                        "Units": len(df_summary[mc_mask]),
-                        "Value": df_summary[mc_mask]["total_value"].sum()
-                    },
-                    {
-                        "Category": "Tier Sandton",
-                        "Units": len(df_summary[tier_mask]),
-                        "Value": df_summary[tier_mask]["total_value"].sum()
-                    }
+                    {"Category": "Used BMW", "Units": len(df_summary[bmw_mask]), "Value": df_summary[bmw_mask]["total_value"].sum()},
+                    {"Category": "Used MINI", "Units": len(df_summary[mini_mask]), "Value": df_summary[mini_mask]["total_value"].sum()},
+                    {"Category": "Used MC", "Units": len(df_summary[mc_mask]), "Value": df_summary[mc_mask]["total_value"].sum()},
+                    {"Category": "Tier Sandton", "Units": len(df_summary[tier_mask]), "Value": df_summary[tier_mask]["total_value"].sum()}
                 ]
                 
                 df_matrix_view = pd.DataFrame(summary_matrix_data)
-                
-                # Format calculated summary fields precisely matching image styling attributes
                 df_matrix_render = df_matrix_view.copy()
                 df_matrix_render["Units"] = df_matrix_render["Units"].map(lambda x: f"{int(x):,}")
                 df_matrix_render["Value"] = df_matrix_render["Value"].map(lambda x: f"R {float(x):,.2f}")
                 df_matrix_render.columns = ["STOCK DIVISION", "UNITS ON HAND", "PORTFOLIO INVESTMENT VALUE"]
                 
                 st.table(df_matrix_render)
+                
+                # --- OVERVIEW B: AGING PROVISION SUMMARY MATRIX (Replicating image_98ff23.png) ---
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("#### 🪙 DEALERSHIP VEHICLE AGING PROVISION MATRIX")
+                
+                provision_rows = []
+                categories = [
+                    ("Used BMW", bmw_mask),
+                    ("Used MINI", mini_mask),
+                    ("Used MC", mc_mask),
+                    ("Tier Sandton", tier_mask)
+                ]
+                
+                for cat_name, mask in categories:
+                    cat_df = df_summary[mask]
+                    
+                    # Group by aging buckets based on user layout parameters
+                    v_30_60 = cat_df[(cat_df["days_in_stock"] >= 30) & (cat_df["days_in_stock"] <= 60)]["total_value"].sum()
+                    v_61_90 = cat_df[(cat_df["days_in_stock"] >= 61) & (cat_df["days_in_stock"] <= 90)]["total_value"].sum()
+                    v_91_120 = cat_df[(cat_df["days_in_stock"] >= 91) & (cat_df["days_in_stock"] <= 120)]["total_value"].sum()
+                    v_121_plus = cat_df[cat_df["days_in_stock"] >= 121]["total_value"].sum()
+                    
+                    # Calculate exact financial provisions
+                    p_2_5 = v_30_60 * 0.025
+                    p_5_0 = v_61_90 * 0.050
+                    p_7_5 = v_91_120 * 0.075
+                    p_10_0 = v_121_plus * 0.100
+                    p_total = p_2_5 + p_5_0 + p_7_5 + p_10_0
+                    
+                    provision_rows.append({
+                        "STOCK DIVISION": cat_name,
+                        "2.5% (30-60 Days)": p_2_5,
+                        "5.0% (61-90 Days)": p_5_0,
+                        "7.5% (91-120 Days)": p_7_5,
+                        "10.0% (121+ Days)": p_10_0,
+                        "TOTAL PROVISION": p_total
+                    })
+                    
+                df_prov = pd.DataFrame(provision_rows)
+                
+                # Format calculated numbers nicely as readable currency text matrices
+                for col in ["2.5% (30-60 Days)", "5.0% (61-90 Days)", "7.5% (91-120 Days)", "10.0% (121+ Days)", "TOTAL PROVISION"]:
+                    df_prov[col] = df_prov[col].map(lambda x: f"R {float(x):,.2f}")
+                    
+                st.table(df_prov)
             else:
-                st.caption("Waiting for stock lines to construct executive dashboard summary grid layout views.")
+                st.caption("Waiting for stock lines to construct executive dashboard summary views.")
                 
             st.markdown("---")
             try:
