@@ -1,6 +1,6 @@
 [theme]
-primaryColor = "#06469D"         # BMW M-Sport Electric Blue Accent
-backgroundColor = "#0F141C"      # Premium Obsidian Dark Mode Background
-secondaryBackgroundColor = "#1A202C" # Contained Surface Slate for Cards and Sidebar
-textColor = "#FFFFFF"            # Crisp White Text Readability
+primaryColor = "#000000"         # Official BMW Absolute Black for Primary Elements
+backgroundColor = "#FFFFFF"      # Crisp Pure White Main Canvas
+secondaryBackgroundColor = "#F6F6F6" # Light Executive Slate for Sidebars and Filter Panels
+textColor = "#262626"            # Midnight Ash for Elite Readability
 font = "sans serif"
