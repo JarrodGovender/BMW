@@ -15,6 +15,13 @@ SAST = pytz.timezone('Africa/Johannesburg')
 BMW_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg"
 M_SPORT_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/b/b3/BMW_M_logo.svg"
 
+def safe_rerun():
+    """Waterproof context manager to handle page refreshes across all Streamlit versions."""
+    if hasattr(st, "rerun"):
+        st.rerun()
+    else:
+        st.experimental_rerun()
+
 # ====================================================================
 # OFFICIAL BMW DIGITAL DESIGN IDENTITY CSS INJECTION
 # Reference: https://www.bmw.co.za/en/index.html flat luxury architecture
@@ -42,7 +49,7 @@ st.markdown("""
         }
         
         /* =========================================================
-           🚨 DECISIVE FIX: FIXED WIDTH BASE WITH CLEAN INNER TEXT 🚨
+           🚨 WATERPROOF BUTTON TEXT & FIXED NORMAL SIZE CONTAINER FIX 🚨
            ========================================================= */
         /* Completely contains the Streamlit block wrapper from expanding */
         div.stButton {
@@ -91,12 +98,6 @@ st.markdown("""
         
         div.stButton > button:active {
             transform: scale(0.98) !important;
-        }
-        
-        /* Structural Framed Lead Cards Fallback styling override */
-        div[data-testid="stVerticalBlock"] > div {
-            background-color: #FFFFFF !important;
-            transition: border-color 0.2s ease;
         }
         
         /* Clean Up Executive KPI Elements */
@@ -208,14 +209,13 @@ if st.session_state['authenticated']:
             st.session_state['user'] = None
             st.session_state['name'] = None
             st.session_state['role'] = None
-            st.rerun()
+            safe_rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(f"LOGGED IN AS: **{st.session_state['name'].upper()}** ({st.session_state['role'].replace('_', ' ').upper()})")
     st.markdown("---")
 
-    # Unified Management Access Rule: DP, Finance/Admin, and Sales Manager see the executive suite tabs
     MANAGEMENT_ROLES = ['dealer_principal', 'finance_admin', 'sales_manager']
     
     if st.session_state['role'] in MANAGEMENT_ROLES:
@@ -247,7 +247,7 @@ if st.session_state['authenticated']:
                             st.info(f"💡 {row['signal']}")
                             if st.button("CLAIM ACCOUNT", key=f"claim_c_{row['id']}"):
                                 supabase.table("leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
-                                st.rerun()
+                                safe_rerun()
 
         elif lead_section == "🚗 Individual Leads (B2C)":
             res = supabase.table("individual_leads").select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str).order("score", desc=True).execute()
@@ -266,7 +266,7 @@ if st.session_state['authenticated']:
                             st.info(f"💎 {row['signal']}")
                             if st.button("CLAIM CLIENT", key=f"claim_i_{row['id']}"):
                                 supabase.table("individual_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
-                                st.rerun()
+                                safe_rerun()
 
         else:
             res = supabase.table("tender_leads").select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str).order("score", desc=True).execute()
@@ -285,28 +285,52 @@ if st.session_state['authenticated']:
                             st.info(f"🏛️ {row['tender_desc']}")
                             if st.button("CLAIM TENDER", key=f"claim_t_{row['id']}"):
                                 supabase.table("tender_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
-                                # 🌟 FIXED: Misplaced metric function completely removed from button logic
-                                st.rerun()
+                                safe_rerun()
 
-    # ---- TAB 2: CLAIMED LEADS INTERACTION PANELS ----
+    # ---- TAB 2: CLAIMED ACCOUNTS CHANNEL MONITORING ----
     with tab2:
         my_corp_res = supabase.table("leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
-        st.markdown("### 🏢 YOUR CLAIMED CORPORATE FLEET ACCOUNTS")
+        my_ind_res = supabase.table("individual_leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
+        my_tend_res = supabase.table("tender_leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
+        
+        st.markdown("### 🏢 CLAIMED CORPORATE FLEET ACCOUNTS")
         if not my_corp_res.data:
-            st.caption("No active claims allocated to your profile.")
+            st.caption("No active claims linked to your profile.")
         else:
             for row in my_corp_res.data:
                 with st.expander(f"COMPANY: {row['company'].upper()} ({row['location'].upper()})"):
                     st.write(f"**SIGNAL:** {row['signal']}")
                     if st.button("CLOSE ACCOUNT AS CONVERTED", key=f"cl_c_{row['id']}"):
                         supabase.table("leads").update({"status": "Closed"}).eq("id", row['id']).execute()
-                        st.rerun()
+                        safe_rerun()
+                        
+        st.markdown("### 🚗 CLAIMED PRIVATE LUXURY CLIENTS")
+        if not my_ind_res.data:
+            st.caption("No active private client claims linked to your profile.")
+        else:
+            for row in my_ind_res.data:
+                with st.expander(f"CLIENT: {row['client_name'].upper()}"):
+                    st.write(f"**SIGNAL:** {row['signal']}")
+                    if st.button("CLOSE CLIENT AS DELIVERED", key=f"cl_i_{row['id']}"):
+                        supabase.table("individual_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
+                        safe_rerun()
+                        
+        st.markdown("### 🏛️ CLAIMED GOVERNMENT TENDER ACCOUNTS")
+        if not my_tend_res.data:
+            st.caption("No active tender wins linked to your profile.")
+        else:
+            for row in my_tend_res.data:
+                with st.expander(f"VENDOR: {row['company'].upper()}"):
+                    st.write(f"**SIGNAL:** {row['tender_desc']}")
+                    if st.button("CLOSE TENDER AS LOGISTICS SECURED", key=f"cl_t_{row['id']}"):
+                        supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
+                        safe_rerun()
 
     # ---- 📦 TAB 3: LIVE STOCK DASHBOARD PORTAL ----
     if st.session_state['role'] in MANAGEMENT_ROLES:
         with tab3:
             st.markdown("### 📦 DEALERSHIP STOCK CONTROL ENGINE")
-            st.caption("Morning stock registry dropzone. Upload your daily 'BMW Sandton Stock - 05.06.2026.xlsx' spreadsheet below to refresh inventory metrics.")
+            st.caption("Morning stock registry upload zone. Upload your daily 'BMW Sandton Stock - 05.06.2026.xlsx' spreadsheet below to refresh inventory metrics.")
             
             stock_file = st.file_uploader("UPLOAD CURRENT MORNING STOCK EXCEL TEMPLATE", type=["xlsx", "csv"], key="stock_sheet_uploader")
             default_overview_path = "BMW Sandton Stock - 05.06.2026.xlsx - Overview.csv"
@@ -341,13 +365,11 @@ if st.session_state['authenticated']:
                 cleaned_stock = df_stock.dropna(subset=[df_stock.columns[0]]).copy()
                 cleaned_stock.columns = ["STOCK SEGMENT CHANNEL", "UNITS ON HAND", "INVESTMENT VALUE (ZAR)"]
                 
-                st.dataframe(
-                    cleaned_stock.style.format({
-                        "UNITS ON HAND": "{:,.0f}",
-                        "INVESTMENT VALUE (ZAR)": "R {:,.2f}"
-                    }), 
-                    use_container_width=True
-                )
+                # Format metrics directly to avoid data table styling bugs on legacy packages
+                cleaned_stock["UNITS ON HAND"] = cleaned_stock["UNITS ON HAND"].map(lambda x: f"{int(x):,}" if pd.notna(x) else "0")
+                cleaned_stock["INVESTMENT VALUE (ZAR)"] = cleaned_stock["INVESTMENT VALUE (ZAR)"].map(lambda x: f"R {float(x):,.2f}" if pd.notna(x) else "R 0.00")
+                
+                st.table(cleaned_stock)
             else:
                 st.warning("No template inventory lines could be verified in memory. Please complete an operational upload cycle.")
 
@@ -409,7 +431,7 @@ else:
                                 st.session_state['user'] = login_username
                                 st.session_state['name'] = res.data[0]['name']
                                 st.session_state['role'] = res.data[0]['role']
-                                st.rerun()
+                                safe_rerun()
                             else:
                                 st.error("Authentication rejected: invalid credentials.")
                         else:
