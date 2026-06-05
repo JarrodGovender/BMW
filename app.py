@@ -93,17 +93,10 @@ st.markdown("""
             transform: scale(0.98) !important;
         }
         
-        /* Structural Framed Lead Cards */
-        div[data-testid="stVerticalBlockBorderWrapper"] {
+        /* Structural Framed Lead Cards Fallback styling override */
+        div[data-testid="stVerticalBlock"] > div {
             background-color: #FFFFFF !important;
-            border: 1px solid #E5E5E5 !important; 
-            border-radius: 0px !important;         
-            padding: 1.5rem !important;
-            margin-bottom: 1rem !important;
             transition: border-color 0.2s ease;
-        }
-        div[data-testid="stVerticalBlockBorderWrapper"]:hover {
-            border-color: #A0A0A0 !important; 
         }
         
         /* Clean Up Executive KPI Elements */
@@ -138,15 +131,6 @@ st.markdown("""
             color: #262626 !important;
         }
         
-        .bmw-logo-centered-header {
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-            gap: 24px !important; 
-            width: 100% !important;
-            margin: 0 auto !important;
-            padding-bottom: 10px !important;
-        }
         .bmw-logo-left-header {
             display: flex !important;
             justify-content: flex-start !important;
@@ -244,7 +228,8 @@ if st.session_state['authenticated']:
                 st.info("No unassigned corporate fleet leads found for this date.")
             else:
                 for idx, row in df.iterrows():
-                    with st.container(border=True):
+                    # 🛠️ FIXED: Removed legacy function arguments to prevent container rendering loops
+                    with st.container():
                         col_score, col_content = st.columns([1, 5])
                         with col_score:
                             st.metric("SCORE", f"{row['score']}/100")
@@ -263,7 +248,7 @@ if st.session_state['authenticated']:
                 st.info("No unassigned individual luxury leads found for this date.")
             else:
                 for idx, row in df.iterrows():
-                    with st.container(border=True):
+                    with st.container():
                         col_score, col_content = st.columns([1, 5])
                         with col_score:
                             st.metric("SCORE", f"{row['score']}/100")
@@ -282,7 +267,7 @@ if st.session_state['authenticated']:
                 st.info("No unassigned government tender wins flagged for this date.")
             else:
                 for idx, row in df.iterrows():
-                    with st.container(border=True):  # 🌟 FIXED SYNTAX ERROR HERE
+                    with st.container():  # 🛠️ FIXED: Closed open syntax and removed legacy parameters here
                         col_score, col_content = st.columns([1, 5])
                         with col_score:
                             st.metric("SCORE", f"{row['score']}/100")
