@@ -198,8 +198,8 @@ if st.session_state['authenticated']:
                 <img src='{BMW_LOGO_URL}' width='50' style='height: auto;'>
                 <img src='{M_SPORT_LOGO_URL}' width='65' style='height: auto; margin-top: 4px;'>
                 <div style='margin-left: 10px;'>
-                    <h3 style='margin: 0; padding: 0; font-size: 1.4rem; font-weight: 400; letter-spacing: 0.5px;'>BMW CORPORATE FLEET ENGINE</h3>
-                    <p style='margin: 0; padding: 0; font-size: 0.75rem; color: #666666; letter-spacing: 1px;'>GAUTENG DEALERSHIP PIPELINE NETWORK • PRODUCTION WORKSPACE NODE</p>
+                    <h3 style='margin: 0; padding: 0; font-size: 1.4rem; font-weight: 400; letter-spacing: 0.5px;'>BMW SANDTON</h3>
+                    <p style='margin: 0; padding: 0; font-size: 0.75rem; color: #666666; letter-spacing: 1px;'>SALES LEADS PORTAL • PRODUCTION WORKSPACE NODE</p>
                 </div>
             </div>
         """, unsafe_allow_html=True)
@@ -410,8 +410,9 @@ else:
             </div>
         """, unsafe_allow_html=True)
             
-        st.markdown("<h2 style='text-align: center; font-weight: 300; letter-spacing: 1px; margin-top:25px; margin-bottom: 0;'>BMW ENTERPRISE SYSTEM</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; font-size:0.85rem; color:#666666; letter-spacing:1px; margin-top: 5px;'>GAUTENG FLEET LOGISTICS PORTAL</p>", unsafe_allow_html=True)
+        # 🌟 UPDATED BRANDING STRINGS HERE AS PER image_a902e4.png REFERENCE REQUEST
+        st.markdown("<h2 style='text-align: center; font-weight: 300; letter-spacing: 1px; margin-top:25px; margin-bottom: 0;'>BMW SANDTON</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; font-size:0.85rem; color:#666666; letter-spacing:1px; margin-top: 5px;'>SALES LEADS PORTAL</p>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
     
         auth_tab, signup_tab = st.tabs(["🔒 SECURE SIGN IN", "📝 CREATE ACCESS ACCOUNT"])
