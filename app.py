@@ -24,7 +24,6 @@ def safe_rerun():
 
 # ====================================================================
 # OFFICIAL BMW DIGITAL DESIGN IDENTITY CSS INJECTION
-# Reference: https://www.bmw.co.za/en/index.html flat luxury architecture
 # ====================================================================
 st.markdown("""
     <style>
@@ -37,7 +36,7 @@ st.markdown("""
         /* Premium Flat Input Elements & Dropzones */
         .stTextInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea {
             border: 1px solid #E5E5E5 !important;
-            border-radius: 0px !important; /* Flat geometric corners */
+            border-radius: 0px !important; 
             background-color: #F6F6F6 !important;
             color: #262626 !important;
             font-size: 0.95rem !important;
@@ -50,9 +49,7 @@ st.markdown("""
             box-shadow: none !important;
         }
         
-        /* =========================================================
-           🚨 WATERPROOF BUTTON TEXT & FIXED CLEAN VISUAL CONTAINERS 🚨
-           ========================================================= */
+        /* Premium Flat Buttons */
         div.stButton {
             width: auto !important;
             max-width: 240px !important; 
@@ -90,11 +87,6 @@ st.markdown("""
             border-color: #262626 !important;
         }
         
-        div.stButton > button:hover *,
-        div.stButton > button:focus * {
-            color: #FFFFFF !important;
-        }
-        
         /* Executive KPI Layout Tweak */
         [data-testid="stMetricValue"] {
             font-size: 2.3rem !important;
@@ -123,10 +115,6 @@ st.markdown("""
             font-weight: 600 !important;
         }
         
-        h1, h2, h3, h4, label {
-            color: #262626 !important;
-        }
-        
         .bmw-logo-left-header {
             display: flex !important;
             justify-content: flex-start !important;
@@ -135,7 +123,6 @@ st.markdown("""
             width: 100% !important;
         }
         
-        /* Custom styling override for table group separation headers */
         .franchise-header-banner {
             background-color: #F6F6F6 !important;
             padding: 10px 15px !important;
@@ -161,33 +148,20 @@ except Exception as e:
     st.error(f"🔒 Secure API Hook Connection Error: {str(e)}")
     st.stop()
 
-# ==========================================
-# 2. OPERATIONAL TIME GUARD (10PM - 6AM LOCKOUT)
-# ==========================================
+# Operational Hour Compliance Guard
 now_sast = datetime.now(SAST)
-current_hour = now_sast.hour
-
-if current_hour >= 22 or current_hour < 6:
+if now_sast.hour >= 22 or now_sast.hour < 6:
     st.error("🛑 **Access Denied: System Offline.**")
-    st.info("To maintain security and compliance boundaries, the BMW Sandton Corporate Fleet Engine locks out all access between **22:00 PM and 06:00 AM SAST**.")
     st.stop()
 
-# ==========================================
-# 3. AUTHENTICATION SESSION STATE
-# ==========================================
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
     st.session_state['user'] = None
     st.session_state['name'] = None
     st.session_state['role'] = None
 
-# ==========================================
-# 4. CORE PLATFORM ROUTING ROUTER
-# ==========================================
 if st.session_state['authenticated']:
-    # ------------------------------------------
-    # VIEW A: AUTHENTICATED PARTNER WORKSPACE
-    # ------------------------------------------
+    # Authenticated Workspace Layout Header
     header_col1, header_col2 = st.columns([4, 1])
     with header_col1:
         st.markdown(f"""
@@ -370,7 +344,7 @@ if st.session_state['authenticated']:
                         supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         safe_rerun()
 
-    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH DEFENSIVE PARSING ----
+    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH STRING CLEANUP ----
     with tab3:
         st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
         st.caption("Single source of truth inventory registry organized and separated by official franchise division lines.")
@@ -388,7 +362,7 @@ if st.session_state['authenticated']:
                             records_processed = 0
                             current_franchise = "General Used Stock"
                             
-                            # 🚨 LAYER 1 FORCE-CLEAR: Wipe out all existing items to completely eradicate previous "LHP" data rows
+                            # Clean out all existing items to completely eradicate previous database fragments
                             supabase.table("used_car_stock").delete().gt("days_in_stock", -1).execute()
                             supabase.table("used_car_stock").delete().eq("days_in_stock", 0).execute()
                             
@@ -397,7 +371,7 @@ if st.session_state['authenticated']:
                                 if not cleaned_line:
                                     continue
                                     
-                                # Catch franchise name updates directly (e.g., "Franchise: B - BMW")
+                                # 🧠 INTEL BLOCK: Catch franchise name updates directly & apply strict trailing whitespace strip
                                 if "franchise:" in cleaned_line.lower():
                                     current_franchise = cleaned_line.split(':', 1)[1].strip()
                                     continue
@@ -422,10 +396,10 @@ if st.session_state['authenticated']:
                                         
                                     chassis = parts[13].strip() if len(parts) > 13 else ''
                                     
-                                    # 🚨 LAYER 2 STRICT MAPPING: We force current_franchise into the location table field, ignoring parts[12] completely!
+                                    # 🚨 DYNAMIC STRIP: Ensure franchise group name runs completely clean of whitespaces into location row
                                     supabase.table("used_car_stock").upsert({
                                         "vsb_no": vsb, "description": desc, "into_stock": into_stk,
-                                        "days_in_stock": days, "total_value": val, "location": current_franchise, "chassis_no": chassis
+                                        "days_in_stock": days, "total_value": val, "location": current_franchise.strip(), "chassis_no": chassis
                                     }).execute()
                                     records_processed += 1
                                     
@@ -445,6 +419,9 @@ if st.session_state['authenticated']:
 
         if not df_live_stock.empty:
             df_live_stock.columns = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "FRANCHISE DIVISION"]
+            
+            # 🚨 CLEAN ENTRIES IN DATAFRAME FOR RENDERING COMPLIANCE
+            df_live_stock["FRANCHISE DIVISION"] = df_live_stock["FRANCHISE DIVISION"].astype(str).str.strip()
             
             # Global Metrics Summarized Across All Inventory
             total_units_global = len(df_live_stock)
@@ -467,22 +444,19 @@ if st.session_state['authenticated']:
                     filtered_df['VSB NUMBER'].astype(str).str.lower().str.contains(search_query)
                 ]
             
-            # Render vehicles grouped under isolated clean web tables
+            # Group lists sequentially using clean text names
             unique_franchises = sorted(list(filtered_df["FRANCHISE DIVISION"].unique()))
             
             for franchise in unique_franchises:
-                # Defensive check to skip any legacy corrupted entries if any exist
-                if franchise.strip() == "LHP":
+                if franchise.strip() == "LHP" or not franchise.strip():
                     continue
                     
                 franchise_df = filtered_df[filtered_df["FRANCHISE DIVISION"] == franchise].copy()
                 
                 if not franchise_df.empty:
-                    # Calculate Franchise specific subtotals
                     f_units = len(franchise_df)
                     f_value = franchise_df['CAPITAL VAL (ZAR)'].sum()
                     
-                    # Custom CSS Styled Heading Header row separating each Franchise group cleanly
                     st.markdown(f"""
                         <div class='franchise-header-banner'>
                             🏢 FRANCHISE DIVISION: {franchise.upper()} &nbsp;|&nbsp; 
@@ -490,7 +464,6 @@ if st.session_state['authenticated']:
                         </div>
                     """, unsafe_allow_html=True)
                     
-                    # Convert number values to clean currency formats before rendering table
                     render_df = franchise_df.copy()
                     render_df["CAPITAL VAL (ZAR)"] = render_df["CAPITAL VAL (ZAR)"].map(lambda x: f"R {float(x):,.2f}")
                     
