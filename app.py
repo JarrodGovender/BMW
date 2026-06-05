@@ -345,12 +345,11 @@ if st.session_state['authenticated']:
                         supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         safe_rerun()
 
-    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH FRANCHISE MULTI-SELECT FILTER ----
+    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE ----
     with tab3:
         st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
         st.caption("Single source of truth inventory registry organized and separated by official franchise division lines.")
         
-        # Admin Terminal Zone: Locked strictly to Finance/Admin roles
         if st.session_state['role'] == 'finance_admin':
             with st.expander("🛠️ ADMIN CONSOLE: BULK CAR STOCK TERMINAL", expanded=False):
                 st.markdown("#### Paste Spreadsheet Data Rows Below")
@@ -363,7 +362,7 @@ if st.session_state['authenticated']:
                             records_processed = 0
                             current_franchise = "General Used Stock"
                             
-                            # Clean out all existing items to completely eradicate previous database fragments
+                            # Force clean data tables
                             supabase.table("used_car_stock").delete().gt("days_in_stock", -1).execute()
                             supabase.table("used_car_stock").delete().eq("days_in_stock", 0).execute()
                             
@@ -408,7 +407,6 @@ if st.session_state['authenticated']:
                     else:
                         st.warning("Please populate the data terminal before submitting.")
 
-        # ---- LIVE COHORT DATA DISPLAY PANELS ----
         try:
             stock_res = supabase.table("used_car_stock").select("vsb_no, description, into_stock, days_in_stock, total_value, location").order("days_in_stock", desc=True).execute()
             df_live_stock = pd.DataFrame(stock_res.data) if stock_res.data else pd.DataFrame()
@@ -430,24 +428,15 @@ if st.session_state['authenticated']:
             s_col3.metric("TOTAL AVERAGE FLOOR AGE", f"{int(total_age_global)} DAYS")
             
             st.markdown("---")
-            
-            # Extract clean unique franchise options list directly for the multi-select box
             unique_franchises_options = sorted(list(df_live_stock["FRANCHISE DIVISION"].unique()))
-            # Remove edge noise headers if they pop up
             unique_franchises_options = [f for f in unique_franchises_options if f.strip() != "LHP" and f.strip()]
             
             col_filter1, col_filter2 = st.columns([2, 2])
             with col_filter1:
-                # 🌟 MULTI-SELECT UPGRADE: Allows choosing multiple franchises simultaneously.
-                selected_franchises = st.multiselect(
-                    "FILTER BY FRANCHISE DIVISION(S) (Leave blank to display all)", 
-                    options=unique_franchises_options, 
-                    key="franchise_multi_selector"
-                )
+                selected_franchises = st.multiselect("FILTER BY FRANCHISE DIVISION(S) (Leave blank to display all)", options=unique_franchises_options, key="franchise_multi_selector")
             with col_filter2:
                 search_query = st.text_input("🔍 LIVE GLOBAL VEHICLE SEARCH (Type Model name or VSB Number)", "").strip().lower()
             
-            # Apply sequential multi-filter matching
             filtered_df = df_live_stock.copy()
             if selected_franchises:
                 filtered_df = filtered_df[filtered_df["FRANCHISE DIVISION"].isin(selected_franchises)]
@@ -458,20 +447,6 @@ if st.session_state['authenticated']:
                     filtered_df['VSB NUMBER'].astype(str).str.lower().str.contains(search_query)
                 ]
             
-            # Compute real-time updates based purely on current selections
-            cnt_units = len(filtered_df)
-            sum_capital = filtered_df['CAPITAL VAL (ZAR)'].sum()
-            avg_age = filtered_df['DAYS ON FLOOR'].mean() if cnt_units > 0 else 0
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            f_col1, f_col2, f_col3 = st.columns(3)
-            f_col1.metric("SELECTED VISIBLE UNITS", f"{cnt_units:,} VEHICLES")
-            f_col2.metric("SELECTED BOOK VALUE", f"R {sum_capital:,.2f}")
-            f_col3.metric("SELECTED AVERAGE FLOOR AGE", f"{int(avg_age)} DAYS")
-            
-            st.markdown("---")
-            
-            # Determine looping headers based on selection arrays
             loop_franchises = sorted(list(filtered_df["FRANCHISE DIVISION"].unique())) if not selected_franchises else selected_franchises
             
             for franchise in loop_franchises:
@@ -493,15 +468,71 @@ if st.session_state['authenticated']:
                     
                     render_df = franchise_df.copy()
                     render_df["CAPITAL VAL (ZAR)"] = render_df["CAPITAL VAL (ZAR)"].map(lambda x: f"R {float(x):,.2f}")
-                    
                     st.table(render_df[["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"]])
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
-    # ---- TAB 4: COMMAND OVERVIEW ----
+    # ---- TAB 4: COMMAND OVERVIEW & EXECUTIVE MATRIX SUMMARY ----
     if st.session_state['role'] in MANAGEMENT_ROLES:
         with tab4:
             st.markdown("### 👑 MANAGEMENT COMMAND OVERVIEW & AUDITS")
+            
+            # 📊 EXECUTIVE STOCK BOOK SUMMARY MATRIX (Replicating image_990eff.png)
+            st.markdown("#### 📊 DEALERSHIP USED car stock summary overview")
+            
+            try:
+                raw_res = supabase.table("used_car_stock").select("total_value, location").execute()
+                df_summary = pd.DataFrame(raw_res.data) if raw_res.data else pd.DataFrame()
+            except:
+                df_summary = pd.DataFrame()
+                
+            if not df_summary.empty:
+                # Isolate strings and assign classifications cleanly based on user layout parameters
+                df_summary["location"] = df_summary["location"].astype(str).str.strip()
+                
+                # Define mapping masks for each franchise cohort bucket
+                bmw_mask = df_summary["location"].str.lower().str.contains("b -") | df_summary["location"].str.lower().str.contains("i -")
+                mini_mask = df_summary["location"].str.lower().str.contains("m -")
+                mc_mask = df_summary["location"].str.lower().str.contains("a -") | df_summary["location"].str.lower().str.contains("c -")
+                tier_mask = df_summary["location"].str.lower().str.contains("z -")
+                
+                # Build list dictionaries for compiling data elements into matrix frame
+                summary_matrix_data = [
+                    {
+                        "Category": "Used BMW",
+                        "Units": len(df_summary[bmw_mask]),
+                        "Value": df_summary[bmw_mask]["total_value"].sum()
+                    },
+                    {
+                        "Category": "Used MINI",
+                        "Units": len(df_summary[mini_mask]),
+                        "Value": df_summary[mini_mask]["total_value"].sum()
+                    },
+                    {
+                        "Category": "Used MC",
+                        "Units": len(df_summary[mc_mask]),
+                        "Value": df_summary[mc_mask]["total_value"].sum()
+                    },
+                    {
+                        "Category": "Tier Sandton",
+                        "Units": len(df_summary[tier_mask]),
+                        "Value": df_summary[tier_mask]["total_value"].sum()
+                    }
+                ]
+                
+                df_matrix_view = pd.DataFrame(summary_matrix_data)
+                
+                # Format calculated summary fields precisely matching image styling attributes
+                df_matrix_render = df_matrix_view.copy()
+                df_matrix_render["Units"] = df_matrix_render["Units"].map(lambda x: f"{int(x):,}")
+                df_matrix_render["Value"] = df_matrix_render["Value"].map(lambda x: f"R {float(x):,.2f}")
+                df_matrix_render.columns = ["STOCK DIVISION", "UNITS ON HAND", "PORTFOLIO INVESTMENT VALUE"]
+                
+                st.table(df_matrix_render)
+            else:
+                st.caption("Waiting for stock lines to construct executive dashboard summary grid layout views.")
+                
+            st.markdown("---")
             try:
                 c_leads = len(supabase.table("leads").select("id").execute().data)
                 i_leads = len(supabase.table("individual_leads").select("id").execute().data)
@@ -529,9 +560,7 @@ if st.session_state['authenticated']:
                         st.markdown(f"**{r_note['salesperson_name'].upper()}** (`@{r_note['username']}`) handled a **{r_note['lead_type'].upper()}** channel asset at *{r_note['timestamp']}*")
                         st.write(f"📝 *\"{r_note['note_text']}\"*")
 else:
-    # ------------------------------------------
-    # VIEW B: GATEWAY INTERFACE (SIGN IN / UP)
-    # ------------------------------------------
+    # Gateway Authorization Interface Layer
     gate_col1, gate_col2, gate_col3 = st.columns([1.5, 3, 1.5])
     with gate_col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
