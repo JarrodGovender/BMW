@@ -53,13 +53,13 @@ st.markdown("""
             margin-top: 0.5rem !important;
         }
         
-        /* TARGETS THE BUTTON CANVAS ONLY - No staircase styling anomalies */
+        /* TARGETS THE BUTTON CANVAS ONLY */
         div.stButton > button, 
         div.stButton > button:first-child {
             background-color: #000000 !important; /* Absolute Black Background */
             border-radius: 0px !important;         /* Sharp geometric edges */
             border: 1px solid #000000 !important;
-            padding: 0.6rem 0rem !important;       /* Balanced padding baseline */
+            padding: 0.6rem 0rem !important;       
             font-weight: 500 !important;
             font-size: 0.8rem !important;
             letter-spacing: 1.5px !important;     /* Premium text tracking */
@@ -71,7 +71,7 @@ st.markdown("""
             transition: all 0.2s ease-in-out !important;
         }
         
-        /* TARGETS INNER TEXT LAYERS SEPARATELY - Forcing clean text colors */
+        /* TARGETS INNER TEXT LAYERS SEPARATELY */
         div.stButton > button * {
             color: #FFFFFF !important;
             width: auto !important;
@@ -79,7 +79,6 @@ st.markdown("""
             display: inline-block !important;
         }
         
-        /* Keep text color locked on white through hover and focus loops */
         div.stButton > button:hover,
         div.stButton > button:focus {
             background-color: #262626 !important;
@@ -98,20 +97,20 @@ st.markdown("""
         /* Structural Framed Lead Cards */
         div[data-testid="stVerticalBlockBorderWrapper"] {
             background-color: #FFFFFF !important;
-            border: 1px solid #E5E5E5 !important; /* Subtle corporate divider line */
-            border-radius: 0px !important;         /* No rounded borders */
+            border: 1px solid #E5E5E5 !important; 
+            border-radius: 0px !important;         
             padding: 1.5rem !important;
             margin-bottom: 1rem !important;
             transition: border-color 0.2s ease;
         }
         div[data-testid="stVerticalBlockBorderWrapper"]:hover {
-            border-color: #A0A0A0 !important; /* Elegant focus indicator */
+            border-color: #A0A0A0 !important; 
         }
         
         /* Clean Up Executive KPI Elements */
         [data-testid="stMetricValue"] {
             font-size: 2.6rem !important;
-            font-weight: 300 !important; /* BMW signature light weights */
+            font-weight: 300 !important; 
             color: #000000 !important;
             letter-spacing: -1px !important;
         }
@@ -136,12 +135,10 @@ st.markdown("""
             font-weight: 600 !important;
         }
         
-        /* Standard structural typography overrides */
         h1, h2, h3, h4, label {
             color: #262626 !important;
         }
         
-        /* High-Premium brand logo header spacing configurations */
         .bmw-logo-centered-header {
             display: flex !important;
             justify-content: center !important;
@@ -226,7 +223,10 @@ if st.session_state['authenticated']:
     st.markdown(f"LOGGED IN AS: **{st.session_state['name'].upper()}** ({st.session_state['role'].replace('_', ' ').upper()})")
     st.markdown("---")
 
-    if st.session_state['role'] == 'dealer_principal':
+    # 🌟 NEW MASTER ROUTING LAYER: Granting full view privileges to DP, Finance/Admin, and Sales Manager
+    MANAGEMENT_ROLES = ['dealer_principal', 'finance_admin', 'sales_manager']
+    
+    if st.session_state['role'] in MANAGEMENT_ROLES:
         tab1, tab2, tab3 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "📊 COMMAND OVERVIEW"])
     else:
         tab1, tab2 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS"])
@@ -327,63 +327,10 @@ if st.session_state['authenticated']:
                         supabase.table("leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         st.rerun()
 
-        st.markdown("---")
-        st.markdown("### 🚗 MY CLAIMED PRIVATE LUXURY CLIENTS")
-        if not my_ind_res.data:
-            st.caption("No active individual accounts claimed.")
-        else:
-            for row in my_ind_res.data:
-                with st.expander(f"PROSPECT: {row['client_name'].upper()} — {row['title'].upper()}"):
-                    st.write(f"**OUTREACH SIGNAL:** {row['signal']}")
-                    st.markdown("#### 📞 DIRECT CONTACT DETAILS")
-                    i_i1, i_i2, i_i3 = st.columns(3)
-                    i_i1.markdown(f"**Direct Email:**\n`{row['public_email']}`")
-                    i_i2.markdown(f"**Office Line:**\n`{row['public_phone']}`")
-                    i_i3.markdown(f"[🔗 LinkedIn Profile]({row['linkedin_url']})")
-                    st.markdown("---")
-                    note_text_ind = st.text_area("LOG CLIENT VERBAL UPDATE", key=f"n_i_{row['id']}")
-                    if st.button("SAVE CLIENT UPDATE", key=f"s_i_{row['id']}") and note_text_ind:
-                        supabase.table("lead_notes").insert({
-                            "lead_id": row['id'], "lead_type": "individual", "username": st.session_state['user'],
-                            "salesperson_name": st.session_state['name'], "note_text": note_text_ind, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
-                        }).execute()
-                        st.success("Client updates cataloged.")
-                        st.rerun()
-                    if st.button("MARK UNIT SECURED & DELIVERED 🔑", key=f"cl_i_{row['id']}"):
-                        supabase.table("individual_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
-                        st.rerun()
-
-        st.markdown("---")
-        st.markdown("### 🏛️ CLAIMED TENDER VENDORS")
-        if not my_tend_res.data:
-            st.caption("No active government tender claims currently flagged.")
-        else:
-            for row in my_tend_res.data:
-                with st.expander(f"TENDER WINNER: {row['company'].upper()}"):
-                    st.write(f"**PROJECT ANCHOR DESC:** {row['tender_desc']}")
-                    st.markdown("#### 📞 CORPORATE MANAGEMENT ANCHORS")
-                    t_i1, t_i2, t_i3, t_i4 = st.columns(4)
-                    t_i1.markdown(f"**Primary Email:**\n`{row['public_email']}`")
-                    t_i2.markdown(f"**Switchboard Phone:**\n`{row['public_phone']}`")
-                    t_i3.markdown(f"[🌐 Corporate Site]({row['company_website']})")
-                    t_i4.markdown(f"[🔗 LinkedIn Anchor]({row['linkedin_url']})")
-                    st.markdown("---")
-                    note_text_tend = st.text_area("LOG FLEET ENGAGEMENT SUMMARY", key=f"n_t_{row['id']}")
-                    if st.button("SAVE TENDER DATA NOTE", key=f"s_t_{row['id']}") and note_text_tend:
-                        supabase.table("lead_notes").insert({
-                            "lead_id": row['id'], "lead_type": "tender", "username": st.session_state['user'],
-                            "salesperson_name": st.session_state['name'], "note_text": note_text_tend, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
-                        }).execute()
-                        st.success("Engagement data safely written.")
-                        st.rerun()
-                    if st.button("MARK CONTRACT LOGISTICS SECURED 🚚", key=f"cl_t_{row['id']}"):
-                        supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
-                        st.rerun()
-
-    # ---- TAB 3: DEALER PRINCIPAL OVERVIEW ----
-    if st.session_state['role'] == 'dealer_principal':
+    # ---- TAB 3: COMMAND OVERVIEW PANELS ----
+    if st.session_state['role'] in MANAGEMENT_ROLES:
         with tab3:
-            st.markdown("### 👑 DEALER PRINCIPAL CONTROL GATE & METRICS")
+            st.markdown("### 👑 MANAGEMENT DASHBOARD CONTROL GATE & METRICS")
             try:
                 c_leads = len(supabase.table("leads").select("id").execute().data)
                 i_leads = len(supabase.table("individual_leads").select("id").execute().data)
@@ -418,7 +365,6 @@ else:
     with gate_col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
         
-        # HTML inline flex layout for perfect horizontal logo alignment
         st.markdown(f"""
             <div class='bmw-logo-centered-header'>
                 <img src='{BMW_LOGO_URL}' width='82' style='height: auto; display: block;'>
@@ -462,7 +408,13 @@ else:
             new_name = st.text_input("FULL NAME", key="reg_name").strip()
             new_username = st.text_input("CHOOSE SYSTEM USERNAME", key="reg_user").strip().lower()
             new_password = st.text_input("CHOOSE ACCESS PASSWORD", type="password", key="reg_pass")
-            chosen_role = st.selectbox("SELECT POSITION", ["Sales Representative", "Dealer Principal"], key="reg_role")
+            
+            # 🌟 UPDATED SELECTION: Adding Finance/Admin and Sales Manager options
+            chosen_role = st.selectbox(
+                "SELECT POSITION", 
+                ["Sales Representative", "Dealer Principal", "Finance/Admin", "Sales Manager"], 
+                key="reg_role"
+            )
             security_code = st.text_input("DEALERSHIP SECURITY AUTHORIZATION CODE", type="password", key="reg_code")
             st.markdown("<br>", unsafe_allow_html=True)
             
@@ -475,7 +427,16 @@ else:
                     st.error("Incorrect Dealership Security Authorization Code.")
                 else:
                     try:
-                        role_db_value = 'dealer_principal' if chosen_role == "Dealer Principal" else 'sales_rep'
+                        # Map drop-down choices cleanly to underlying db identifier variables
+                        if chosen_role == "Dealer Principal":
+                            role_db_value = 'dealer_principal'
+                        elif chosen_role == "Finance/Admin":
+                            role_db_value = 'finance_admin'
+                        elif chosen_role == "Sales Manager":
+                            role_db_value = 'sales_manager'
+                        else:
+                            role_db_value = 'sales_rep'
+                            
                         existing = supabase.table("users").select("username").eq("username", new_username).execute()
                         if existing.data:
                             st.error("System username is already claimed.")
