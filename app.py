@@ -13,56 +13,102 @@ SAST = pytz.timezone('Africa/Johannesburg')
 # Public CDN URL for the modern official BMW transparent logo asset
 BMW_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg"
 
-# Premium BMW Corporate Brand Identity CSS Injection
+# ====================================================================
+# OFFICIAL BMW DIGITAL DESIGN IDENTITY CSS INJECTION
+# Reference: https://www.bmw.co.za/en/index.html flat luxury architecture
+# ====================================================================
 st.markdown("""
     <style>
-        /* Modernize input boxes, selectors, and tabs */
-        .stTextInput>div>div>input, .stSelectbox>div>div>div {
-            border: 1px solid #2D3748 !important;
-            border-radius: 4px !important;
-            background-color: #121824 !important;
-            transition: all 0.3s ease;
-        }
-        .stTextInput>div>div>input:focus {
-            border-color: #06469D !important;
-            box-shadow: 0 0 0 1px #06469D !important;
+        /* Global Typography & Background Restructuring */
+        html, body, [data-testid="stAppViewContainer"] {
+            font-family: "BMWTypeNext", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+            background-color: #FFFFFF !important;
         }
         
-        /* Transform buttons into sharp, premium tactical triggers */
+        /* Premium Flat Input Elements */
+        .stTextInput>div>div>input, .stSelectbox>div>div>div {
+            border: 1px solid #E5E5E5 !important;
+            border-radius: 0px !important; /* Flat geometric corners */
+            background-color: #F6F6F6 !important;
+            color: #262626 !important;
+            font-size: 0.95rem !important;
+            padding: 0.5rem !important;
+            transition: all 0.2s ease-in-out;
+        }
+        .stTextInput>div>div>input:focus {
+            border-color: #000000 !important;
+            background-color: #FFFFFF !important;
+            box-shadow: none !important;
+        }
+        
+        /* Official BMW Monochromatic Premium Action Buttons */
         div.stButton > button:first-child {
-            background-color: #06469D !important;
-            color: white !important;
-            border-radius: 4px !important;
-            border: none !important;
-            padding: 0.6rem 2rem !important;
-            font-weight: 600 !important;
-            letter-spacing: 0.5px !important;
-            text-transform: uppercase;
-            font-size: 0.85rem;
+            background-color: #000000 !important; /* Absolute Black Base */
+            color: #FFFFFF !important;
+            border-radius: 0px !important; /* Sharp corners */
+            border: 1px solid #000000 !important;
+            padding: 0.75rem 2rem !important;
+            font-weight: 500 !important;
+            font-size: 0.85rem !important;
+            letter-spacing: 1.5px !important; /* Luxury tracking */
+            text-transform: uppercase !important; /* Corporate naming style */
             width: 100%;
-            transition: background-color 0.2s ease, transform 0.1s ease;
+            transition: all 0.2s ease-in-out;
         }
         div.stButton > button:first-child:hover {
-            background-color: #1D63B8 !important;
+            background-color: #262626 !important;
+            border-color: #262626 !important;
+            color: #FFFFFF !important;
             cursor: pointer;
         }
         div.stButton > button:first-child:active {
-            transform: scale(0.98);
+            transform: scale(0.99);
         }
         
-        /* Clean up executive KPI metrics block */
-        [data-testid="stMetricValue"] {
-            font-size: 2.4rem !important;
-            font-weight: 700 !important;
-            color: #FFFFFF !important;
-            letter-spacing: -0.5px;
-        }
-        
-        /* Style card containers */
+        /* Structural Framed Lead Cards */
         div[data-testid="stVerticalBlockBorderWrapper"] {
-            background-color: #161C26 !important;
-            border: 1px solid #232B3B !important;
-            border-radius: 6px !important;
+            background-color: #FFFFFF !important;
+            border: 1px solid #E5E5E5 !important; /* Subtle corporate divider line */
+            border-radius: 0px !important; /* No rounded borders */
+            padding: 1.5rem !important;
+            margin-bottom: 1rem !important;
+            transition: border-color 0.2s ease;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+            border-color: #A0A0A0 !important; /* Elegant focus indicator */
+        }
+        
+        /* Clean Up Executive KPI Elements */
+        [data-testid="stMetricValue"] {
+            font-size: 2.6rem !important;
+            font-weight: 300 !important; /* BMW signature light weights */
+            color: #000000 !important;
+            letter-spacing: -1px !important;
+        }
+        [data-testid="stMetricLabel"] {
+            font-size: 0.85rem !important;
+            text-transform: uppercase !important;
+            letter-spacing: 1px !important;
+            color: #666666 !important;
+        }
+        
+        /* Main Navigation Tab Customization */
+        button[data-baseweb="tab"] {
+            font-size: 0.9rem !important;
+            text-transform: uppercase !important;
+            letter-spacing: 1px !important;
+            color: #666666 !important;
+            border-bottom-width: 2px !important;
+        }
+        button[data-baseweb="tab"][aria-selected="true"] {
+            color: #000000 !important;
+            border-bottom-color: #000000 !important;
+            font-weight: 600 !important;
+        }
+        
+        /* Set standard font colors for subheaders and text */
+        h1, h2, h3, h4, p, span, label {
+            color: #262626 !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -107,33 +153,32 @@ if st.session_state['authenticated']:
     # ------------------------------------------
     # VIEW A: AUTHENTICATED PARTNER WORKSPACE
     # ------------------------------------------
-    header_col1, header_col2, header_col3 = st.columns([1, 4, 1])
+    header_col1, header_col2, header_col3 = st.columns([1, 5, 2])
     with header_col1:
-        st.image(BMW_LOGO_URL, width=80)
+        st.image(BMW_LOGO_URL, width=70)
     with header_col2:
-        st.title("BMW Corporate Fleet Engine")
-        st.caption("Gauteng Dealership Pipeline Network • Production Workspace Node")
+        st.subheader("BMW CORPORATE FLEET ENGINE")
+        st.caption("GAUTENG DEALERSHIP PIPELINE NETWORK • PRODUCTION WORKSPACE NODE")
     with header_col3:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🚪 Secure Logout", key="header_logout_btn"):
+        if st.button("🚪 SECURE LOGOUT", key="header_logout_btn"):
             st.session_state['authenticated'] = False
             st.session_state['user'] = None
             st.session_state['name'] = None
             st.session_state['role'] = None
             st.rerun()
 
-    st.markdown(f"Logged in as: **{st.session_state['name']}** ({st.session_state['role'].replace('_', ' ').title()})")
+    st.markdown(f"LOGGED IN AS: **{st.session_state['name'].upper()}** ({st.session_state['role'].replace('_', ' ').upper()})")
     st.markdown("---")
 
     if st.session_state['role'] == 'dealer_principal':
-        tab1, tab2, tab3 = st.tabs(["🔥 Available Daily Feed", "💼 My Claimed Accounts", "📊 Dealer Principal Command Overview"])
+        tab1, tab2, tab3 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "📊 COMMAND OVERVIEW"])
     else:
-        tab1, tab2 = st.tabs(["🔥 Available Daily Feed (First-Come, First-Served)", "💼 My Claimed Accounts"])
+        tab1, tab2 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS"])
 
     # ---- TAB 1: AVAILABLE DAILY FEED ----
     with tab1:
-        lead_section = st.radio("Select Target Section", ["🏢 Corporate Fleet (B2B)", "🚗 Individual Leads (B2C)", "🏛️ Gov Tenders (B2B)"], horizontal=True)
-        selected_date = st.date_input("Filter by Generation Date", datetime.now(SAST))
+        lead_section = st.radio("SELECT OPPORTUNITY CHANNEL", ["🏢 Corporate Fleet (B2B)", "🚗 Individual Leads (B2C)", "🏛️ Gov Tenders (B2B)"], horizontal=True)
+        selected_date = st.date_input("FILTER BY GENERATION DATE", datetime.now(SAST))
         filter_date_str = selected_date.strftime('%Y-%m-%d')
         st.markdown("---")
         
@@ -145,12 +190,12 @@ if st.session_state['authenticated']:
             else:
                 for idx, row in df.iterrows():
                     with st.container(border=True):
-                        col1, col2, col3 = st.columns([1, 4, 1])
-                        col1.metric("Score", f"{row['score']}/100")
-                        col2.subheader(f"{row['company']} — {row['location']}")
-                        col2.markdown(f"**Target Persona:** {row['target']} | 📅 *Generated: {row['lead_date']}*")
+                        col1, col2, col3 = st.columns([1, 4, 1.5])
+                        col1.metric("SCORE", f"{row['score']}/100")
+                        col2.markdown(f"### {row['company'].upper()} — {row['location'].upper()}")
+                        col2.markdown(f"**TARGET PERSONA:** {row['target']}  |  📅 *GENERATED: {row['lead_date']}*")
                         col2.info(f"💡 {row['signal']}")
-                        if col3.button("Claim Fleet Lead", key=f"claim_c_{row['id']}"):
+                        if col3.button("CLAIM ACCOUNT", key=f"claim_c_{row['id']}"):
                             supabase.table("leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
                             st.rerun()
 
@@ -162,12 +207,12 @@ if st.session_state['authenticated']:
             else:
                 for idx, row in df.iterrows():
                     with st.container(border=True):
-                        col1, col2, col3 = st.columns([1, 4, 1])
-                        col1.metric("Score", f"{row['score']}/100")
-                        col2.subheader(f"Prospect: {row['client_name']}")
-                        col2.markdown(f"**Position:** {row['title']} at *{row['company']}* ({row['location']}) | 📅 *Generated: {row['lead_date']}*")
+                        col1, col2, col3 = st.columns([1, 4, 1.5])
+                        col1.metric("SCORE", f"{row['score']}/100")
+                        col2.markdown(f"### PROSPECT: {row['client_name'].upper()}")
+                        col2.markdown(f"**POSITION:** {row['title']} at *{row['company']}* ({row['location']})  |  📅 *GENERATED: {row['lead_date']}*")
                         col2.info(f"💎 {row['signal']}")
-                        if col3.button("Claim Client Lead", key=f"claim_i_{row['id']}"):
+                        if col3.button("CLAIM CLIENT", key=f"claim_i_{row['id']}"):
                             supabase.table("individual_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
                             st.rerun()
 
@@ -179,12 +224,12 @@ if st.session_state['authenticated']:
             else:
                 for idx, row in df.iterrows():
                     with st.container(border=True):
-                        col1, col2, col3 = st.columns([1, 4, 1])
-                        col1.metric("Score", f"{row['score']}/100")
-                        col2.subheader(f"Winning Vendor: {row['company']}")
-                        col2.markdown(f"**Awarding Body:** {row['awarding_body']} | 💰 **Contract Value:** `{row['contract_value']}`")
+                        col1, col2, col3 = st.columns([1, 4, 1.5])
+                        col1.metric("SCORE", f"{row['score']}/100")
+                        col2.markdown(f"### VENDOR: {row['company'].upper()}")
+                        col2.markdown(f"**AWARDING BODY:** {row['awarding_body']}  |  💰 **VALUE:** `{row['contract_value']}`")
                         col2.info(f"🏛️ {row['tender_desc']}")
-                        if col3.button("Claim Tender Lead", key=f"claim_t_{row['id']}"):
+                        if col3.button("CLAIM TENDER", key=f"claim_t_{row['id']}"):
                             supabase.table("tender_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
                             st.rerun()
 
@@ -194,89 +239,89 @@ if st.session_state['authenticated']:
         my_ind_res = supabase.table("individual_leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
         my_tend_res = supabase.table("tender_leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
         
-        st.subheader("🏢 My Claimed Corporate Fleet Accounts")
+        st.markdown("### 🏢 CLAIMED CORPORATE FLEET ACCOUNTS")
         if not my_corp_res.data:
-            st.caption("No active corporate fleet claims.")
+            st.caption("No active corporate fleet claims linked to your profile.")
         else:
             for row in my_corp_res.data:
-                with st.expander(f"Company: {row['company']} ({row['location']})"):
-                    st.write(f"**Signal Details:** {row['signal']}")
-                    st.markdown("### 📞 Public Contact Anchors")
+                with st.expander(f"COMPANY: {row['company'].upper()} ({row['location'].upper()})"):
+                    st.write(f"**SIGNAL ANALYSIS:** {row['signal']}")
+                    st.markdown("#### 📞 CONTACT SECURE ANCHORS")
                     c_i1, c_i2, c_i3, c_i4 = st.columns(4)
                     c_i1.markdown(f"**Email:**\n`{row['public_email']}`")
-                    c_i2.markdown(f"**Phone:**\n`{row['public_phone']}`")
-                    c_i3.markdown(f"[🌐 Website]({row['company_website']})")
-                    c_i4.markdown(f"[🔗 LinkedIn]({row['linkedin_url']})")
+                    c_i2.markdown(f"**Phone Line:**\n`{row['public_phone']}`")
+                    c_i3.markdown(f"[🌐 Web Domain]({row['company_website']})")
+                    c_i4.markdown(f"[🔗 LinkedIn Connect]({row['linkedin_url']})")
                     st.markdown("---")
-                    note_text = st.text_area("Log Fleet Note", key=f"n_c_{row['id']}")
-                    if st.button("Save Fleet Note", key=f"s_c_{row['id']}") and note_text:
+                    note_text = st.text_area("LOG COMMUNICATIONS NOTE", key=f"n_c_{row['id']}")
+                    if st.button("SAVE LOG NOTE", key=f"s_c_{row['id']}") and note_text:
                         supabase.table("lead_notes").insert({
                             "lead_id": row['id'], "lead_type": "corporate", "username": st.session_state['user'],
                             "salesperson_name": st.session_state['name'], "note_text": note_text, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
                         }).execute()
-                        st.success("Note logged.")
+                        st.success("Note committed to cloud registry.")
                         st.rerun()
-                    if st.button("Mark Fleet Converted", key=f"cl_c_{row['id']}"):
+                    if st.button("CLOSE ACCOUNT AS CONVERTED", key=f"cl_c_{row['id']}"):
                         supabase.table("leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         st.rerun()
 
         st.markdown("---")
-        st.subheader("🚗 My Claimed Individual Private Client Accounts")
+        st.markdown("### 🚗 MY CLAIMED PRIVATE Luxury CLIENTS")
         if not my_ind_res.data:
-            st.caption("No active individual private client claims.")
+            st.caption("No active individual accounts claimed.")
         else:
             for row in my_ind_res.data:
-                with st.expander(f"Prospect: {row['client_name']} — {row['title']}"):
-                    st.write(f"**Signal Details:** {row['signal']}")
-                    st.markdown("### 📞 Public Contacts")
+                with st.expander(f"PROSPECT: {row['client_name'].upper()} — {row['title'].upper()}"):
+                    st.write(f"**OUTREACH SIGNAL:** {row['signal']}")
+                    st.markdown("#### 📞 DIRECT CONTACT DETAILS")
                     i_i1, i_i2, i_i3 = st.columns(3)
                     i_i1.markdown(f"**Direct Email:**\n`{row['public_email']}`")
-                    i_i2.markdown(f"**Office Phone:**\n`{row['public_phone']}`")
+                    i_i2.markdown(f"**Office Line:**\n`{row['public_phone']}`")
                     i_i3.markdown(f"[🔗 LinkedIn Profile]({row['linkedin_url']})")
                     st.markdown("---")
-                    note_text_ind = st.text_area("Log Client Note", key=f"n_i_{row['id']}")
-                    if st.button("Save Client Note", key=f"s_i_{row['id']}") and note_text_ind:
+                    note_text_ind = st.text_area("LOG CLIENT VERBAL UPDATE", key=f"n_i_{row['id']}")
+                    if st.button("SAVE CLIENT UPDATE", key=f"s_i_{row['id']}") and note_text_ind:
                         supabase.table("lead_notes").insert({
                             "lead_id": row['id'], "lead_type": "individual", "username": st.session_state['user'],
                             "salesperson_name": st.session_state['name'], "note_text": note_text_ind, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
                         }).execute()
-                        st.success("Note logged.")
+                        st.success("Client updates cataloged.")
                         st.rerun()
-                    if st.button("Mark Sale Won 🔑", key=f"cl_i_{row['id']}"):
+                    if st.button("MARK UNIT SECURED & DELIVERED 🔑", key=f"cl_i_{row['id']}"):
                         supabase.table("individual_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         st.rerun()
 
         st.markdown("---")
-        st.subheader("🏛️ My Claimed Tender Winner Accounts")
+        st.markdown("### 🏛️ CLAIMED TENDER VENDORS")
         if not my_tend_res.data:
-            st.caption("No active government tender claims in progress.")
+            st.caption("No active government tender claims currently flagged.")
         else:
             for row in my_tend_res.data:
-                with st.expander(f"Tender Winner: {row['company']}"):
-                    st.write(f"**Project Details:** {row['tender_desc']}")
-                    st.markdown("### 📞 Public Corporate Contact Anchors")
+                with st.expander(f"TENDER WINNER: {row['company'].upper()}"):
+                    st.write(f"**PROJECT ANCHOR DESC:** {row['tender_desc']}")
+                    st.markdown("#### 📞 CORPORATE MANAGEMENT ANCHORS")
                     t_i1, t_i2, t_i3, t_i4 = st.columns(4)
-                    t_i1.markdown(f"**Email:**\n`{row['public_email']}`")
-                    t_i2.markdown(f"**Phone Line:**\n`{row['public_phone']}`")
+                    t_i1.markdown(f"**Primary Email:**\n`{row['public_email']}`")
+                    t_i2.markdown(f"**Switchboard Phone:**\n`{row['public_phone']}`")
                     t_i3.markdown(f"[🌐 Corporate Site]({row['company_website']})")
-                    t_i4.markdown(f"[🔗 LinkedIn]({row['linkedin_url']})")
+                    t_i4.markdown(f"[🔗 LinkedIn Anchor]({row['linkedin_url']})")
                     st.markdown("---")
-                    note_text_tend = st.text_area("Log Tender Note", key=f"n_t_{row['id']}")
-                    if st.button("Save Tender Note", key=f"s_t_{row['id']}") and note_text_tend:
+                    note_text_tend = st.text_area("LOG FLEET ENGAGEMENT SUMMARY", key=f"n_t_{row['id']}")
+                    if st.button("SAVE TENDER DATA NOTE", key=f"s_t_{row['id']}") and note_text_tend:
                         supabase.table("lead_notes").insert({
                             "lead_id": row['id'], "lead_type": "tender", "username": st.session_state['user'],
                             "salesperson_name": st.session_state['name'], "note_text": note_text_tend, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
                         }).execute()
-                        st.success("Note logged.")
+                        st.success("Engagement data safely written.")
                         st.rerun()
-                    if st.button("Mark Tender Fleet Secured 🚚", key=f"cl_t_{row['id']}"):
+                    if st.button("MARK CONTRACT LOGISTICS SECURED 🚚", key=f"cl_t_{row['id']}"):
                         supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         st.rerun()
 
     # ---- TAB 3: DEALER PRINCIPAL OVERVIEW ----
     if st.session_state['role'] == 'dealer_principal':
         with tab3:
-            st.header("👑 Dealership Performance & Master Activity Pipeline")
+            st.markdown("### 👑 DEALER PRINCIPAL CONTROL GATE & METRICS")
             try:
                 c_leads = len(supabase.table("leads").select("id").execute().data)
                 i_leads = len(supabase.table("individual_leads").select("id").execute().data)
@@ -290,17 +335,18 @@ if st.session_state['authenticated']:
                 df_master_notes = pd.DataFrame()
                 
             m1, m2, m3 = st.columns(3)
-            m1.metric("Total Tracked Scoped Opportunities", c_leads + i_leads + t_leads)
-            m2.metric("Fleet & Tender Conversions (B2B)", c_closed + t_closed)
-            m3.metric("Private Deliveries (B2C)", i_closed, delta=f"+{c_closed + i_closed + t_closed} Total Units")
+            m1.metric("TOTAL OPPORTUNITIES", c_leads + i_leads + t_leads)
+            m2.metric("CONVERSIONS (B2B)", c_closed + t_closed)
+            m3.metric("DELIVERIES (B2C)", i_closed)
+            
             st.markdown("---")
-            st.subheader("💬 Live Master Communications Audit Log")
+            st.markdown("### 💬 MASTER OUTREACH AUDIT REGISTRY")
             if df_master_notes.empty:
-                st.info("No outreach updates logged yet today.")
+                st.info("No transaction log adjustments submitted today.")
             else:
                 for idx, r_note in df_master_notes.iterrows():
                     with st.chat_message("user"):
-                        st.markdown(f"**{r_note['salesperson_name']}** (`@{r_note['username']}`) handled a **{r_note['lead_type'].upper()}** profile at *{r_note['timestamp']}*")
+                        st.markdown(f"**{r_note['salesperson_name'].upper()}** (`@{r_note['username']}`) handled a **{r_note['lead_type'].upper()}** channel asset at *{r_note['timestamp']}*")
                         st.write(f"📝 *\"{r_note['note_text']}\"*")
 else:
     # ------------------------------------------
@@ -309,68 +355,68 @@ else:
     gate_col1, gate_col2, gate_col3 = st.columns([2, 3, 2])
     with gate_col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        # Center-aligned brand icon placement
-        st.image(BMW_LOGO_URL, width=120)
-        st.title("BMW Sandton Fleet Platform")
-        st.caption("Production Enterprise Access Gate")
+        # Corporate light-mode welcome anchor
+        st.image(BMW_LOGO_URL, width=110)
+        st.markdown("<h2 style='text-align: center; font-weight: 300; letter-spacing: 1px;'>BMW ENTERPRISE SYSTEM</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; font-size:0.85rem; color:#666666; letter-spacing:1px;'>GAUTENG FLEET LOGISTICS PORTAL</p>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
     
-    auth_tab, signup_tab = st.tabs(["🔒 Sign In", "📝 Create Sales Account"])
-    
-    with auth_tab:
-        login_username = st.text_input("Username", key="login_user").strip().lower()
-        login_password = st.text_input("Password", type="password", key="login_pass")
+        auth_tab, signup_tab = st.tabs(["🔒 SECURE SIGN IN", "📝 CREATE ACCESS ACCOUNT"])
         
-        if st.button("Login", key="login_btn"):
-            if login_username and login_password:
-                try:
-                    res = supabase.table("users").select("name", "role", "password").eq("username", login_username).execute()
-                    if res.data:
-                        import hashlib
-                        hashed_input = hashlib.sha256(login_password.encode()).hexdigest()
-                        if res.data[0]['password'] == hashed_input:
-                            st.session_state['authenticated'] = True
-                            st.session_state['user'] = login_username
-                            st.session_state['name'] = res.data[0]['name']
-                            st.session_state['role'] = res.data[0]['role']
-                            st.success("Access granted...")
-                            st.rerun()
+        with auth_tab:
+            login_username = st.text_input("USERNAME", key="login_user").strip().lower()
+            login_password = st.text_input("PASSWORD", type="password", key="login_pass")
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            if st.button("AUTHENTICATE ACCESS", key="login_btn"):
+                if login_username and login_password:
+                    try:
+                        res = supabase.table("users").select("name", "role", "password").eq("username", login_username).execute()
+                        if res.data:
+                            import hashlib
+                            hashed_input = hashlib.sha256(login_password.encode()).hexdigest()
+                            if res.data[0]['password'] == hashed_input:
+                                st.session_state['authenticated'] = True
+                                st.session_state['user'] = login_username
+                                st.session_state['name'] = res.data[0]['name']
+                                st.session_state['role'] = res.data[0]['role']
+                                st.rerun()
+                            else:
+                                st.error("Authentication rejected: invalid credentials.")
                         else:
-                            st.error("Invalid production credentials.")
-                    else:
-                        st.error("Account not found.")
-                except Exception as e:
-                    st.info("💡 Pro-Tip: Ensure your tables are initially primed by running your GitHub Scraper workflow first.")
-                    st.error(f"API Fetch Error: {str(e)}")
-                    
-    with signup_tab:
-        st.markdown("### Register New Dealer Profile")
-        new_name = st.text_input("Full Name", key="reg_name").strip()
-        new_username = st.text_input("Choose a Username", key="reg_user").strip().lower()
-        new_password = st.text_input("Choose a Password", type="password", key="reg_pass")
-        chosen_role = st.selectbox("Select Your Position", ["Sales Representative", "Dealer Principal"], key="reg_role")
-        security_code = st.text_input("Dealership Authorization Code", type="password", key="reg_code")
-        
-        if st.button("Create Account", key="signup_btn"):
-            if not new_name or not new_username or not new_password:
-                st.warning("Please fill in all fields.")
-            elif " " in new_username:
-                st.error("Usernames cannot contain spaces.")
-            elif security_code != "SandtonBMW2026":
-                st.error("Incorrect Dealership Authorization Code.")
-            else:
-                try:
-                    role_db_value = 'dealer_principal' if chosen_role == "Dealer Principal" else 'sales_rep'
-                    existing = supabase.table("users").select("username").eq("username", new_username).execute()
-                    if existing.data:
-                        st.error("Username is already taken.")
-                    else:
-                        import hashlib
-                        hashed_pw = hashlib.sha256(new_password.encode()).hexdigest()
-                        supabase.table("users").insert({
-                            "username": new_username, "password": hashed_pw, "name": new_name, "role": role_db_value
-                        }).execute()
-                        st.success("🎉 Account created! Switch to Sign In tab.")
-                except Exception as e:
-                    st.error(f"Registration Write Error: {str(e)}")
+                            st.error("Identity matching trace failed: profile not found.")
+                    except Exception as e:
+                        st.error(f"Gateway Handshake Error: {str(e)}")
+                        
+        with signup_tab:
+            st.markdown("### REGISTER NEW DEALERSHIP PROFILE")
+            new_name = st.text_input("FULL NAME", key="reg_name").strip()
+            new_username = st.text_input("CHOOSE SYSTEM USERNAME", key="reg_user").strip().lower()
+            new_password = st.text_input("CHOOSE ACCESS PASSWORD", type="password", key="reg_pass")
+            chosen_role = st.selectbox("SELECT POSITION", ["Sales Representative", "Dealer Principal"], key="reg_role")
+            security_code = st.text_input("DEALERSHIP SECURITY AUTHORIZATION CODE", type="password", key="reg_code")
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            if st.button("INITIALIZE ACCOUNT PROFILE", key="signup_btn"):
+                if not new_name or not new_username or not new_password:
+                    st.warning("All verification input parameters must be compiled.")
+                elif " " in new_username:
+                    st.error("Usernames cannot incorporate empty spacing gaps.")
+                elif security_code != "SandtonBMW2026":
+                    st.error("Invalid Dealership Security Authorization Code.")
+                else:
+                    try:
+                        role_db_value = 'dealer_principal' if chosen_role == "Dealer Principal" else 'sales_rep'
+                        existing = supabase.table("users").select("username").eq("username", new_username).execute()
+                        if existing.data:
+                            st.error("System username is already claimed.")
+                        else:
+                            import hashlib
+                            hashed_pw = hashlib.sha256(new_password.encode()).hexdigest()
+                            supabase.table("users").insert({
+                                "username": new_username, "password": hashed_pw, "name": new_name, "role": role_db_value
+                            }).execute()
+                            st.success("🎉 Account profile initialized. Proceed to Sign In tab.")
+                    except Exception as e:
+                        st.error(f"Profile Initialization Error: {str(e)}")
     st.stop()
