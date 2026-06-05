@@ -26,8 +26,4 @@ jobs:
           SUPABASE_KEY: "sb_publishable_9C4lD6aJd1h9cIq0SqVanA_6Yz_mvs_"
         run: |
           python scraper.py
-- name: Run Commercial Real Estate Lead Ingest
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python cre_scraper.py
+
