@@ -119,10 +119,14 @@ with header_col1:
     st.title("BMW Corporate Fleet Engine")
     st.caption("Gauteng Dealership Pipeline Network • Production Workspace Node")
 with header_col2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🚪 Secure Logout"):
-        st.session_state['authenticated'] = False
-        st.rerun()
+        st.markdown("<br>", unsafe_allow_html=True)
+        # 🌟 Update this line explicitly with a custom key:
+        if st.button("🚪 Secure Logout", key="header_logout_btn"):
+            st.session_state['authenticated'] = False
+            st.session_state['user'] = None
+            st.session_state['name'] = None
+            st.session_state['role'] = None
+            st.rerun()
     
     auth_tab, signup_tab = st.tabs(["🔒 Sign In", "📝 Create Sales Account"])
     
