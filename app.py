@@ -370,7 +370,7 @@ if st.session_state['authenticated']:
                         supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         safe_rerun()
 
-    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH FRANCHISE SEPARATION ----
+    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH DEFENSIVE PARSING ----
     with tab3:
         st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
         st.caption("Single source of truth inventory registry organized and separated by official franchise division lines.")
@@ -388,15 +388,16 @@ if st.session_state['authenticated']:
                             records_processed = 0
                             current_franchise = "General Used Stock"
                             
-                            # Clean old rows cleanly first before mapping new registers
-                            supabase.table("used_car_stock").delete().neq("vsb_no", "placeholder_wipe").execute()
+                            # 🚨 LAYER 1 FORCE-CLEAR: Wipe out all existing items to completely eradicate previous "LHP" data rows
+                            supabase.table("used_car_stock").delete().gt("days_in_stock", -1).execute()
+                            supabase.table("used_car_stock").delete().eq("days_in_stock", 0).execute()
                             
                             for line in lines:
                                 cleaned_line = line.strip()
                                 if not cleaned_line:
                                     continue
                                     
-                                # 🧠 INTEL BLOCK: Catch franchise name updates directly (e.g., "Franchise: B - BMW")
+                                # Catch franchise name updates directly (e.g., "Franchise: B - BMW")
                                 if "franchise:" in cleaned_line.lower():
                                     current_franchise = cleaned_line.split(':', 1)[1].strip()
                                     continue
@@ -421,6 +422,7 @@ if st.session_state['authenticated']:
                                         
                                     chassis = parts[13].strip() if len(parts) > 13 else ''
                                     
+                                    # 🚨 LAYER 2 STRICT MAPPING: We force current_franchise into the location table field, ignoring parts[12] completely!
                                     supabase.table("used_car_stock").upsert({
                                         "vsb_no": vsb, "description": desc, "into_stock": into_stk,
                                         "days_in_stock": days, "total_value": val, "location": current_franchise, "chassis_no": chassis
@@ -465,10 +467,14 @@ if st.session_state['authenticated']:
                     filtered_df['VSB NUMBER'].astype(str).str.lower().str.contains(search_query)
                 ]
             
-            # 🌟 FRANCHISE SEPARATION VIEW ENGINE: Render vehicles grouped under isolated clean web tables
+            # Render vehicles grouped under isolated clean web tables
             unique_franchises = sorted(list(filtered_df["FRANCHISE DIVISION"].unique()))
             
             for franchise in unique_franchises:
+                # Defensive check to skip any legacy corrupted entries if any exist
+                if franchise.strip() == "LHP":
+                    continue
+                    
                 franchise_df = filtered_df[filtered_df["FRANCHISE DIVISION"] == franchise].copy()
                 
                 if not franchise_df.empty:
