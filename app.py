@@ -483,11 +483,11 @@ if st.session_state['authenticated']:
                     for _, row in franchise_df.iterrows():
                         days = int(row["DAYS ON FLOOR"])
                         
-                        # 🛠️ TARGET UPDATE: NEW STOCK badge moved to Ageing Column
+                        # 🛠️ TARGET UPDATE: NEW STOCK badge in the ageing column
                         if days <= 3:
                             days_badge = "🔥 NEW STOCK"
                         elif days >= 90:
-                            days_badge = f"🚨 {days} DAYS (Critical Ageing)"
+                            days_badge = f"🚨 {days} DAYS (Critical Ageing: Max Prov)"
                         elif days >= 60:
                             days_badge = f"⚠️ {days} DAYS (Approaching max prov)"
                         else:
