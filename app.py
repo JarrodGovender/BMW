@@ -170,7 +170,7 @@ if st.session_state['authenticated']:
     with tab1: st.info("Daily opportunity network channels active.")
     with tab2: st.caption("Profile specific claims registry matrix.")
 
-    # ---- 🚗 TAB 3: USED CAR STOCK MODULE WITH FRANCHISE INTEGRITY ----
+    # ---- 🚗 TAB 3: USED CAR STOCK MODULE ----
     with tab3:
         st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
         st.caption("Single source of truth inventory registry organized by official franchise grouping lines.")
@@ -198,9 +198,9 @@ if st.session_state['authenticated']:
                                 if not cleaned_line:
                                     continue
                                     
-                                # 🧠 INTEL BLOCK: Catch the franchise header string text block change dynamically
+                                # 🧠 INTEL BLOCK: Catch the explicit franchise title dynamically (e.g. "Franchise: B - BMW")
                                 if "franchise:" in cleaned_line.lower():
-                                    current_franchise = cleaned_line.replace('Franchise:', '').strip()
+                                    current_franchise = cleaned_line.split(':', 1)[1].strip()
                                     continue
                                     
                                 parts = cleaned_line.split('\t') if '\t' in cleaned_line else cleaned_line.split(',')
@@ -221,13 +221,12 @@ if st.session_state['authenticated']:
                                     except:
                                         days = 0
                                         
-                                    loc = parts[12].strip() if len(parts) > 12 else current_franchise
                                     chassis = parts[13].strip() if len(parts) > 13 else ''
                                     
-                                    # Insert vehicle line and append the active franchise block classification
+                                    # 🛠️ RE-MAPPED DIRECTIVE: "location" column strictly stores the mapped Franchise Division Grouping
                                     supabase.table("used_car_stock").upsert({
                                         "vsb_no": vsb, "description": desc, "into_stock": into_stk,
-                                        "days_in_stock": days, "total_value": val, "location": loc, "chassis_no": chassis
+                                        "days_in_stock": days, "total_value": val, "location": current_franchise, "chassis_no": chassis
                                     }).execute()
                                     records_processed += 1
                                     
@@ -246,19 +245,19 @@ if st.session_state['authenticated']:
             df_live_stock = pd.DataFrame()
 
         if not df_live_stock.empty:
-            # Map location database field string back to UI labels cleanly
+            # Re-map backend attributes straight to readable corporate matrix strings
             df_live_stock.columns = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "FRANCHISE DIVISION"]
             
-            # Extract unique franchises available in dataset for the dropdown filter layout
+            # Extract clean unique franchise options string fields directly from records
             franchise_list = ["ALL FRANCHISES"] + sorted(list(df_live_stock["FRANCHISE DIVISION"].unique()))
             
             col_filter1, col_filter2 = st.columns([1, 2])
             with col_filter1:
-                selected_franchise = st.selectbox("SELECT FRANCHISE DIVISION", franchise_list, key="franchise_selector_dropdown")
+                selected_franchise = st.selectbox("FILTER BY FRANCHISE DIVISION", franchise_list, key="franchise_selector_dropdown")
             with col_filter2:
-                search_query = st.text_input("🔍 SEARCH CATALOG (Type Model name or VSB Number)", "").strip().lower()
+                search_query = st.text_input("🔍 SEARCH INVENTORY (Type Model name or VSB Number)", "").strip().lower()
             
-            # Apply dynamic filters sequentially
+            # Apply sequential sorting filters
             filtered_df = df_live_stock.copy()
             if selected_franchise != "ALL FRANCHISES":
                 filtered_df = filtered_df[filtered_df["FRANCHISE DIVISION"] == selected_franchise]
@@ -269,7 +268,7 @@ if st.session_state['authenticated']:
                     filtered_df['VSB NUMBER'].astype(str).str.lower().str.contains(search_query)
                 ]
                 
-            # Compute operational summary KPIs dynamically based on current selections
+            # Compute real-time filtered totals accurately
             cnt_units = len(filtered_df)
             sum_capital = filtered_df['CAPITAL VAL (ZAR)'].sum()
             avg_age = filtered_df['DAYS ON FLOOR'].mean() if cnt_units > 0 else 0
@@ -289,7 +288,7 @@ if st.session_state['authenticated']:
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
-    # ---- TAB 4: COMMAND CONTROLS ----
+    # ---- TAB 4: MANAGEMENT COMMAND OVERVIEW ----
     if st.session_state['role'] in MANAGEMENT_ROLES:
         with tab4: st.markdown("### 📊 AUDIT MONITOR NODE")
 else:
@@ -320,7 +319,7 @@ else:
                 except Exception as e: st.error(f"Handshake Error: {str(e)}")
                 
         with signup_tab:
-            st.markdown("### INITIALIZE SYSTEM ACCOUNT")
+            st.markdown("### REGISTER NEW DEALERSHIP PROFILE")
             n_name = st.text_input("FULL NAME", key="reg_name").strip()
             n_user = st.text_input("CHOOSE USERNAME", key="reg_user").strip().lower()
             n_pass = st.text_input("CHOOSE PASSWORD", type="password", key="reg_pass")
