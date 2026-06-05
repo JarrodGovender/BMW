@@ -98,8 +98,16 @@ if 'authenticated' not in st.session_state:
     st.session_state['role'] = None
 
 if not st.session_state['authenticated']:
-    st.title("🏢 BMW Sandton Fleet Platform Gateway")
-    st.caption("Production Enterprise Access Gate")
+    # Corporate Platform Header Array
+header_col1, header_col2 = st.columns([4, 1])
+with header_col1:
+    st.title("BMW Corporate Fleet Engine")
+    st.caption("Gauteng Dealership Pipeline Network • Production Workspace Node")
+with header_col2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🚪 Secure Logout"):
+        st.session_state['authenticated'] = False
+        st.rerun()
     
     auth_tab, signup_tab = st.tabs(["🔒 Sign In", "📝 Create Sales Account"])
     
