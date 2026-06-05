@@ -97,36 +97,212 @@ if 'authenticated' not in st.session_state:
     st.session_state['name'] = None
     st.session_state['role'] = None
 
-# Line 100 (Your existing authenticated section check)
+# ==========================================
+# 4. CORE PLATFORM ROUTING ROUTER
+# ==========================================
 if st.session_state['authenticated']:
-    
-    # 🌟 Add 4 spaces to the front of all these lines below:
+    # ------------------------------------------
+    # VIEW A: AUTHENTICATED PARTNER WORKSPACE
+    # ------------------------------------------
     header_col1, header_col2 = st.columns([4, 1])
     with header_col1:
         st.title("BMW Corporate Fleet Engine")
         st.caption("Gauteng Dealership Pipeline Network • Production Workspace Node")
     with header_col2:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🚪 Secure Logout"):
-            st.session_state['authenticated'] = False
-            st.session_state['user'] = None
-            st.session_state['name'] = None
-            st.session_state['role'] = None
-            st.rerun()
-    # Corporate Platform Header Array
-header_col1, header_col2 = st.columns([4, 1])
-with header_col1:
-    st.title("BMW Corporate Fleet Engine")
-    st.caption("Gauteng Dealership Pipeline Network • Production Workspace Node")
-with header_col2:
-        st.markdown("<br>", unsafe_allow_html=True)
-        # 🌟 Update this line explicitly with a custom key:
         if st.button("🚪 Secure Logout", key="header_logout_btn"):
             st.session_state['authenticated'] = False
             st.session_state['user'] = None
             st.session_state['name'] = None
             st.session_state['role'] = None
             st.rerun()
+
+    st.markdown(f"Logged in as: **{st.session_state['name']}** ({st.session_state['role'].replace('_', ' ').title()})")
+    st.markdown("---")
+
+    if st.session_state['role'] == 'dealer_principal':
+        tab1, tab2, tab3 = st.tabs(["🔥 Available Daily Feed", "💼 My Claimed Accounts", "📊 Dealer Principal Command Overview"])
+    else:
+        tab1, tab2 = st.tabs(["🔥 Available Daily Feed (First-Come, First-Served)", "💼 My Claimed Accounts"])
+
+    # ---- TAB 1: AVAILABLE DAILY FEED ----
+    with tab1:
+        lead_section = st.radio("Select Target Section", ["🏢 Corporate Fleet (B2B)", "🚗 Individual Leads (B2C)", "🏛️ Gov Tenders (B2B)"], horizontal=True)
+        selected_date = st.date_input("Filter by Generation Date", datetime.now(SAST))
+        filter_date_str = selected_date.strftime('%Y-%m-%d')
+        st.markdown("---")
+        
+        if lead_section == "🏢 Corporate Fleet (B2B)":
+            res = supabase.table("leads").select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str).order("score", desc=True).execute()
+            df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
+            if df.empty:
+                st.info("No unassigned corporate fleet leads found for this date.")
+            else:
+                for idx, row in df.iterrows():
+                    with st.container(border=True):
+                        col1, col2, col3 = st.columns([1, 4, 1])
+                        col1.metric("Score", f"{row['score']}/100")
+                        col2.subheader(f"{row['company']} — {row['location']}")
+                        col2.markdown(f"**Target Persona:** {row['target']} | 📅 *Generated: {row['lead_date']}*")
+                        col2.info(f"💡 {row['signal']}")
+                        if col3.button("Claim Fleet Lead", key=f"claim_c_{row['id']}"):
+                            supabase.table("leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
+                            st.rerun()
+
+        elif lead_section == "🚗 Individual Leads (B2C)":
+            res = supabase.table("individual_leads").select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str).order("score", desc=True).execute()
+            df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
+            if df.empty:
+                st.info("No unassigned individual luxury leads found for this date.")
+            else:
+                for idx, row in df.iterrows():
+                    with st.container(border=True):
+                        col1, col2, col3 = st.columns([1, 4, 1])
+                        col1.metric("Score", f"{row['score']}/100")
+                        col2.subheader(f"Prospect: {row['client_name']}")
+                        col2.markdown(f"**Position:** {row['title']} at *{row['company']}* ({row['location']}) | 📅 *Generated: {row['lead_date']}*")
+                        col2.info(f"💎 {row['signal']}")
+                        if col3.button("Claim Client Lead", key=f"claim_i_{row['id']}"):
+                            supabase.table("individual_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
+                            st.rerun()
+
+        else:
+            res = supabase.table("tender_leads").select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str).order("score", desc=True).execute()
+            df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
+            if df.empty:
+                st.info("No unassigned government tender wins flagged for this date.")
+            else:
+                for idx, row in df.iterrows():
+                    with st.container(border=True):
+                        col1, col2, col3 = st.columns([1, 4, 1])
+                        col1.metric("Score", f"{row['score']}/100")
+                        col2.subheader(f"Winning Vendor: {row['company']}")
+                        col2.markdown(f"**Awarding Body:** {row['awarding_body']} | 💰 **Contract Value:** `{row['contract_value']}`")
+                        col2.info(f"🏛️ {row['tender_desc']}")
+                        if col3.button("Claim Tender Lead", key=f"claim_t_{row['id']}"):
+                            supabase.table("tender_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
+                            st.rerun()
+
+    # ---- TAB 2: CLAIMED LEADS INTERACTION PANELS ----
+    with tab2:
+        my_corp_res = supabase.table("leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
+        my_ind_res = supabase.table("individual_leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
+        my_tend_res = supabase.table("tender_leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
+        
+        st.subheader("🏢 My Claimed Corporate Fleet Accounts")
+        if not my_corp_res.data:
+            st.caption("No active corporate fleet claims.")
+        else:
+            for row in my_corp_res.data:
+                with st.expander(f"Company: {row['company']} ({row['location']})"):
+                    st.write(f"**Signal Details:** {row['signal']}")
+                    st.markdown("### 📞 Public Contact Anchors")
+                    c_i1, c_i2, c_i3, c_i4 = st.columns(4)
+                    c_i1.markdown(f"**Email:**\n`{row['public_email']}`")
+                    c_i2.markdown(f"**Phone:**\n`{row['public_phone']}`")
+                    c_i3.markdown(f"[🌐 Website]({row['company_website']})")
+                    c_i4.markdown(f"[🔗 LinkedIn]({row['linkedin_url']})")
+                    st.markdown("---")
+                    note_text = st.text_area("Log Fleet Note", key=f"n_c_{row['id']}")
+                    if st.button("Save Fleet Note", key=f"s_c_{row['id']}") and note_text:
+                        supabase.table("lead_notes").insert({
+                            "lead_id": row['id'], "lead_type": "corporate", "username": st.session_state['user'],
+                            "salesperson_name": st.session_state['name'], "note_text": note_text, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
+                        }).execute()
+                        st.success("Note logged.")
+                        st.rerun()
+                    if st.button("Mark Fleet Converted", key=f"cl_c_{row['id']}"):
+                        supabase.table("leads").update({"status": "Closed"}).eq("id", row['id']).execute()
+                        st.rerun()
+
+        st.markdown("---")
+        st.subheader("🚗 My Claimed Individual Private Client Accounts")
+        if not my_ind_res.data:
+            st.caption("No active individual private client claims.")
+        else:
+            for row in my_ind_res.data:
+                with st.expander(f"Prospect: {row['client_name']} — {row['title']}"):
+                    st.write(f"**Signal Details:** {row['signal']}")
+                    st.markdown("### 📞 Public Contacts")
+                    i_i1, i_i2, i_i3 = st.columns(3)
+                    i_i1.markdown(f"**Direct Email:**\n`{row['public_email']}`")
+                    i_i2.markdown(f"**Office Phone:**\n`{row['public_phone']}`")
+                    i_i3.markdown(f"[🔗 LinkedIn Profile]({row['linkedin_url']})")
+                    st.markdown("---")
+                    note_text_ind = st.text_area("Log Client Note", key=f"n_i_{row['id']}")
+                    if st.button("Save Client Note", key=f"s_i_{row['id']}") and note_text_ind:
+                        supabase.table("lead_notes").insert({
+                            "lead_id": row['id'], "lead_type": "individual", "username": st.session_state['user'],
+                            "salesperson_name": st.session_state['name'], "note_text": note_text_ind, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
+                        }).execute()
+                        st.success("Note logged.")
+                        st.rerun()
+                    if st.button("Mark Sale Won 🔑", key=f"cl_i_{row['id']}"):
+                        supabase.table("individual_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
+                        st.rerun()
+
+        st.markdown("---")
+        st.subheader("🏛️ My Claimed Tender Winner Accounts")
+        if not my_tend_res.data:
+            st.caption("No active government tender claims in progress.")
+        else:
+            for row in my_tend_res.data:
+                with st.expander(f"Tender Winner: {row['company']}"):
+                    st.write(f"**Project Details:** {row['tender_desc']}")
+                    st.markdown("### 📞 Public Corporate Contact Anchors")
+                    t_i1, t_i2, t_i3, t_i4 = st.columns(4)
+                    t_i1.markdown(f"**Email:**\n`{row['public_email']}`")
+                    t_i2.markdown(f"**Phone Line:**\n`{row['public_phone']}`")
+                    t_i3.markdown(f"[🌐 Corporate Site]({row['company_website']})")
+                    t_i4.markdown(f"[🔗 LinkedIn]({row['linkedin_url']})")
+                    st.markdown("---")
+                    note_text_tend = st.text_area("Log Tender Note", key=f"n_t_{row['id']}")
+                    if st.button("Save Tender Note", key=f"s_t_{row['id']}") and note_text_tend:
+                        supabase.table("lead_notes").insert({
+                            "lead_id": row['id'], "lead_type": "tender", "username": st.session_state['user'],
+                            "salesperson_name": st.session_state['name'], "note_text": note_text_tend, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
+                        }).execute()
+                        st.success("Note logged.")
+                        st.rerun()
+                    if st.button("Mark Tender Fleet Secured 🚚", key=f"cl_t_{row['id']}"):
+                        supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
+                        st.rerun()
+
+    # ---- TAB 3: DEALER PRINCIPAL OVERVIEW ----
+    if st.session_state['role'] == 'dealer_principal':
+        with tab3:
+            st.header("👑 Dealership Performance & Master Activity Pipeline")
+            try:
+                c_leads = len(supabase.table("leads").select("id").execute().data)
+                i_leads = len(supabase.table("individual_leads").select("id").execute().data)
+                t_leads = len(supabase.table("tender_leads").select("id").execute().data)
+                c_closed = len(supabase.table("leads").select("id").eq("status", "Closed").execute().data)
+                i_closed = len(supabase.table("individual_leads").select("id").eq("status", "Closed").execute().data)
+                t_closed = len(supabase.table("tender_leads").select("id").eq("status", "Closed").execute().data)
+                df_master_notes = pd.DataFrame(supabase.table("lead_notes").select("*").order("timestamp", desc=True).execute().data)
+            except:
+                c_leads, i_leads, t_leads, c_closed, i_closed, t_closed = 0, 0, 0, 0, 0, 0
+                df_master_notes = pd.DataFrame()
+                
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total Tracked Scoped Opportunities", c_leads + i_leads + t_leads)
+            m2.metric("Fleet & Tender Conversions (B2B)", c_closed + t_closed)
+            m3.metric("Private Deliveries (B2C)", i_closed, delta=f"+{c_closed + i_closed + t_closed} Total Units")
+            st.markdown("---")
+            st.subheader("💬 Live Master Communications Audit Log")
+            if df_master_notes.empty:
+                st.info("No outreach updates logged yet today.")
+            else:
+                for idx, r_note in df_master_notes.iterrows():
+                    with st.chat_message("user"):
+                        st.markdown(f"**{r_note['salesperson_name']}** (`@{r_note['username']}`) handled a **{r_note['lead_type'].upper()}** profile at *{r_note['timestamp']}*")
+                        st.write(f"📝 *\"{r_note['note_text']}\"*")
+else:
+    # ------------------------------------------
+    # VIEW B: GATEWAY INTERFACE (SIGN IN / UP)
+    # ------------------------------------------
+    st.title("🏢 BMW Sandton Fleet Platform Gateway")
+    st.caption("Production Enterprise Access Gate")
     
     auth_tab, signup_tab = st.tabs(["🔒 Sign In", "📝 Create Sales Account"])
     
@@ -187,194 +363,3 @@ with header_col2:
                 except Exception as e:
                     st.error(f"Registration Write Error: {str(e)}")
     st.stop()
-
-# ==========================================
-# 4. DASHBOARD INTERFACE WORKSPACE
-# ==========================================
-st.title("📈 Daily Sandton Client Lead Hub")
-st.markdown(f"Logged in as: **{st.session_state['name']}** ({st.session_state['role'].replace('_', ' ').title()})")
-
-if st.sidebar.button("Logout"):
-    st.session_state['authenticated'] = False
-    st.session_state['user'] = None
-    st.session_state['name'] = None
-    st.session_state['role'] = None
-    st.rerun()
-
-if st.session_state['role'] == 'dealer_principal':
-    tab1, tab2, tab3 = st.tabs(["🔥 Available Daily Feed", "💼 My Claimed Accounts", "📊 Dealer Principal Command Overview"])
-else:
-    tab1, tab2 = st.tabs(["🔥 Available Daily Feed (First-Come, First-Served)", "💼 My Claimed Accounts"])
-
-# ---- TAB 1: AVAILABLE DAILY FEED ----
-with tab1:
-    lead_section = st.radio("Select Target Section", ["🏢 Corporate Fleet (B2B)", "🚗 Individual Leads (B2C)", "🏛️ Gov Tenders (B2B)"], horizontal=True)
-    selected_date = st.date_input("Filter by Generation Date", datetime.now(SAST))
-    filter_date_str = selected_date.strftime('%Y-%m-%d')
-    st.markdown("---")
-    
-    if lead_section == "🏢 Corporate Fleet (B2B)":
-        res = supabase.table("leads").select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str).order("score", desc=True).execute()
-        df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
-        if df.empty:
-            st.info("No unassigned corporate fleet leads found for this date.")
-        else:
-            for idx, row in df.iterrows():
-                col1, col2, col3 = st.columns([1, 4, 1])
-                col1.metric("Score", f"{row['score']}/100")
-                col2.subheader(f"{row['company']} — {row['location']}")
-                col2.markdown(f"**Target Persona:** {row['target']} | 📅 *Generated: {row['lead_date']}*")
-                col2.info(f"💡 {row['signal']}")
-                if col3.button("Claim Fleet Lead", key=f"claim_c_{row['id']}"):
-                    supabase.table("leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
-                    st.rerun()
-                st.markdown("---")
-                    
-    elif lead_section == "🚗 Individual Leads (B2C)":
-        res = supabase.table("individual_leads").select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str).order("score", desc=True).execute()
-        df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
-        if df.empty:
-            st.info("No unassigned individual luxury leads found for this date.")
-        else:
-            for idx, row in df.iterrows():
-                col1, col2, col3 = st.columns([1, 4, 1])
-                col1.metric("Score", f"{row['score']}/100")
-                col2.subheader(f"Prospect: {row['client_name']}")
-                col2.markdown(f"**Position:** {row['title']} at *{row['company']}* ({row['location']}) | 📅 *Generated: {row['lead_date']}*")
-                col2.info(f"💎 {row['signal']}")
-                if col3.button("Claim Client Lead", key=f"claim_i_{row['id']}"):
-                    supabase.table("individual_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
-                    st.rerun()
-                st.markdown("---")
-
-    else:
-        res = supabase.table("tender_leads").select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str).order("score", desc=True).execute()
-        df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
-        if df.empty:
-            st.info("No unassigned government tender wins flagged for this date.")
-        else:
-            for idx, row in df.iterrows():
-                col1, col2, col3 = st.columns([1, 4, 1])
-                col1.metric("Score", f"{row['score']}/100")
-                col2.subheader(f"Winning Vendor: {row['company']}")
-                col2.markdown(f"**Awarding Body:** {row['awarding_body']} | 💰 **Contract Value:** `{row['contract_value']}`")
-                col2.info(f"🏛️ {row['tender_desc']}")
-                if col3.button("Claim Tender Lead", key=f"claim_t_{row['id']}"):
-                    supabase.table("tender_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
-                    st.rerun()
-                st.markdown("---")
-
-# ---- TAB 2: CLAIMED LEADS INTERACTION PANELS ----
-with tab2:
-    my_corp_res = supabase.table("leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
-    my_ind_res = supabase.table("individual_leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
-    my_tend_res = supabase.table("tender_leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
-    
-    st.subheader("🏢 My Claimed Corporate Fleet Accounts")
-    if not my_corp_res.data:
-        st.caption("No active corporate fleet claims.")
-    else:
-        for row in my_corp_res.data:
-            with st.expander(f"Company: {row['company']} ({row['location']})"):
-                st.write(f"**Signal Details:** {row['signal']}")
-                st.markdown("### 📞 Public Contact Anchors")
-                c_i1, c_i2, c_i3, c_i4 = st.columns(4)
-                c_i1.markdown(f"**Email:**\n`{row['public_email']}`")
-                c_i2.markdown(f"**Phone:**\n`{row['public_phone']}`")
-                c_i3.markdown(f"[🌐 Website]({row['company_website']})")
-                c_i4.markdown(f"[🔗 LinkedIn]({row['linkedin_url']})")
-                st.markdown("---")
-                note_text = st.text_area("Log Fleet Note", key=f"n_c_{row['id']}")
-                if st.button("Save Fleet Note", key=f"s_c_{row['id']}") and note_text:
-                    supabase.table("lead_notes").insert({
-                        "lead_id": row['id'], "lead_type": "corporate", "username": st.session_state['user'],
-                        "salesperson_name": st.session_state['name'], "note_text": note_text, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
-                    }).execute()
-                    st.success("Note logged.")
-                    st.rerun()
-                if st.button("Mark Fleet Converted", key=f"cl_c_{row['id']}"):
-                    supabase.table("leads").update({"status": "Closed"}).eq("id", row['id']).execute()
-                    st.rerun()
-
-    st.markdown("---")
-    st.subheader("🚗 My Claimed Individual Private Client Accounts")
-    if not my_ind_res.data:
-        st.caption("No active individual private client claims.")
-    else:
-        for row in my_ind_res.data:
-            with st.expander(f"Prospect: {row['client_name']} — {row['title']}"):
-                st.write(f"**Signal Details:** {row['signal']}")
-                st.markdown("### 📞 Public Contacts")
-                i_i1, i_i2, i_i3 = st.columns(3)
-                i_i1.markdown(f"**Direct Email:**\n`{row['public_email']}`")
-                i_i2.markdown(f"**Office Phone:**\n`{row['public_phone']}`")
-                i_i3.markdown(f"[🔗 LinkedIn Profile]({row['linkedin_url']})")
-                st.markdown("---")
-                note_text_ind = st.text_area("Log Client Note", key=f"n_i_{row['id']}")
-                if st.button("Save Client Note", key=f"s_i_{row['id']}") and note_text_ind:
-                    supabase.table("lead_notes").insert({
-                        "lead_id": row['id'], "lead_type": "individual", "username": st.session_state['user'],
-                        "salesperson_name": st.session_state['name'], "note_text": note_text_ind, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
-                    }).execute()
-                    st.success("Note logged.")
-                    st.rerun()
-                if st.button("Mark Sale Won 🔑", key=f"cl_i_{row['id']}"):
-                    supabase.table("individual_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
-                    st.rerun()
-
-    st.markdown("---")
-    st.subheader("🏛️ My Claimed Tender Winner Accounts")
-    if not my_tend_res.data:
-        st.caption("No active government tender claims in progress.")
-    else:
-        for row in my_tend_res.data:
-            with st.expander(f"Tender Winner: {row['company']}"):
-                st.write(f"**Project Details:** {row['tender_desc']}")
-                st.markdown("### 📞 Public Corporate Contact Anchors")
-                t_i1, t_i2, t_i3, t_i4 = st.columns(4)
-                t_i1.markdown(f"**Email:**\n`{row['public_email']}`")
-                t_i2.markdown(f"**Phone Line:**\n`{row['public_phone']}`")
-                t_i3.markdown(f"[🌐 Corporate Site]({row['company_website']})")
-                t_i4.markdown(f"[🔗 LinkedIn]({row['linkedin_url']})")
-                st.markdown("---")
-                note_text_tend = st.text_area("Log Tender Note", key=f"n_t_{row['id']}")
-                if st.button("Save Tender Note", key=f"s_t_{row['id']}") and note_text_tend:
-                    supabase.table("lead_notes").insert({
-                        "lead_id": row['id'], "lead_type": "tender", "username": st.session_state['user'],
-                        "salesperson_name": st.session_state['name'], "note_text": note_text_tend, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')
-                    }).execute()
-                    st.success("Note logged.")
-                    st.rerun()
-                if st.button("Mark Tender Fleet Secured 🚚", key=f"cl_t_{row['id']}"):
-                    supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
-                    st.rerun()
-
-# ---- TAB 3: DEALER PRINCIPAL OVERVIEW ----
-if st.session_state['role'] == 'dealer_principal':
-    with tab3:
-        st.header("👑 Dealership Performance & Master Activity Pipeline")
-        try:
-            c_leads = len(supabase.table("leads").select("id").execute().data)
-            i_leads = len(supabase.table("individual_leads").select("id").execute().data)
-            t_leads = len(supabase.table("tender_leads").select("id").execute().data)
-            c_closed = len(supabase.table("leads").select("id").eq("status", "Closed").execute().data)
-            i_closed = len(supabase.table("individual_leads").select("id").eq("status", "Closed").execute().data)
-            t_closed = len(supabase.table("tender_leads").select("id").eq("status", "Closed").execute().data)
-            df_master_notes = pd.DataFrame(supabase.table("lead_notes").select("*").order("timestamp", desc=True).execute().data)
-        except:
-            c_leads, i_leads, t_leads, c_closed, i_closed, t_closed = 0, 0, 0, 0, 0, 0
-            df_master_notes = pd.DataFrame()
-            
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total Tracked Scoped Opportunities", c_leads + i_leads + t_leads)
-        m2.metric("Fleet & Tender Conversions (B2B)", c_closed + t_closed)
-        m3.metric("Private Deliveries (B2C)", i_closed, delta=f"+{c_closed + i_closed + t_closed} Total Units")
-        st.markdown("---")
-        st.subheader("💬 Live Master Communications Audit Log")
-        if df_master_notes.empty:
-            st.info("No outreach updates logged yet today.")
-        else:
-            for idx, r_note in df_master_notes.iterrows():
-                with st.chat_message("user"):
-                    st.markdown(f"**{r_note['salesperson_name']}** (`@{r_note['username']}`) handled a **{r_note['lead_type'].upper()}** profile at *{r_note['timestamp']}*")
-                    st.write(f"📝 *\"{r_note['note_text']}\"*")
