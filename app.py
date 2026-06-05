@@ -135,28 +135,15 @@ st.markdown("""
         }
 
         /* =========================================================
-           🚨 DECISIVE FIX: HIDE BLANK Pandas INDEX ROW NUMBERS 🚨
+           🚨 WATERPROOF CENTER ALIGNMENT FOR TARGET METRIC DATA 🚨
            ========================================================= */
-        /* Hides the empty index upper-left corner cell header */
-        .stTable thead tr th:first-child {
-            display: none !important;
-        }
-        /* Hides the row number elements inside the table rows */
-        .stTable tbody tr th {
-            display: none !important;
-        }
-
-        /* =========================================================
-           🚨 DECISIVE FIX: CENTER ALIGN DATES & FLOOR DAYS 🚨
-           ========================================================= */
-        /* Targets column header cells 3 and 4 (Into Stock Date & Days on Floor) */
-        .stTable thead tr th:nth-child(4),
-        .stTable thead tr th:nth-child(5) {
+        /* Center aligns Into Stock Date & Days on Floor text columns */
+        .stTable thead tr th:nth-child(2),
+        .stTable thead tr th:nth-child(3) {
             text-align: center !important;
         }
-        /* Targets body data content cells 3 and 4 to force center alignment values */
-        .stTable tbody tr td:nth-child(3),
-        .stTable tbody tr td:nth-child(4) {
+        .stTable tbody tr td:nth-child(2),
+        .stTable tbody tr td:nth-child(3) {
             text-align: center !important;
         }
     </style>
@@ -387,7 +374,6 @@ if st.session_state['authenticated']:
                             records_processed = 0
                             current_franchise = "General Used Stock"
                             
-                            # Force clean data tables
                             supabase.table("used_car_stock").delete().gt("days_in_stock", -1).execute()
                             supabase.table("used_car_stock").delete().eq("days_in_stock", 0).execute()
                             
@@ -490,10 +476,16 @@ if st.session_state['authenticated']:
                         </div>
                     """, unsafe_allow_html=True)
                     
+                    # 🚨 BACKEND FIX: Move "VSB NUMBER" into the row index location dynamically!
+                    # This drops the raw Pandas row numbers naturally without brittle CSS overrides.
                     render_df = franchise_df.copy()
+                    render_df.set_index("VSB NUMBER", inplace=True)
+                    
+                    # Convert price floats into professional South African Rand notation
                     render_df["CAPITAL VAL (ZAR)"] = render_df["CAPITAL VAL (ZAR)"].map(lambda x: f"R {float(x):,.2f}")
-                    # Standard display output
-                    st.table(render_df[["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"]])
+                    
+                    # Render table matching column positions perfectly
+                    st.table(render_df[["VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"]])
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
@@ -558,13 +550,17 @@ if st.session_state['authenticated']:
                     "10.0% (121+ Days)": f"R {p_10_0:,.2f}",
                     "TOTAL PROVISION": f"R {p_total:,.2f}"
                 })
-                
-            st.table(pd.DataFrame(summary_matrix_data))
+            
+            df_sum_mat = pd.DataFrame(summary_matrix_data)
+            df_sum_mat.set_index("STOCK DIVISION", inplace=True)
+            st.table(df_sum_mat)
             
             # --- OVERVIEW B: AGING PROVISION SUMMARY MATRIX ---
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("#### 🪙 DEALERSHIP VEHICLE AGING PROVISION MATRIX")
-            st.table(pd.DataFrame(provision_rows))
+            df_prov_mat = pd.DataFrame(provision_rows)
+            df_prov_mat.set_index("STOCK DIVISION", inplace=True)
+            st.table(df_prov_mat)
                 
             st.markdown("---")
             try:
