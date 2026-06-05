@@ -356,7 +356,7 @@ if st.session_state['authenticated']:
                         supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         safe_rerun()
 
-    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH AGEING INTEL ----
+    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH RE-WORDED AGEING TARGETS ----
     with tab3:
         st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
         st.caption("Single source of truth inventory registry organized and separated by official franchise division lines.")
@@ -447,7 +447,6 @@ if st.session_state['authenticated']:
                 search_query = st.text_input("🔍 LIVE GLOBAL VEHICLE SEARCH", "").strip().lower()
             with col_filter3:
                 st.markdown("<br>", unsafe_allow_html=True)
-                # 🔥 HOT STOCKS QUICK FILTER CHECKBOX
                 show_hot_only = st.checkbox("🔥 SHOW HOT STOCKS ONLY", value=False, key="hot_stocks_toggle")
             
             filtered_df = df_live_stock.copy()
@@ -482,21 +481,19 @@ if st.session_state['authenticated']:
                         </div>
                     """, unsafe_allow_html=True)
                     
-                    # 🚨 BACKEND INVENTORY INTELLIGENCE MAPPING
                     render_rows = []
                     for _, row in franchise_df.iterrows():
                         desc = str(row["VEHICLE DESCRIPTION"])
                         days = int(row["DAYS ON FLOOR"])
                         
-                        # Apply Hot Stock Flag
                         if days <= 3:
                             desc = f"🔥 HOT STOCK — {desc}"
                             
-                        # Apply Provision Ageing Alerts inline
+                        # 🛠️ SPECIFIC TARGET UPDATE: Reworded tracking tag precisely per image_9726e1.png requirements
                         if days >= 90:
                             days_alert = f"🚨 {days} DAYS (Critical Ageing)"
                         elif days >= 60:
-                            days_alert = f"⚠️ {days} DAYS (Approaching Provision)"
+                            days_alert = f"⚠️ {days} DAYS (Approaching max prov)"
                         else:
                             days_alert = f"{days} Days"
                             
