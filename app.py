@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import pytz
+import os
 from supabase import create_client, Client
 
 # ==========================================
@@ -23,7 +24,6 @@ def safe_rerun():
 
 # ====================================================================
 # OFFICIAL BMW DIGITAL DESIGN IDENTITY CSS INJECTION
-# Reference: https://www.bmw.co.za/en/index.html flat luxury architecture
 # ====================================================================
 st.markdown("""
     <style>
@@ -33,7 +33,7 @@ st.markdown("""
             background-color: #FFFFFF !important;
         }
         
-        /* Premium Flat Input Elements */
+        /* Premium Flat Input Elements & Dropzones */
         .stTextInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea {
             border: 1px solid #E5E5E5 !important;
             border-radius: 0px !important; /* Flat geometric corners */
@@ -50,7 +50,7 @@ st.markdown("""
         }
         
         /* =========================================================
-           🚨 WATERPROOF BUTTON TEXT & FIXED CLEAN VISUAL CONTAINERS 🚨
+           🚨 WATERPROOF BUTTON TEXT & FIXED NORMAL SIZE CONTAINER FIX 🚨
            ========================================================= */
         div.stButton {
             width: auto !important;
@@ -59,25 +59,23 @@ st.markdown("""
             margin-top: 0.5rem !important;
         }
         
-        /* TARGETS THE BUTTON CANVAS ONLY - No staircase styling anomalies */
         div.stButton > button, 
         div.stButton > button:first-child {
-            background-color: #000000 !important; /* Absolute Black Background */
-            border-radius: 0px !important;         /* Sharp geometric edges */
+            background-color: #000000 !important; 
+            border-radius: 0px !important;         
             border: 1px solid #000000 !important;
-            padding: 0.6rem 0rem !important;       /* Balanced padding baseline */
+            padding: 0.6rem 0rem !important;       
             font-weight: 500 !important;
             font-size: 0.8rem !important;
-            letter-spacing: 1.5px !important;     /* Premium text tracking */
-            text-transform: uppercase !important;  /* Corporate styling */
-            width: 240px !important;               /* FIXED CLEAN DIMENSIONS */
+            letter-spacing: 1.5px !important;     
+            text-transform: uppercase !important;  
+            width: 240px !important;               
             max-width: 240px !important;
             height: 42px !important;
             display: block !important;
             transition: all 0.2s ease-in-out !important;
         }
         
-        /* TARGETS INNER TEXT LAYERS SEPARATELY - Forcing clean text colors */
         div.stButton > button * {
             color: #FFFFFF !important;
             width: auto !important;
@@ -85,7 +83,6 @@ st.markdown("""
             display: inline-block !important;
         }
         
-        /* Keep text color locked on white through hover and focus loops */
         div.stButton > button:hover,
         div.stButton > button:focus {
             background-color: #262626 !important;
@@ -97,10 +94,10 @@ st.markdown("""
             color: #FFFFFF !important;
         }
         
-        /* Executive KPI Layout Tweak */
+        /* Clean Up Executive KPI Elements */
         [data-testid="stMetricValue"] {
-            font-size: 2.6rem !important;
-            font-weight: 300 !important; /* BMW signature light weights */
+            font-size: 2.3rem !important;
+            font-weight: 300 !important; 
             color: #000000 !important;
             letter-spacing: -1px !important;
         }
@@ -129,15 +126,6 @@ st.markdown("""
             color: #262626 !important;
         }
         
-        .bmw-logo-centered-header {
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-            gap: 24px !important; 
-            width: 100% !important;
-            margin: 0 auto !important;
-            padding-bottom: 10px !important;
-        }
         .bmw-logo-left-header {
             display: flex !important;
             justify-content: flex-start !important;
@@ -213,13 +201,13 @@ if st.session_state['authenticated']:
     st.markdown(f"LOGGED IN AS: **{st.session_state['name'].upper()}** ({st.session_state['role'].replace('_', ' ').upper()})")
     st.markdown("---")
 
-    # Unified Management Access Check: DP, Finance/Admin, and Sales Manager see full executive dashboards
     MANAGEMENT_ROLES = ['dealer_principal', 'finance_admin', 'sales_manager']
     
+    # Injection Layout Rules: Stock dashboard tab is available across all authentication levels
     if st.session_state['role'] in MANAGEMENT_ROLES:
-        tab1, tab2, tab3 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "📊 COMMAND OVERVIEW"])
+        tab1, tab2, tab3, tab4 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "📊 COMMAND OVERVIEW"])
     else:
-        tab1, tab2 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS"])
+        tab1, tab2, tab3 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM"])
 
     # ---- TAB 1: AVAILABLE DAILY FEED ----
     with tab1:
@@ -285,7 +273,7 @@ if st.session_state['authenticated']:
                                 supabase.table("tender_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
                                 safe_rerun()
 
-    # ---- TAB 2: CLAIMED LEADS INTERACTION PANELS (RESTORED ALL BUTTONS) ----
+    # ---- TAB 2: CLAIMED LEADS INTERACTION PANELS ----
     with tab2:
         my_corp_res = supabase.table("leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
         my_ind_res = supabase.table("individual_leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
@@ -370,9 +358,117 @@ if st.session_state['authenticated']:
                         supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         safe_rerun()
 
-    # ---- TAB 3: COMMAND OVERVIEW ----
+    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE ----
+    with tab3:
+        st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
+        st.caption("Single source of truth inventory registry organized by official franchise grouping boundaries.")
+        
+        # Admin Terminal Zone: Locked strictly to Finance/Admin roles
+        if st.session_state['role'] == 'finance_admin':
+            with st.expander("🛠️ ADMIN CONSOLE: BULK CAR STOCK TERMINAL", expanded=False):
+                st.markdown("#### Paste Spreadsheet Data Rows Below")
+                raw_paste_data = st.text_area("PASTE RAW DATA ROWS HERE", height=250, placeholder="Franchise: B - BMW\n109237\tX4 xDrive20d Sport A...")
+                
+                if st.button("PROCESS AND OVERWRITE INVENTORY", key="process_stock_paste_btn"):
+                    if raw_paste_data.strip():
+                        try:
+                            lines = raw_paste_data.split('\n')
+                            records_processed = 0
+                            current_franchise = "General Used Stock"
+                            
+                            # Clean old rows cleanly first before mapping new registers
+                            supabase.table("used_car_stock").delete().neq("vsb_no", "placeholder_wipe").execute()
+                            
+                            for line in lines:
+                                cleaned_line = line.strip()
+                                if not cleaned_line:
+                                    continue
+                                    
+                                # Catch franchise name updates directly
+                                if "franchise:" in cleaned_line.lower():
+                                    current_franchise = cleaned_line.split(':', 1)[1].strip()
+                                    continue
+                                    
+                                parts = cleaned_line.split('\t') if '\t' in cleaned_line else cleaned_line.split(',')
+                                
+                                # Isolate rows matching numeric primary VSB key metrics
+                                if len(parts) >= 2 and parts[0].strip().isdigit():
+                                    vsb = parts[0].strip()
+                                    desc = parts[1].strip()
+                                    into_stk = parts[2].strip() if len(parts) > 2 else ''
+                                    
+                                    try:
+                                        val = float(parts[10].strip().replace(' ', '').replace(' ', '').replace(',', '')) if len(parts) > 10 else 0.00
+                                    except:
+                                        val = 0.00
+                                        
+                                    try:
+                                        days = int(float(parts[11].strip().replace(' ', '').strip())) if len(parts) > 11 and parts[11].strip() else 0
+                                    except:
+                                        days = 0
+                                        
+                                    chassis = parts[13].strip() if len(parts) > 13 else ''
+                                    
+                                    supabase.table("used_car_stock").upsert({
+                                        "vsb_no": vsb, "description": desc, "into_stock": into_stk,
+                                        "days_in_stock": days, "total_value": val, "location": current_franchise, "chassis_no": chassis
+                                    }).execute()
+                                    records_processed += 1
+                                    
+                            st.success(f"🎉 Stock refreshed successfully. {records_processed} units assigned to their respective franchises inside cloud engine.")
+                            safe_rerun()
+                        except Exception as parse_ex:
+                            st.error(f"Data processing failed: {str(parse_ex)}")
+                    else:
+                        st.warning("Please populate the data terminal before submitting.")
+
+        # ---- LIVE COHORT DATA DISPLAY PANELS ----
+        try:
+            stock_res = supabase.table("used_car_stock").select("vsb_no, description, into_stock, days_in_stock, total_value, location").order("days_in_stock", desc=True).execute()
+            df_live_stock = pd.DataFrame(stock_res.data) if stock_res.data else pd.DataFrame()
+        except:
+            df_live_stock = pd.DataFrame()
+
+        if not df_live_stock.empty:
+            df_live_stock.columns = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "FRANCHISE DIVISION"]
+            franchise_list = ["ALL FRANCHISES"] + sorted(list(df_live_stock["FRANCHISE DIVISION"].unique()))
+            
+            col_filter1, col_filter2 = st.columns([1, 2])
+            with col_filter1:
+                selected_franchise = st.selectbox("FILTER BY FRANCHISE DIVISION", franchise_list, key="franchise_selector_dropdown")
+            with col_filter2:
+                search_query = st.text_input("🔍 SEARCH CATALOG (Type Model name or VSB Number)", "").strip().lower()
+            
+            filtered_df = df_live_stock.copy()
+            if selected_franchise != "ALL FRANCHISES":
+                filtered_df = filtered_df[filtered_df["FRANCHISE DIVISION"] == selected_franchise]
+                
+            if search_query:
+                filtered_df = filtered_df[
+                    filtered_df['VEHICLE DESCRIPTION'].astype(str).str.lower().str.contains(search_query) |
+                    filtered_df['VSB NUMBER'].astype(str).str.lower().str.contains(search_query)
+                ]
+                
+            cnt_units = len(filtered_df)
+            sum_capital = filtered_df['CAPITAL VAL (ZAR)'].sum()
+            avg_age = filtered_df['DAYS ON FLOOR'].mean() if cnt_units > 0 else 0
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            s_col1, s_col2, s_col3 = st.columns(3)
+            s_col1.metric("UNITS IN SELECTION", f"{cnt_units:,} VEHICLES")
+            s_col2.metric("SELECTION BOOK VALUE", f"R {sum_capital:,.2f}")
+            s_col3.metric("AVERAGE SELECTION FLOOR AGE", f"{int(avg_age)} DAYS")
+            
+            st.markdown("---")
+            display_df = filtered_df.copy()
+            display_df["CAPITAL VAL (ZAR)"] = display_df["CAPITAL VAL (ZAR)"].map(lambda x: f"R {float(x):,.2f}")
+            st.table(display_df[["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "FRANCHISE DIVISION"]])
+        else:
+            st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
+
+    # ---- TAB 4: COMMAND OVERVIEW ----
     if st.session_state['role'] in MANAGEMENT_ROLES:
-        with tab3:
+        with tab4:
             st.markdown("### 👑 MANAGEMENT COMMAND OVERVIEW & AUDITS")
             try:
                 c_leads = len(supabase.table("leads").select("id").execute().data)
@@ -479,7 +575,7 @@ else:
                             import hashlib
                             hashed_pw = hashlib.sha256(new_password.encode()).hexdigest()
                             supabase.table("users").insert({
-                                "username": new_username, "password": hashed_pw, "name": n_name if 'n_name' in locals() else new_name, "role": role_db_value
+                                "username": new_username, "password": hashed_pw, "name": new_name, "role": role_db_value
                             }).execute()
                             st.success("🎉 Account profile initialized. Proceed to Sign In tab.")
                     except Exception as e:
