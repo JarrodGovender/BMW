@@ -36,7 +36,7 @@ st.markdown("""
         /* Premium Flat Input Elements & Dropzones */
         .stTextInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea, .stMultiSelect>div {
             border: 1px solid #E5E5E5 !important;
-            border-radius: 0px !important; /* Flat geometric corners */
+            border-radius: 0px !important; 
             background-color: #F6F6F6 !important;
             color: #262626 !important;
             font-size: 0.95rem !important;
@@ -134,9 +134,7 @@ st.markdown("""
             text-transform: uppercase;
         }
 
-        /* =========================================================
-           🚨 WATERPROOF CENTER ALIGNMENT FOR TARGET METRIC DATA 🚨
-           ========================================================= */
+        /* Center alignment for Date and Days columns */
         .stTable thead tr th:nth-child(2),
         .stTable thead tr th:nth-child(3) {
             text-align: center !important;
@@ -356,7 +354,7 @@ if st.session_state['authenticated']:
                         supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         safe_rerun()
 
-    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH RE-WORDED AGEING TARGETS ----
+    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE ----
     with tab3:
         st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
         st.caption("Single source of truth inventory registry organized and separated by official franchise division lines.")
@@ -483,25 +481,23 @@ if st.session_state['authenticated']:
                     
                     render_rows = []
                     for _, row in franchise_df.iterrows():
-                        desc = str(row["VEHICLE DESCRIPTION"])
                         days = int(row["DAYS ON FLOOR"])
                         
+                        # 🛠️ TARGET UPDATE: NEW STOCK badge moved to Ageing Column
                         if days <= 3:
-                            desc = f"🔥 HOT STOCK — {desc}"
-                            
-                        # 🛠️ SPECIFIC TARGET UPDATE: Reworded tracking tag precisely per image_9726e1.png requirements
-                        if days >= 90:
-                            days_alert = f"🚨 {days} DAYS (Critical Ageing)"
+                            days_badge = "🔥 NEW STOCK"
+                        elif days >= 90:
+                            days_badge = f"🚨 {days} DAYS (Critical Ageing)"
                         elif days >= 60:
-                            days_alert = f"⚠️ {days} DAYS (Approaching max prov)"
+                            days_badge = f"⚠️ {days} DAYS (Approaching max prov)"
                         else:
-                            days_alert = f"{days} Days"
+                            days_badge = f"{days} Days"
                             
                         render_rows.append({
                             "VSB NUMBER": row["VSB NUMBER"],
-                            "VEHICLE DESCRIPTION": desc,
+                            "VEHICLE DESCRIPTION": row["VEHICLE DESCRIPTION"],
                             "INTO STOCK DATE": row["INTO STOCK DATE"],
-                            "DAYS ON FLOOR": days_alert,
+                            "DAYS ON FLOOR": days_badge,
                             "CAPITAL VAL (ZAR)": f"R {float(row['CAPITAL VAL (ZAR)']):,.2f}"
                         })
                         
