@@ -137,7 +137,6 @@ st.markdown("""
         /* =========================================================
            🚨 WATERPROOF CENTER ALIGNMENT FOR TARGET METRIC DATA 🚨
            ========================================================= */
-        /* Center aligns Into Stock Date & Days on Floor text columns */
         .stTable thead tr th:nth-child(2),
         .stTable thead tr th:nth-child(3) {
             text-align: center !important;
@@ -357,7 +356,7 @@ if st.session_state['authenticated']:
                         supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         safe_rerun()
 
-    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE ----
+    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH AGEING INTEL ----
     with tab3:
         st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
         st.caption("Single source of truth inventory registry organized and separated by official franchise division lines.")
@@ -441,11 +440,15 @@ if st.session_state['authenticated']:
             unique_franchises_options = sorted(list(df_live_stock["FRANCHISE DIVISION"].unique()))
             unique_franchises_options = [f for f in unique_franchises_options if f.strip() != "LHP" and f.strip()]
             
-            col_filter1, col_filter2 = st.columns([2, 2])
+            col_filter1, col_filter2, col_filter3 = st.columns([2, 2, 1])
             with col_filter1:
-                selected_franchises = st.multiselect("FILTER BY FRANCHISE DIVISION(S) (Leave blank to display all)", options=unique_franchises_options, key="franchise_multi_selector")
+                selected_franchises = st.multiselect("FILTER BY FRANCHISE DIVISION(S)", options=unique_franchises_options, key="franchise_multi_selector")
             with col_filter2:
-                search_query = st.text_input("🔍 LIVE GLOBAL VEHICLE SEARCH (Type Model name or VSB Number)", "").strip().lower()
+                search_query = st.text_input("🔍 LIVE GLOBAL VEHICLE SEARCH", "").strip().lower()
+            with col_filter3:
+                st.markdown("<br>", unsafe_allow_html=True)
+                # 🔥 HOT STOCKS QUICK FILTER CHECKBOX
+                show_hot_only = st.checkbox("🔥 SHOW HOT STOCKS ONLY", value=False, key="hot_stocks_toggle")
             
             filtered_df = df_live_stock.copy()
             if selected_franchises:
@@ -456,6 +459,9 @@ if st.session_state['authenticated']:
                     filtered_df['VEHICLE DESCRIPTION'].astype(str).str.lower().str.contains(search_query) |
                     filtered_df['VSB NUMBER'].astype(str).str.lower().str.contains(search_query)
                 ]
+                
+            if show_hot_only:
+                filtered_df = filtered_df[filtered_df["DAYS ON FLOOR"] <= 3]
             
             loop_franchises = sorted(list(filtered_df["FRANCHISE DIVISION"].unique())) if not selected_franchises else selected_franchises
             
@@ -476,15 +482,34 @@ if st.session_state['authenticated']:
                         </div>
                     """, unsafe_allow_html=True)
                     
-                    # 🚨 BACKEND FIX: Move "VSB NUMBER" into the row index location dynamically!
-                    # This drops the raw Pandas row numbers naturally without brittle CSS overrides.
-                    render_df = franchise_df.copy()
+                    # 🚨 BACKEND INVENTORY INTELLIGENCE MAPPING
+                    render_rows = []
+                    for _, row in franchise_df.iterrows():
+                        desc = str(row["VEHICLE DESCRIPTION"])
+                        days = int(row["DAYS ON FLOOR"])
+                        
+                        # Apply Hot Stock Flag
+                        if days <= 3:
+                            desc = f"🔥 HOT STOCK — {desc}"
+                            
+                        # Apply Provision Ageing Alerts inline
+                        if days >= 90:
+                            days_alert = f"🚨 {days} DAYS (Critical Ageing)"
+                        elif days >= 60:
+                            days_alert = f"⚠️ {days} DAYS (Approaching Provision)"
+                        else:
+                            days_alert = f"{days} Days"
+                            
+                        render_rows.append({
+                            "VSB NUMBER": row["VSB NUMBER"],
+                            "VEHICLE DESCRIPTION": desc,
+                            "INTO STOCK DATE": row["INTO STOCK DATE"],
+                            "DAYS ON FLOOR": days_alert,
+                            "CAPITAL VAL (ZAR)": f"R {float(row['CAPITAL VAL (ZAR)']):,.2f}"
+                        })
+                        
+                    render_df = pd.DataFrame(render_rows)
                     render_df.set_index("VSB NUMBER", inplace=True)
-                    
-                    # Convert price floats into professional South African Rand notation
-                    render_df["CAPITAL VAL (ZAR)"] = render_df["CAPITAL VAL (ZAR)"].map(lambda x: f"R {float(x):,.2f}")
-                    
-                    # Render table matching column positions perfectly
                     st.table(render_df[["VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"]])
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
