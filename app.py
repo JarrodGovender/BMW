@@ -43,8 +43,16 @@ st.markdown("""
         }
         
         /* =========================================================
-           🚨 SHARP FIX: ADJUSTING BUTTON DIMENSIONS & WRAPPING 🚨
+           🚨 WATERPROOF BUTTON TEXT & FIXED NORMAL SIZE CONTAINER FIX 🚨
            ========================================================= */
+        /* Target the outer layout container wrapper to prevent stretching */
+        div.stButton {
+            width: auto !important;
+            display: inline-block !important;
+            margin-top: 0.5rem !important;
+        }
+        
+        /* Apply exact luxury dimensions to the core button element */
         div.stButton > button, 
         div.stButton > button:first-child,
         div.stButton > button * {
@@ -52,15 +60,14 @@ st.markdown("""
             color: #FFFFFF !important;            /* Force crisp white text on button base */
             border-radius: 0px !important;         /* Geometric corners */
             border: 1px solid #000000 !important;
-            padding: 0.75rem 2.5rem !important;    /* Clean luxury corporate breathing room */
+            padding: 0.75rem 2rem !important;      /* Clean luxury corporate breathing room */
             font-weight: 500 !important;
             font-size: 0.85rem !important;
             letter-spacing: 1.5px !important;     /* Luxury tracking */
             text-transform: uppercase !important;  /* Corporate naming style */
-            width: auto !important;                /* DROPS THE HUGE FULL-WIDTH RECTANGLE BLOCK */
-            min-width: 240px !important;           /* Fixed stable structure width */
+            width: auto !important;                /* STRIPS OUT THE GIANT FULL-WIDTH STRETCH */
+            min-width: 240px !important;           /* Stable structural normal width */
             display: block !important;
-            margin: 0 left !important;
             transition: all 0.2s ease-in-out !important;
         }
         
