@@ -10,6 +10,9 @@ from supabase import create_client, Client
 st.set_page_config(page_title="BMW Sandton Lead Hub", layout="wide")
 SAST = pytz.timezone('Africa/Johannesburg')
 
+# Public CDN URL for the modern official BMW transparent logo asset
+BMW_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg"
+
 # Premium BMW Corporate Brand Identity CSS Injection
 st.markdown("""
     <style>
@@ -104,11 +107,13 @@ if st.session_state['authenticated']:
     # ------------------------------------------
     # VIEW A: AUTHENTICATED PARTNER WORKSPACE
     # ------------------------------------------
-    header_col1, header_col2 = st.columns([4, 1])
+    header_col1, header_col2, header_col3 = st.columns([1, 4, 1])
     with header_col1:
+        st.image(BMW_LOGO_URL, width=80)
+    with header_col2:
         st.title("BMW Corporate Fleet Engine")
         st.caption("Gauteng Dealership Pipeline Network • Production Workspace Node")
-    with header_col2:
+    with header_col3:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🚪 Secure Logout", key="header_logout_btn"):
             st.session_state['authenticated'] = False
@@ -301,8 +306,14 @@ else:
     # ------------------------------------------
     # VIEW B: GATEWAY INTERFACE (SIGN IN / UP)
     # ------------------------------------------
-    st.title("🏢 BMW Sandton Fleet Platform Gateway")
-    st.caption("Production Enterprise Access Gate")
+    gate_col1, gate_col2, gate_col3 = st.columns([2, 3, 2])
+    with gate_col2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        # Center-aligned brand icon placement
+        st.image(BMW_LOGO_URL, width=120)
+        st.title("BMW Sandton Fleet Platform")
+        st.caption("Production Enterprise Access Gate")
+        st.markdown("<br>", unsafe_allow_html=True)
     
     auth_tab, signup_tab = st.tabs(["🔒 Sign In", "📝 Create Sales Account"])
     
