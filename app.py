@@ -43,53 +43,54 @@ st.markdown("""
         }
         
         /* =========================================================
-           🚨 WATERPROOF BUTTON TEXT & FIXED NORMAL SIZE CONTAINER FIX 🚨
+           🚨 DECISIVE FIX: STRICT MAX-WIDTH CONSTRAINT ON BUTTONS 🚨
            ========================================================= */
-        /* Target the outer layout container wrapper to prevent stretching */
+        /* Completely contains the Streamlit block wrapper from expanding */
         div.stButton {
             width: auto !important;
+            max-width: 220px !important; /* Hard ceiling to prevent block stretching */
             display: inline-block !important;
             margin-top: 0.5rem !important;
         }
         
-        /* Apply exact luxury dimensions to the core button element */
+        /* Forces the native button to maintain normal premium proportions */
         div.stButton > button, 
         div.stButton > button:first-child,
         div.stButton > button * {
             background-color: #000000 !important; /* Absolute Black Background */
-            color: #FFFFFF !important;            /* Force crisp white text on button base */
-            border-radius: 0px !important;         /* Geometric corners */
+            color: #FFFFFF !important;            /* Force crisp white text */
+            border-radius: 0px !important;         /* Sharp geometric edges */
             border: 1px solid #000000 !important;
-            padding: 0.75rem 2rem !important;      /* Clean luxury corporate breathing room */
+            padding: 0.6rem 1.5rem !important;     /* Clean corporate breathing room */
             font-weight: 500 !important;
-            font-size: 0.85rem !important;
-            letter-spacing: 1.5px !important;     /* Luxury tracking */
-            text-transform: uppercase !important;  /* Corporate naming style */
-            width: auto !important;                /* STRIPS OUT THE GIANT FULL-WIDTH STRETCH */
-            min-width: 240px !important;           /* Stable structural normal width */
+            font-size: 0.8rem !important;
+            letter-spacing: 1.5px !important;     /* Premium text tracking */
+            text-transform: uppercase !important;  /* Corporate styling */
+            width: 220px !important;               /* EXACT FIXED SIZE FOR ALL INTERACTIVE TRIGGERS */
+            max-width: 220px !important;
             display: block !important;
             transition: all 0.2s ease-in-out !important;
         }
         
-        /* Force text to stay white during all micro-interactions */
+        /* Keep text color locked on white through hover and focus tracking loops */
         div.stButton > button:hover,
         div.stButton > button:hover *,
         div.stButton > button:focus,
         div.stButton > button:focus * {
             background-color: #262626 !important;
             border-color: #262626 !important;
-            color: #FFFFFF !important; /* Keeps text fully visible */
+            color: #FFFFFF !important;
         }
         
         div.stButton > button:active {
-            transform: scale(0.99) !important;
+            transform: scale(0.98) !important;
         }
         
         /* Structural Framed Lead Cards */
         div[data-testid="stVerticalBlockBorderWrapper"] {
             background-color: #FFFFFF !important;
             border: 1px solid #E5E5E5 !important; /* Subtle corporate divider line */
-            border-radius: 0px !important; /* No rounded borders */
+            border-radius: 0px !important;         /* No rounded borders */
             padding: 1.5rem !important;
             margin-bottom: 1rem !important;
             transition: border-color 0.2s ease;
@@ -153,7 +154,6 @@ st.markdown("""
 
 @st.cache_resource
 def get_supabase_client() -> Client:
-    # Authenticate cleanly using the standard secure HTTPS web layer
     sb_url = st.secrets["supabase"]["url"]
     sb_key = st.secrets["supabase"]["key"]
     return create_client(sb_url, sb_key)
@@ -191,7 +191,7 @@ if st.session_state['authenticated']:
     # ------------------------------------------
     # VIEW A: AUTHENTICATED PARTNER WORKSPACE
     # ------------------------------------------
-    header_col1, header_col2 = st.columns([3, 1])
+    header_col1, header_col2 = st.columns([4, 1])
     with header_col1:
         st.markdown(f"""
             <div class='bmw-logo-left-header'>
@@ -204,13 +204,15 @@ if st.session_state['authenticated']:
             </div>
         """, unsafe_allow_html=True)
     with header_col2:
-        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+        # Pushes button alignment to flush right corner container smoothly
+        st.markdown("<div style='text-align: right;'>", unsafe_allow_html=True)
         if st.button("🚪 LOGOUT", key="header_logout_btn"):
             st.session_state['authenticated'] = False
             st.session_state['user'] = None
             st.session_state['name'] = None
             st.session_state['role'] = None
             st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(f"LOGGED IN AS: **{st.session_state['name'].upper()}** ({st.session_state['role'].replace('_', ' ').upper()})")
@@ -236,14 +238,18 @@ if st.session_state['authenticated']:
             else:
                 for idx, row in df.iterrows():
                     with st.container(border=True):
-                        col1, col2, col3 = st.columns([1, 4, 1.5])
-                        col1.metric("SCORE", f"{row['score']}/100")
-                        col2.markdown(f"### {row['company'].upper()} — {row['location'].upper()}")
-                        col2.markdown(f"**TARGET PERSONA:** {row['target']}  |  📅 *GENERATED: {row['lead_date']}*")
-                        col2.info(f"💡 {row['signal']}")
-                        if col3.button("CLAIM ACCOUNT", key=f"claim_c_{row['id']}"):
-                            supabase.table("leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
-                            st.rerun()
+                        # 🌟 RESTRUCTURED GRID ARRAY TO ELIMINATE RECTANGLE STRETCH SEEN IN image_a8fee7.png
+                        col_score, col_content = st.columns([1, 5])
+                        with col_score:
+                            st.metric("SCORE", f"{row['score']}/100")
+                        with col_content:
+                            st.markdown(f"### {row['company'].upper()} — {row['location'].upper()}")
+                            st.markdown(f"**TARGET PERSONA:** {row['target']}  |  📅 *GENERATED: {row['lead_date']}*")
+                            st.info(f"💡 {row['signal']}")
+                            # Placed directly beneath the metadata at normal inline dimensions
+                            if st.button("CLAIM ACCOUNT", key=f"claim_c_{row['id']}"):
+                                supabase.table("leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
+                                st.rerun()
 
         elif lead_section == "🚗 Individual Leads (B2C)":
             res = supabase.table("individual_leads").select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str).order("score", desc=True).execute()
@@ -253,14 +259,16 @@ if st.session_state['authenticated']:
             else:
                 for idx, row in df.iterrows():
                     with st.container(border=True):
-                        col1, col2, col3 = st.columns([1, 4, 1.5])
-                        col1.metric("SCORE", f"{row['score']}/100")
-                        col2.markdown(f"### PROSPECT: {row['client_name'].upper()}")
-                        col2.markdown(f"**POSITION:** {row['title']} at *{row['company']}* ({row['location']})  |  📅 *GENERATED: {row['lead_date']}*")
-                        col2.info(f"💎 {row['signal']}")
-                        if col3.button("CLAIM CLIENT", key=f"claim_i_{row['id']}"):
-                            supabase.table("individual_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
-                            st.rerun()
+                        col_score, col_content = st.columns([1, 5])
+                        with col_score:
+                            st.metric("SCORE", f"{row['score']}/100")
+                        with col_content:
+                            st.markdown(f"### PROSPECT: {row['client_name'].upper()}")
+                            st.markdown(f"**POSITION:** {row['title']} at *{row['company']}* ({row['location']})  |  📅 *GENERATED: {row['lead_date']}*")
+                            st.info(f"💎 {row['signal']}")
+                            if st.button("CLAIM CLIENT", key=f"claim_i_{row['id']}"):
+                                supabase.table("individual_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
+                                st.rerun()
 
         else:
             res = supabase.table("tender_leads").select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str).order("score", desc=True).execute()
@@ -270,14 +278,16 @@ if st.session_state['authenticated']:
             else:
                 for idx, row in df.iterrows():
                     with st.container(border=True):
-                        col1, col2, col3 = st.columns([1, 4, 1.5])
-                        col1.metric("SCORE", f"{row['score']}/100")
-                        col2.markdown(f"### VENDOR: {row['company'].upper()}")
-                        col2.markdown(f"**AWARDING BODY:** {row['awarding_body']}  |  💰 **VALUE:** `{row['contract_value']}`")
-                        col2.info(f"🏛️ {row['tender_desc']}")
-                        if col3.button("CLAIM TENDER", key=f"claim_t_{row['id']}"):
-                            supabase.table("tender_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
-                            st.rerun()
+                        col_score, col_content = st.columns([1, 5])
+                        with col_score:
+                            st.metric("SCORE", f"{row['score']}/100")
+                        with col_content:
+                            st.markdown(f"### VENDOR: {row['company'].upper()}")
+                            st.markdown(f"**AWARDING BODY:** {row['awarding_body']}  |  💰 **VALUE:** `{row['contract_value']}`")
+                            st.info(f"🏛️ {row['tender_desc']}")
+                            if st.button("CLAIM TENDER", key=f"claim_t_{row['id']}"):
+                                supabase.table("tender_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
+                                st.rerun()
 
     # ---- TAB 2: CLAIMED LEADS INTERACTION PANELS ----
     with tab2:
@@ -402,7 +412,6 @@ else:
     with gate_col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
         
-        # HTML inline flex layout for perfect horizontal logo alignment
         st.markdown(f"""
             <div class='bmw-logo-centered-header'>
                 <img src='{BMW_LOGO_URL}' width='82' style='height: auto; display: block;'>
@@ -410,7 +419,6 @@ else:
             </div>
         """, unsafe_allow_html=True)
             
-        # 🌟 UPDATED BRANDING STRINGS HERE AS PER image_a902e4.png REFERENCE REQUEST
         st.markdown("<h2 style='text-align: center; font-weight: 300; letter-spacing: 1px; margin-top:25px; margin-bottom: 0;'>BMW SANDTON</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; font-size:0.85rem; color:#666666; letter-spacing:1px; margin-top: 5px;'>SALES LEADS PORTAL</p>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
