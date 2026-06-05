@@ -285,6 +285,7 @@ if st.session_state['authenticated']:
                             st.info(f"🏛️ {row['tender_desc']}")
                             if st.button("CLAIM TENDER", key=f"claim_t_{row['id']}"):
                                 supabase.table("tender_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
+                                # 🌟 FIXED: Misplaced metric function completely removed from button logic
                                 st.rerun()
 
     # ---- TAB 2: CLAIMED LEADS INTERACTION PANELS ----
