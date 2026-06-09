@@ -697,11 +697,11 @@ if st.session_state['authenticated']:
                 if show_hot_only:
                     filtered_df = filtered_df[filtered_df["DAYS ON FLOOR"] <= 3]
                     
-                # 🟢 MULTI-SHEET EXCEL EMAIL ENGINE
+                # 🟢 STYLED EXCEL DISTRIBUTION ENGINE
                 if IS_MANAGEMENT:
                     with st.expander("📤 DISTRIBUTE FILTERED STOCKBOOK VIA EMAIL"):
                         st.markdown("#### Push Current Stockbook to Management")
-                        st.caption("This will attach the currently filtered stockbook as a multi-sheet Excel file (.xlsx) and email it to the designated distribution list. Sheet 1 contains the Executive Overviews, and subsequent sheets contain individual franchise stock.")
+                        st.caption("This will compile and securely format the stockbook into a multi-sheet Excel file (.xlsx) using professional executive templates.")
                         
                         target_email = st.text_input("RECIPIENT EMAIL ADDRESS(ES)", placeholder="dp@bmwsandton.co.za, sm@bmwsandton.co.za", help="Separate multiple emails with a comma")
                         
@@ -713,9 +713,9 @@ if st.session_state['authenticated']:
                                     sender_email = st.secrets["smtp"]["sender_email"]
                                     smtp_pass = st.secrets["smtp"]["password"]
                                     
-                                    with st.spinner("Compiling multi-sheet Excel report and connecting to secure mail server..."):
+                                    with st.spinner("Rendering styled Excel templates and connecting to secure mail server..."):
                                         
-                                        # 1. Build Overview Matrices for Sheet 1 using full database logic
+                                        # 1. Build Overview Matrices raw numbers
                                         categories_def_export = [
                                             ("Used BMW", lambda df: df["FRANCHISE DIVISION"].str.lower().str.contains("b -") | df["FRANCHISE DIVISION"].str.lower().str.contains("i -")),
                                             ("Used MINI", lambda df: df["FRANCHISE DIVISION"].str.lower().str.contains("m -")),
@@ -728,16 +728,16 @@ if st.session_state['authenticated']:
                                             cat_df = df_live_stock[mask_func(df_live_stock)]
                                             
                                             units = len(cat_df)
-                                            val_sum = cat_df["CAPITAL VAL (ZAR)"].sum()
+                                            val_sum = float(cat_df["CAPITAL VAL (ZAR)"].sum())
                                             
-                                            v_30_60 = cat_df[(cat_df["DAYS ON FLOOR"] >= 30) & (cat_df["DAYS ON FLOOR"] <= 60)]["CAPITAL VAL (ZAR)"].sum()
-                                            v_61_90 = cat_df[(cat_df["DAYS ON FLOOR"] >= 61) & (cat_df["DAYS ON FLOOR"] <= 90)]["CAPITAL VAL (ZAR)"].sum()
-                                            v_91_120 = cat_df[(cat_df["DAYS ON FLOOR"] >= 91) & (cat_df["DAYS ON FLOOR"] <= 120)]["CAPITAL VAL (ZAR)"].sum()
-                                            v_121_plus = cat_df[cat_df["DAYS ON FLOOR"] >= 121]["CAPITAL VAL (ZAR)"].sum()
+                                            v_30_60 = float(cat_df[(cat_df["DAYS ON FLOOR"] >= 30) & (cat_df["DAYS ON FLOOR"] <= 60)]["CAPITAL VAL (ZAR)"].sum())
+                                            v_61_90 = float(cat_df[(cat_df["DAYS ON FLOOR"] >= 61) & (cat_df["DAYS ON FLOOR"] <= 90)]["CAPITAL VAL (ZAR)"].sum())
+                                            v_91_120 = float(cat_df[(cat_df["DAYS ON FLOOR"] >= 91) & (cat_df["DAYS ON FLOOR"] <= 120)]["CAPITAL VAL (ZAR)"].sum())
+                                            v_121_plus = float(cat_df[cat_df["DAYS ON FLOOR"] >= 121]["CAPITAL VAL (ZAR)"].sum())
                                             
                                             unenc_df = cat_df[cat_df['FP STATUS'] == '🟢 UNENCUMBERED']
                                             unenc_units = len(unenc_df)
-                                            unenc_val = unenc_df["CAPITAL VAL (ZAR)"].sum()
+                                            unenc_val = float(unenc_df["CAPITAL VAL (ZAR)"].sum())
                                             
                                             p_2_5 = v_30_60 * 0.025
                                             p_5_0 = v_61_90 * 0.050
@@ -753,35 +753,76 @@ if st.session_state['authenticated']:
                                         df_prov_export = pd.DataFrame(prov_data)
                                         df_unenc_export = pd.DataFrame(unenc_data)
                                         
-                                        # 2. Write to Excel Buffer natively
+                                        # 2. Excel Format Construction
                                         excel_buffer = io.BytesIO()
                                         with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                                            workbook = writer.book
                                             
-                                            df_title_1 = pd.DataFrame([["DEALERSHIP USED CAR STOCK SUMMARY OVERVIEW"]])
-                                            df_title_2 = pd.DataFrame([["DEALERSHIP VEHICLE AGING PROVISION MATRIX"]])
-                                            df_title_3 = pd.DataFrame([["DEALERSHIP UNENCUMBERED STOCK MATRIX"]])
+                                            # Define Executive Styles
+                                            title_format = workbook.add_format({
+                                                'bold': True, 'font_size': 14, 'bg_color': '#003366', 
+                                                'font_color': '#FFFFFF', 'align': 'center', 'valign': 'vcenter', 'border': 1
+                                            })
+                                            header_format = workbook.add_format({
+                                                'bold': True, 'bg_color': '#E0E0E0', 'font_color': '#000000', 
+                                                'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True
+                                            })
+                                            text_format = workbook.add_format({'border': 1, 'valign': 'vcenter'})
+                                            num_format = workbook.add_format({'border': 1, 'valign': 'vcenter', 'align': 'center', 'num_format': '#,##0'})
+                                            curr_format = workbook.add_format({'border': 1, 'valign': 'vcenter', 'num_format': 'R #,##0.00'})
                                             
-                                            df_title_1.to_excel(writer, sheet_name='EXECUTIVE OVERVIEWS', startrow=0, header=False, index=False)
-                                            df_sum_export.to_excel(writer, sheet_name='EXECUTIVE OVERVIEWS', startrow=2, index=False)
+                                            def draw_executive_table(ws, df, start_row, start_col, title, col_formats):
+                                                ws.merge_range(start_row, start_col, start_row, start_col + len(df.columns) - 1, title, title_format)
+                                                ws.set_row(start_row, 30)
+                                                ws.set_row(start_row + 1, 35)
+                                                for c_num, col_name in enumerate(df.columns):
+                                                    ws.write(start_row + 1, start_col + c_num, col_name, header_format)
+                                                    
+                                                for r_idx, row in enumerate(df.values):
+                                                    for c_idx, val in enumerate(row):
+                                                        fmt = col_formats[c_idx]
+                                                        if pd.isna(val): ws.write(start_row + 2 + r_idx, start_col + c_idx, "", fmt)
+                                                        elif isinstance(val, (int, float)): ws.write_number(start_row + 2 + r_idx, start_col + c_idx, val, fmt)
+                                                        else: ws.write(start_row + 2 + r_idx, start_col + c_idx, str(val), fmt)
                                             
-                                            prov_start = 2 + len(df_sum_export) + 3
-                                            df_title_2.to_excel(writer, sheet_name='EXECUTIVE OVERVIEWS', startrow=prov_start, header=False, index=False)
-                                            df_prov_export.to_excel(writer, sheet_name='EXECUTIVE OVERVIEWS', startrow=prov_start + 2, index=False)
+                                            # OVERVIEW SHEET
+                                            ws_exec = workbook.add_worksheet('EXECUTIVE OVERVIEWS')
+                                            ws_exec.hide_gridlines(2)
+                                            ws_exec.set_column('A:A', 30)
+                                            ws_exec.set_column('B:F', 25)
                                             
-                                            unenc_start = prov_start + 2 + len(df_prov_export) + 3
-                                            df_title_3.to_excel(writer, sheet_name='EXECUTIVE OVERVIEWS', startrow=unenc_start, header=False, index=False)
-                                            df_unenc_export.to_excel(writer, sheet_name='EXECUTIVE OVERVIEWS', startrow=unenc_start + 2, index=False)
+                                            row_cursor = 1
+                                            draw_executive_table(ws_exec, df_sum_export, row_cursor, 0, "DEALERSHIP USED CAR STOCK SUMMARY OVERVIEW", [text_format, num_format, curr_format])
+                                            row_cursor += len(df_sum_export) + 4
                                             
-                                            # Write Individual Franchise Sheets
+                                            draw_executive_table(ws_exec, df_prov_export, row_cursor, 0, "DEALERSHIP VEHICLE AGING PROVISION MATRIX", [text_format, curr_format, curr_format, curr_format, curr_format, curr_format])
+                                            row_cursor += len(df_prov_export) + 4
+                                            
+                                            draw_executive_table(ws_exec, df_unenc_export, row_cursor, 0, "DEALERSHIP UNENCUMBERED STOCK MATRIX", [text_format, num_format, curr_format])
+                                            
+                                            # INDIVIDUAL FRANCHISE SHEETS
                                             loop_export = sorted(list(filtered_df["FRANCHISE DIVISION"].unique()))
                                             for franchise in loop_export:
                                                 if franchise.strip() == "LHP" or not franchise.strip(): continue
                                                 franchise_export_df = filtered_df[filtered_df["FRANCHISE DIVISION"] == franchise].copy()
+                                                
                                                 if not franchise_export_df.empty:
+                                                    safe_sheet_name = str(franchise).replace('/', '-').replace('\\', '-').replace('?', '').replace('*', '').replace('[', '').replace(']', '')[:31]
+                                                    ws_f = workbook.add_worksheet(safe_sheet_name)
+                                                    ws_f.hide_gridlines(2)
+                                                    ws_f.set_column('A:A', 15)
+                                                    ws_f.set_column('B:B', 45)
+                                                    ws_f.set_column('C:C', 18)
+                                                    ws_f.set_column('D:D', 18)
+                                                    ws_f.set_column('E:E', 25)
+                                                    ws_f.set_column('F:F', 25)
+                                                    
+                                                    # Keep raw numeric data for excel rendering
                                                     export_cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "FP STATUS", "CAPITAL VAL (ZAR)"]
                                                     f_exp = franchise_export_df[export_cols]
-                                                    safe_sheet_name = str(franchise).replace('/', '-').replace('\\', '-').replace('?', '').replace('*', '').replace('[', '').replace(']', '')[:31]
-                                                    f_exp.to_excel(writer, sheet_name=safe_sheet_name, index=False)
+                                                    
+                                                    f_fmts = [text_format, text_format, text_format, num_format, text_format, curr_format]
+                                                    draw_executive_table(ws_f, f_exp, 1, 0, f"FRANCHISE INVENTORY: {franchise.upper()}", f_fmts)
                                                     
                                         # Construct Email
                                         msg = EmailMessage()
@@ -803,7 +844,7 @@ if st.session_state['authenticated']:
                                             server.login(sender_email, smtp_pass)
                                             server.send_message(msg)
                                             
-                                        st.success("✅ Multi-sheet Excel Stockbook successfully compiled and transmitted!")
+                                        st.success("✅ Multi-sheet Excel Stockbook successfully formatted and transmitted!")
                                 except KeyError:
                                     st.error("❌ Mail Settings Missing: Please configure your [smtp] credentials in the Streamlit App Secrets.")
                                 except ImportError:
