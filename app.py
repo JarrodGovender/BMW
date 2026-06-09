@@ -133,12 +133,6 @@ st.markdown("""
             letter-spacing: 0.5px;
             text-transform: uppercase;
         }
-
-        /* Hides the default Pandas row numbers to prevent misalignment cleanly */
-        .stTable thead tr th:first-child,
-        .stTable tbody tr th {
-            display: none !important;
-        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -614,18 +608,18 @@ if st.session_state['authenticated']:
                             row_dict["FP STATUS"] = row.get("FP STATUS", "")
                             
                         row_dict["CAPITAL VAL (ZAR)"] = f"R {float(row.get('CAPITAL VAL (ZAR)', 0)):,.2f}"
-                        
                         render_rows.append(row_dict)
                         
                     render_df = pd.DataFrame(render_rows)
-                    
-                    # 🚨 FIX: Data remains un-indexed to ensure the VSB Column renders correctly under its own header
                     cols_to_render = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR"]
-                    if IS_MANAGEMENT:
-                        cols_to_render.append("FP STATUS")
+                    if IS_MANAGEMENT: cols_to_render.append("FP STATUS")
                     cols_to_render.append("CAPITAL VAL (ZAR)")
                     
-                    st.table(render_df[cols_to_render])
+                    # 🚨 FIX: Natively hide the integer index properly via pandas styler to prevent header misalignment
+                    try:
+                        st.table(render_df[cols_to_render].style.hide(axis="index"))
+                    except:
+                        st.table(render_df[cols_to_render].style.hide_index())
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
@@ -700,9 +694,11 @@ if st.session_state['authenticated']:
             render_pipe["ESTIMATED VALUE (ZAR)"] = df_pipeline["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
             render_pipe["DELIVERY DATE"] = pd.to_datetime(df_pipeline["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
             
-            # 🚨 FIX: Dataframes are no longer indexed forcefully. 
-            # The HTML columns naturally align because the Custom CSS quietly deletes the blank integer index.
-            st.table(render_pipe)
+            # 🚨 FIX: Natively hide the integer index properly via pandas styler to prevent header misalignment
+            try:
+                st.table(render_pipe.style.hide(axis="index"))
+            except:
+                st.table(render_pipe.style.hide_index())
             
             st.markdown("#### 🛠️ UPDATE ACTIVE PIPELINE DEALS")
             for idx, row in df_pipeline.iterrows():
@@ -778,8 +774,11 @@ if st.session_state['authenticated']:
             render_arch["DELIVERY DATE"] = pd.to_datetime(df_archive["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unknown")
             render_arch["FINAL VALUE (ZAR)"] = df_archive["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
             
-            # 🚨 FIX: Dataframes are no longer indexed forcefully here either.
-            st.table(render_arch)
+            # 🚨 FIX: Natively hide the integer index properly via pandas styler to prevent header misalignment
+            try:
+                st.table(render_arch.style.hide(axis="index"))
+            except:
+                st.table(render_arch.style.hide_index())
             
             st.markdown("#### 📂 ARCHIVE DETAILS & REVISIONS")
             for idx, row in df_archive.iterrows():
@@ -886,13 +885,14 @@ if st.session_state['authenticated']:
                 })
             
             df_sum_mat = pd.DataFrame(summary_matrix_data)
-            # 🚨 FIX: Removed set_index here too to ensure standard column display globally
+            df_sum_mat.set_index("STOCK DIVISION", inplace=True)
             st.table(df_sum_mat)
             
             # --- OVERVIEW B: AGING PROVISION SUMMARY MATRIX ---
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("#### 🪙 DEALERSHIP VEHICLE AGING PROVISION MATRIX")
             df_prov_mat = pd.DataFrame(provision_rows)
+            df_prov_mat.set_index("STOCK DIVISION", inplace=True)
             st.table(df_prov_mat)
                 
             st.markdown("---")
