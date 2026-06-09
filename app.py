@@ -676,7 +676,10 @@ if st.session_state['authenticated']:
                 st.caption("Select a vehicle to dynamically generate a professional, internet-enriched PDF specification sheet for your clients.")
                 
                 if FPDF_AVAILABLE:
-                    brochure_opts = ["Select a Vehicle..."] + df_live_stock['VSB NUMBER'].astype(str) + " - " + df_live_stock['VEHICLE DESCRIPTION']
+                    # ✅ FIX: Properly convert pandas series to standard python list before concatenating to avoid PyArrow crashes
+                    vehicle_series = df_live_stock['VSB NUMBER'].astype(str) + " - " + df_live_stock['VEHICLE DESCRIPTION']
+                    brochure_opts = ["Select a Vehicle..."] + vehicle_series.tolist()
+                    
                     selected_brochure = st.selectbox("SEARCH INVENTORY FOR BROCHURE GENERATION", brochure_opts)
                     
                     if selected_brochure != "Select a Vehicle...":
@@ -1251,9 +1254,9 @@ if st.session_state['authenticated']:
                 render_arch["FINAL VALUE (ZAR)"] = df_archive["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
                 
                 try:
-                    st.table(render_arch.style.hide(axis="index"))
+                    st.dataframe(render_arch, hide_index=True, use_container_width=True)
                 except:
-                    st.table(render_arch.style.hide_index())
+                    st.table(render_arch)
                 
                 st.markdown("#### 📂 ARCHIVE DETAILS & REVISIONS")
                 for idx, row in df_archive.iterrows():
@@ -1381,27 +1384,27 @@ if st.session_state['authenticated']:
                 
                 df_sum_mat = pd.DataFrame(summary_matrix_data)
                 try:
-                    st.table(df_sum_mat.style.hide(axis="index"))
+                    st.dataframe(df_sum_mat, hide_index=True, use_container_width=True)
                 except:
-                    st.table(df_sum_mat.style.hide_index())
+                    st.table(df_sum_mat)
                 
                 # --- OVERVIEW B: AGING PROVISION SUMMARY MATRIX ---
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("#### 🪙 DEALERSHIP VEHICLE AGING PROVISION MATRIX")
                 df_prov_mat = pd.DataFrame(provision_rows)
                 try:
-                    st.table(df_prov_mat.style.hide(axis="index"))
+                    st.dataframe(df_prov_mat, hide_index=True, use_container_width=True)
                 except:
-                    st.table(df_prov_mat.style.hide_index())
+                    st.table(df_prov_mat)
 
                 # --- OVERVIEW C: NEW UNENCUMBERED STOCK OVERVIEW ---
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("#### 🟢 DEALERSHIP UNENCUMBERED STOCK MATRIX")
                 df_unenc_mat = pd.DataFrame(unencumbered_matrix_data)
                 try:
-                    st.table(df_unenc_mat.style.hide(axis="index"))
+                    st.dataframe(df_unenc_mat, hide_index=True, use_container_width=True)
                 except:
-                    st.table(df_unenc_mat.style.hide_index())
+                    st.table(df_unenc_mat)
                     
                 st.markdown("---")
                 try:
