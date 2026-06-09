@@ -512,7 +512,7 @@ if st.session_state['authenticated']:
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
-    # ---- TAB 4: INTERACTIVE PIPELINE TRACKER (UPDATED FEATURE) ----
+    # ---- TAB 4: INTERACTIVE PIPELINE TRACKER (UPDATED CALENDAR FEATURE) ----
     with tab4:
         st.markdown("### 💼 SALES PIPELINE: OFF-LEAD DEALS")
         
@@ -523,25 +523,23 @@ if st.session_state['authenticated']:
             col_a, col_b = st.columns(2)
             client = col_a.text_input("CLIENT NAME")
             
-            # --- STOCKROOM LINKAGE LOGIC ---
             try:
                 pipe_stock_res = supabase.table("used_car_stock").select("vsb_no, description").execute()
                 pipe_stock_list = pipe_stock_res.data if pipe_stock_res.data else []
             except:
                 pipe_stock_list = []
                 
-            # Populates the dropdown. Uses standard Streamlit search filtering natively.
             stock_options = ["✏️ CUSTOM ENTRY (Not in Stock / Buy-in)"] + [f"{s['vsb_no']} - {s['description']}" for s in pipe_stock_list]
             stock_selection = col_b.selectbox("LINK TO INVENTORY (Type to search stock)", stock_options)
             
-            # If the user leaves it on Custom Entry, render a text box. Otherwise, lock the selection as the deal description.
             if stock_selection == "✏️ CUSTOM ENTRY (Not in Stock / Buy-in)":
                 deal_desc = col_b.text_input("ENTER CUSTOM VEHICLE / DEAL DESCRIPTION")
             else:
                 deal_desc = stock_selection
-            # -------------------------------
             
+            # --- NEW CALENDAR ENTRY DATE ---
             stage = col_a.selectbox("CURRENT STAGE", PIPELINE_STAGES)
+            delivery_date = col_a.date_input("PLANNED DELIVERY DATE (Estimated)", datetime.now(SAST))
             value = col_b.number_input("ESTIMATED VALUE (ZAR)", min_value=0.0)
             
             if st.button("COMMIT DEAL TO PIPELINE"):
@@ -553,12 +551,13 @@ if st.session_state['authenticated']:
                             "deal_description": deal_desc,
                             "stage": stage,
                             "estimated_value": value,
+                            "planned_delivery_date": delivery_date.strftime('%Y-%m-%d'),
                             "notes": ""
                         }).execute()
                         st.success("Deal successfully logged to pipeline.")
                         safe_rerun()
                     except Exception as e:
-                        st.error(f"Save failed. Did you run the SQL command to add the 'notes' column? Error: {e}")
+                        st.error(f"Save failed. Did you run the SQL command to add the 'planned_delivery_date' column? Error: {e}")
                 else:
                     st.warning("Please enter both the client name and deal description.")
 
@@ -572,8 +571,23 @@ if st.session_state['authenticated']:
         df_pipeline = pd.DataFrame(res.data) if res.data else pd.DataFrame()
         
         if not df_pipeline.empty:
+            
+            # Formats visual display table columns dynamically to include the new delivery date
+            render_pipe = pd.DataFrame()
+            if st.session_state['role'] in MANAGEMENT_ROLES:
+                render_pipe["REP USERNAME"] = df_pipeline["salesperson_username"]
+                
+            render_pipe["CLIENT NAME"] = df_pipeline["client_name"]
+            render_pipe["DEAL DESCRIPTION"] = df_pipeline["deal_description"]
+            render_pipe["STAGE"] = df_pipeline["stage"]
+            render_pipe["ESTIMATED VALUE (ZAR)"] = df_pipeline["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
+            
+            # Map robustly to prevent crashing on older items without a date string
+            render_pipe["DELIVERY DATE"] = pd.to_datetime(df_pipeline["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
+            st.table(render_pipe)
+            
+            st.markdown("#### 🛠️ UPDATE ACTIVE PIPELINE DEALS")
             for idx, row in df_pipeline.iterrows():
-                # Visual flag logic based on the status of the deal
                 if row['stage'] == "Cancelled":
                     stage_icon = "🛑"
                 elif row['stage'] == "Delivered":
@@ -581,7 +595,6 @@ if st.session_state['authenticated']:
                 else:
                     stage_icon = "⏳"
                 
-                # Interactive updating container for every deal
                 with st.expander(f"{stage_icon} {row['client_name'].upper()} | {row['deal_description']} — {row['stage'].upper()}"):
                     c1, c2 = st.columns([1, 2])
                     
@@ -589,27 +602,41 @@ if st.session_state['authenticated']:
                         st.markdown(f"**REP:** `@{row['salesperson_username']}`")
                         st.markdown(f"**EST. VALUE:** R {float(row['estimated_value']):,.2f}")
                         
+                        # Fallback robust parser for database strings 
+                        db_date = row.get('planned_delivery_date')
+                        if pd.isna(db_date) or not db_date:
+                            curr_date = datetime.now(SAST).date()
+                        else:
+                            try:
+                                curr_date = datetime.strptime(str(db_date).split("T")[0], '%Y-%m-%d').date()
+                            except:
+                                curr_date = datetime.now(SAST).date()
+                                
                         current_index = PIPELINE_STAGES.index(row['stage']) if row['stage'] in PIPELINE_STAGES else 0
                         new_stage = st.selectbox("UPDATE STATUS", PIPELINE_STAGES, index=current_index, key=f"stage_{row['id']}")
+                        
+                        # Allow interactive live calendar re-adjustments inside the update form
+                        new_date = st.date_input("UPDATE DELIVERY DATE", value=curr_date, key=f"date_{row['id']}")
                         
                     with c2:
                         current_notes = row.get('notes', '')
                         if pd.isna(current_notes) or current_notes is None: 
                             current_notes = ""
                         
-                        new_notes = st.text_area("DEAL NOTES (Shared between Rep & Manager)", value=str(current_notes), height=110, key=f"notes_{row['id']}")
+                        new_notes = st.text_area("DEAL NOTES (Shared between Rep & Manager)", value=str(current_notes), height=180, key=f"notes_{row['id']}")
                     
                     st.markdown("<br>", unsafe_allow_html=True)
                     if st.button("SAVE PIPELINE UPDATES", key=f"update_{row['id']}"):
                         try:
                             supabase.table("sales_pipeline").update({
                                 "stage": new_stage,
+                                "planned_delivery_date": new_date.strftime('%Y-%m-%d'),
                                 "notes": new_notes
                             }).eq("id", row['id']).execute()
                             st.success("Deal updated successfully.")
                             safe_rerun()
                         except Exception as e:
-                            st.error(f"Failed to update. Did you add the 'notes' column to your database? Error: {e}")
+                            st.error(f"Failed to update. Error: {e}")
         else:
             st.info("No active pipeline deals currently tracked.")
 
