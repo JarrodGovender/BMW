@@ -206,7 +206,6 @@ if st.session_state['authenticated']:
 
     MANAGEMENT_ROLES = ['dealer_principal', 'finance_admin', 'sales_manager']
     
-    # Updated Tab Structure
     if st.session_state['role'] in MANAGEMENT_ROLES:
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER", "📊 COMMAND OVERVIEW"])
     else:
@@ -508,54 +507,93 @@ if st.session_state['authenticated']:
                         })
                         
                     render_df = pd.DataFrame(render_rows)
-                    # Automatically drops the pandas number index cleanly
                     render_df.set_index("VSB NUMBER", inplace=True)
                     st.table(render_df[["VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"]])
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
-    # ---- TAB 4: PIPELINE TRACKER (NEW FEATURE) ----
+    # ---- TAB 4: INTERACTIVE PIPELINE TRACKER (UPDATED FEATURE) ----
     with tab4:
         st.markdown("### 💼 SALES PIPELINE: OFF-LEAD DEALS")
+        
+        # Array of possible deal progression stages
+        PIPELINE_STAGES = ["Prospecting", "Test Drive", "Finance App", "Awaiting Delivery", "Delivered", "Cancelled"]
         
         with st.expander("➕ ADD NEW DEAL TO PIPELINE"):
             col_a, col_b = st.columns(2)
             client = col_a.text_input("CLIENT NAME")
             deal_desc = col_b.text_input("VEHICLE / DEAL DESCRIPTION")
-            stage = col_a.selectbox("CURRENT STAGE", ["Prospecting", "Test Drive", "Finance App", "Awaiting Delivery", "Delivered"])
+            stage = col_a.selectbox("CURRENT STAGE", PIPELINE_STAGES)
             value = col_b.number_input("ESTIMATED VALUE (ZAR)", min_value=0.0)
             
             if st.button("COMMIT DEAL TO PIPELINE"):
                 if client and deal_desc:
-                    supabase.table("sales_pipeline").insert({
-                        "salesperson_username": st.session_state['user'],
-                        "client_name": client,
-                        "deal_description": deal_desc,
-                        "stage": stage,
-                        "estimated_value": value
-                    }).execute()
-                    st.success("Deal successfully logged to pipeline.")
-                    safe_rerun()
+                    try:
+                        supabase.table("sales_pipeline").insert({
+                            "salesperson_username": st.session_state['user'],
+                            "client_name": client,
+                            "deal_description": deal_desc,
+                            "stage": stage,
+                            "estimated_value": value,
+                            "notes": ""
+                        }).execute()
+                        st.success("Deal successfully logged to pipeline.")
+                        safe_rerun()
+                    except Exception as e:
+                        st.error(f"Save failed. Did you run the SQL command to add the 'notes' column? Error: {e}")
                 else:
                     st.warning("Please enter both the client name and deal description.")
 
         if st.session_state['role'] in MANAGEMENT_ROLES:
             st.markdown("#### 🕵️ MANAGER VIEW: ALL ACTIVE DEALS")
-            res = supabase.table("sales_pipeline").select("*").execute()
+            res = supabase.table("sales_pipeline").select("*").order("id", desc=True).execute()
         else:
             st.markdown("#### 👤 MY ACTIVE DEALS")
-            res = supabase.table("sales_pipeline").select("*").eq("salesperson_username", st.session_state['user']).execute()
+            res = supabase.table("sales_pipeline").select("*").eq("salesperson_username", st.session_state['user']).order("id", desc=True).execute()
         
         df_pipeline = pd.DataFrame(res.data) if res.data else pd.DataFrame()
         
         if not df_pipeline.empty:
-            df_pipeline["estimated_value"] = df_pipeline["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
-            df_pipeline.columns = ["ID", "REP USERNAME", "CLIENT NAME", "DEAL DESCRIPTION", "STAGE", "ESTIMATED VALUE (ZAR)", "LAST UPDATED"]
-            
-            if st.session_state['role'] in MANAGEMENT_ROLES:
-                st.table(df_pipeline[["REP USERNAME", "CLIENT NAME", "DEAL DESCRIPTION", "STAGE", "ESTIMATED VALUE (ZAR)"]])
-            else:
-                st.table(df_pipeline[["CLIENT NAME", "DEAL DESCRIPTION", "STAGE", "ESTIMATED VALUE (ZAR)"]])
+            for idx, row in df_pipeline.iterrows():
+                # Visual flag logic based on the status of the deal
+                if row['stage'] == "Cancelled":
+                    stage_icon = "🛑"
+                elif row['stage'] == "Delivered":
+                    stage_icon = "✅"
+                else:
+                    stage_icon = "⏳"
+                
+                # Interactive updating container for every deal
+                with st.expander(f"{stage_icon} {row['client_name'].upper()} | {row['deal_description']} — {row['stage'].upper()}"):
+                    c1, c2 = st.columns([1, 2])
+                    
+                    with c1:
+                        st.markdown(f"**REP:** `@{row['salesperson_username']}`")
+                        st.markdown(f"**EST. VALUE:** R {float(row['estimated_value']):,.2f}")
+                        
+                        # Find current stage index for default dropdown selection
+                        current_index = PIPELINE_STAGES.index(row['stage']) if row['stage'] in PIPELINE_STAGES else 0
+                        new_stage = st.selectbox("UPDATE STATUS", PIPELINE_STAGES, index=current_index, key=f"stage_{row['id']}")
+                        
+                    with c2:
+                        # Fetch existing notes, handle null values cleanly
+                        current_notes = row.get('notes', '')
+                        if pd.isna(current_notes) or current_notes is None: 
+                            current_notes = ""
+                        
+                        new_notes = st.text_area("DEAL NOTES (Shared between Rep & Manager)", value=str(current_notes), height=110, key=f"notes_{row['id']}")
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("SAVE PIPELINE UPDATES", key=f"update_{row['id']}"):
+                        try:
+                            supabase.table("sales_pipeline").update({
+                                "stage": new_stage,
+                                "notes": new_notes
+                            }).eq("id", row['id']).execute()
+                            st.success("Deal updated successfully.")
+                            safe_rerun()
+                        except Exception as e:
+                            st.error(f"Failed to update. Did you add the 'notes' column to your database? Error: {e}")
         else:
             st.info("No active pipeline deals currently tracked.")
 
