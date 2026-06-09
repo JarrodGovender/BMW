@@ -134,19 +134,7 @@ st.markdown("""
             text-transform: uppercase;
         }
 
-        /* Center alignment natively targeting data columns */
-        .stTable thead tr th:nth-of-type(4),
-        .stTable thead tr th:nth-of-type(5),
-        .stTable thead tr th:nth-of-type(6) {
-            text-align: center !important;
-        }
-        .stTable tbody tr td:nth-of-type(3),
-        .stTable tbody tr td:nth-of-type(4),
-        .stTable tbody tr td:nth-of-type(5) {
-            text-align: center !important;
-        }
-
-        /* Hides the default Pandas row numbers to prevent misalignment without overriding data */
+        /* Hides the default Pandas row numbers to prevent misalignment cleanly */
         .stTable thead tr th:first-child,
         .stTable tbody tr th {
             display: none !important;
@@ -509,7 +497,6 @@ if st.session_state['authenticated']:
 
         if not df_live_stock.empty:
             
-            # Map and format display fields cleanly
             if 'floorplan_status' not in df_live_stock.columns:
                 df_live_stock['floorplan_status'] = "⚪ PENDING RECON"
             
@@ -549,7 +536,6 @@ if st.session_state['authenticated']:
             unique_franchises_options = sorted(list(df_live_stock["FRANCHISE DIVISION"].unique()))
             unique_franchises_options = [f for f in unique_franchises_options if f.strip() != "LHP" and f.strip()]
             
-            # 🚨 FILTER UPGRADE: Responsive column split for management filters
             if IS_MANAGEMENT:
                 col_filter1, col_filter2, col_filter3, col_filter4 = st.columns([2, 2, 2, 1])
                 with col_filter1:
@@ -633,10 +619,7 @@ if st.session_state['authenticated']:
                         
                     render_df = pd.DataFrame(render_rows)
                     
-                    # 🚨 FIX: Do not set index so VSB number stays visible as Column 1
-                    # Custom CSS removes the blank index numbering natively!
-                    
-                    # Determine columns to explicitly show based on role
+                    # 🚨 FIX: Data remains un-indexed to ensure the VSB Column renders correctly under its own header
                     cols_to_render = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR"]
                     if IS_MANAGEMENT:
                         cols_to_render.append("FP STATUS")
@@ -717,6 +700,8 @@ if st.session_state['authenticated']:
             render_pipe["ESTIMATED VALUE (ZAR)"] = df_pipeline["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
             render_pipe["DELIVERY DATE"] = pd.to_datetime(df_pipeline["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
             
+            # 🚨 FIX: Dataframes are no longer indexed forcefully. 
+            # The HTML columns naturally align because the Custom CSS quietly deletes the blank integer index.
             st.table(render_pipe)
             
             st.markdown("#### 🛠️ UPDATE ACTIVE PIPELINE DEALS")
@@ -793,6 +778,7 @@ if st.session_state['authenticated']:
             render_arch["DELIVERY DATE"] = pd.to_datetime(df_archive["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unknown")
             render_arch["FINAL VALUE (ZAR)"] = df_archive["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
             
+            # 🚨 FIX: Dataframes are no longer indexed forcefully here either.
             st.table(render_arch)
             
             st.markdown("#### 📂 ARCHIVE DETAILS & REVISIONS")
@@ -900,14 +886,13 @@ if st.session_state['authenticated']:
                 })
             
             df_sum_mat = pd.DataFrame(summary_matrix_data)
-            df_sum_mat.set_index("STOCK DIVISION", inplace=True)
+            # 🚨 FIX: Removed set_index here too to ensure standard column display globally
             st.table(df_sum_mat)
             
             # --- OVERVIEW B: AGING PROVISION SUMMARY MATRIX ---
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("#### 🪙 DEALERSHIP VEHICLE AGING PROVISION MATRIX")
             df_prov_mat = pd.DataFrame(provision_rows)
-            df_prov_mat.set_index("STOCK DIVISION", inplace=True)
             st.table(df_prov_mat)
                 
             st.markdown("---")
