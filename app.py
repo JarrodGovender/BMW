@@ -36,7 +36,7 @@ st.markdown("""
         /* Premium Flat Input Elements & Dropzones */
         .stTextInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea, .stMultiSelect>div {
             border: 1px solid #E5E5E5 !important;
-            border-radius: 0px !important; /* Flat geometric corners */
+            border-radius: 0px !important; 
             background-color: #F6F6F6 !important;
             color: #262626 !important;
             font-size: 0.95rem !important;
@@ -143,6 +143,12 @@ st.markdown("""
         .stTable tbody tr td:nth-child(3) {
             text-align: center !important;
         }
+
+        /* Hides the default Pandas row numbers to prevent misalignment */
+        .stTable thead tr th:first-child,
+        .stTable tbody tr th {
+            display: none !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -200,10 +206,11 @@ if st.session_state['authenticated']:
 
     MANAGEMENT_ROLES = ['dealer_principal', 'finance_admin', 'sales_manager']
     
+    # Updated Tab Structure
     if st.session_state['role'] in MANAGEMENT_ROLES:
-        tab1, tab2, tab3, tab4 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "📊 COMMAND OVERVIEW"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER", "📊 COMMAND OVERVIEW"])
     else:
-        tab1, tab2, tab3 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM"])
+        tab1, tab2, tab3, tab4 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER"])
 
     # ---- TAB 1: AVAILABLE DAILY FEED ----
     with tab1:
@@ -501,14 +508,60 @@ if st.session_state['authenticated']:
                         })
                         
                     render_df = pd.DataFrame(render_rows)
+                    # Automatically drops the pandas number index cleanly
                     render_df.set_index("VSB NUMBER", inplace=True)
                     st.table(render_df[["VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"]])
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
-    # ---- TAB 4: COMMAND OVERVIEW & EXECUTIVE SUMMARIES ----
+    # ---- TAB 4: PIPELINE TRACKER (NEW FEATURE) ----
+    with tab4:
+        st.markdown("### 💼 SALES PIPELINE: OFF-LEAD DEALS")
+        
+        with st.expander("➕ ADD NEW DEAL TO PIPELINE"):
+            col_a, col_b = st.columns(2)
+            client = col_a.text_input("CLIENT NAME")
+            deal_desc = col_b.text_input("VEHICLE / DEAL DESCRIPTION")
+            stage = col_a.selectbox("CURRENT STAGE", ["Prospecting", "Test Drive", "Finance App", "Awaiting Delivery", "Delivered"])
+            value = col_b.number_input("ESTIMATED VALUE (ZAR)", min_value=0.0)
+            
+            if st.button("COMMIT DEAL TO PIPELINE"):
+                if client and deal_desc:
+                    supabase.table("sales_pipeline").insert({
+                        "salesperson_username": st.session_state['user'],
+                        "client_name": client,
+                        "deal_description": deal_desc,
+                        "stage": stage,
+                        "estimated_value": value
+                    }).execute()
+                    st.success("Deal successfully logged to pipeline.")
+                    safe_rerun()
+                else:
+                    st.warning("Please enter both the client name and deal description.")
+
+        if st.session_state['role'] in MANAGEMENT_ROLES:
+            st.markdown("#### 🕵️ MANAGER VIEW: ALL ACTIVE DEALS")
+            res = supabase.table("sales_pipeline").select("*").execute()
+        else:
+            st.markdown("#### 👤 MY ACTIVE DEALS")
+            res = supabase.table("sales_pipeline").select("*").eq("salesperson_username", st.session_state['user']).execute()
+        
+        df_pipeline = pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        
+        if not df_pipeline.empty:
+            df_pipeline["estimated_value"] = df_pipeline["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
+            df_pipeline.columns = ["ID", "REP USERNAME", "CLIENT NAME", "DEAL DESCRIPTION", "STAGE", "ESTIMATED VALUE (ZAR)", "LAST UPDATED"]
+            
+            if st.session_state['role'] in MANAGEMENT_ROLES:
+                st.table(df_pipeline[["REP USERNAME", "CLIENT NAME", "DEAL DESCRIPTION", "STAGE", "ESTIMATED VALUE (ZAR)"]])
+            else:
+                st.table(df_pipeline[["CLIENT NAME", "DEAL DESCRIPTION", "STAGE", "ESTIMATED VALUE (ZAR)"]])
+        else:
+            st.info("No active pipeline deals currently tracked.")
+
+    # ---- TAB 5: COMMAND OVERVIEW & EXECUTIVE SUMMARIES ----
     if st.session_state['role'] in MANAGEMENT_ROLES:
-        with tab4:
+        with tab5:
             st.markdown("### 👑 MANAGEMENT COMMAND OVERVIEW & AUDITS")
             
             # --- OVERVIEW A: STOCK SUMMARY MATRIX ---
