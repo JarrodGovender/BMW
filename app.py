@@ -50,21 +50,29 @@ def create_brochure_excel(car_details, specs):
         
         # Build Document Structure
         ws.merge_range('A1:B2', 'BMW SANDTON - OFFICIAL DIGITAL SPEC SHEET', title_fmt)
-        ws.merge_range('A4:B4', 'VEHICLE IDENTIFICATION', sub_fmt)
         
+        # Vehicle Identification Section
+        ws.merge_range('A4:B4', 'VEHICLE IDENTIFICATION', sub_fmt)
         ws.write('A5', 'Vehicle Description', key_fmt)
         ws.write('B5', car_details['desc'], val_fmt)
         ws.write('A6', 'VSB Number', key_fmt)
         ws.write('B6', car_details['vsb'], val_fmt)
         ws.write('A7', 'VIN / Chassis', key_fmt)
         ws.write('B7', car_details['vin'], val_fmt)
-        
         ws.write('A8', 'Selling Price (ZAR)', key_fmt)
         ws.write_number('B8', car_details['raw_price'], price_fmt)
         
-        ws.merge_range('A10:B10', 'TECHNICAL SPECIFICATIONS & DETAILS', sub_fmt)
+        # Customization Section
+        ws.merge_range('A10:B10', 'VEHICLE CUSTOMIZATION', sub_fmt)
+        ws.write('A11', 'Exterior / Interior Colour', key_fmt)
+        ws.write('B11', 'Enter Colour Details...', edit_fmt)
+        ws.write('A12', 'Additional Sales Notes', key_fmt)
+        ws.write('B12', 'Enter custom pitch / notes...', edit_fmt)
         
-        row = 10
+        # Tech Specs
+        ws.merge_range('A14:B14', 'TECHNICAL SPECIFICATIONS', sub_fmt)
+        
+        row = 14
         for k, v in specs.items():
             ws.set_row(row, 20)
             ws.write(row, 0, k, key_fmt)
@@ -231,18 +239,6 @@ st.markdown(f"""
             letter-spacing: 0.5px;
             text-transform: uppercase;
             color: {text_color} !important;
-        }}
-
-        /* Table Native Alignments */
-        .stTable thead tr th:nth-of-type(4),
-        .stTable thead tr th:nth-of-type(5),
-        .stTable thead tr th:nth-of-type(6) {{
-            text-align: center !important;
-        }}
-        .stTable tbody tr td:nth-of-type(3),
-        .stTable tbody tr td:nth-of-type(4),
-        .stTable tbody tr td:nth-of-type(5) {{
-            text-align: center !important;
         }}
         
         /* Dark Mode Fixes for Tables & Expanders */
@@ -596,7 +592,7 @@ if st.session_state['authenticated']:
                                 supabase.table("tender_leads").update({"status": "Unassigned", "assigned_to": None}).eq("id", row['id']).execute()
                                 safe_rerun()
 
-        # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH DIGITAL BROCHURE STUDIO ----
+        # ---- TAB 3: USED CAR STOCKROOM NODE WITH DIGITAL BROCHURE STUDIO ----
         with tab3:
             st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
             st.caption("Single source of truth inventory registry organized and separated by official franchise division lines.")
@@ -691,6 +687,7 @@ if st.session_state['authenticated']:
                             "Drivetrain": "xDrive (All-Wheel Drive)" if "XDRIVE" in desc_up else "sDrive (Rear-Wheel Drive)",
                             "0-100 km/h Acceleration": "4.1 seconds" if "M50" in desc_up or "M4" in desc_up else "6.4 seconds",
                             "Fuel Economy": "7.5 L/100km (Combined Cycle)" if "D" in desc_up else "8.2 L/100km (Combined Cycle)",
+                            "CO2 Emissions": "165 g/km",
                             "Body Classification": "Premium SUV / SAV" if "X" in desc_up else "Premium Sedan / Coupe",
                             "Current Mileage (km)": "Enter Current Mileage...",
                             "Active Motorplan / Warranty": "Yes / No (Update Here)"
@@ -918,133 +915,6 @@ if st.session_state['authenticated']:
                             else:
                                 st.warning("Please enter at least one recipient email address.")
                 
-                # Admin Stock Processing Section (Hidden from Reps)
-                if IS_MANAGEMENT and st.session_state['role'] == 'finance_admin':
-                    with st.expander("🛠️ ADMIN CONSOLE: INVENTORY & FLOORPLAN MANAGEMENT", expanded=False):
-                        st.markdown("#### 1. Paste Daily Spreadsheet Data")
-                        raw_paste_data = st.text_area("PASTE RAW DATA ROWS HERE", height=150, placeholder="Franchise: B - BMW\n109237\tX4 xDrive20d Sport A...")
-                        
-                        if st.button("PROCESS AND OVERWRITE INVENTORY", key="process_stock_paste_btn"):
-                            if raw_paste_data.strip():
-                                try:
-                                    lines = raw_paste_data.split('\n')
-                                    records_processed = 0
-                                    current_franchise = "General Used Stock"
-                                    
-                                    supabase.table("used_car_stock").delete().gt("days_in_stock", -1).execute()
-                                    supabase.table("used_car_stock").delete().eq("days_in_stock", 0).execute()
-                                    
-                                    for line in lines:
-                                        cleaned_line = line.strip()
-                                        if not cleaned_line:
-                                            continue
-                                            
-                                        if "franchise:" in cleaned_line.lower():
-                                            current_franchise = cleaned_line.split(':', 1)[1].strip()
-                                            continue
-                                            
-                                        parts = cleaned_line.split('\t') if '\t' in cleaned_line else cleaned_line.split(',')
-                                        
-                                        if len(parts) >= 2 and parts[0].strip().isdigit():
-                                            vsb = parts[0].strip()
-                                            desc = parts[1].strip()
-                                            into_stk = parts[2].strip() if len(parts) > 2 else ''
-                                            
-                                            try: val = float(parts[10].strip().replace(' ', '').replace(' ', '').replace(',', '')) if len(parts) > 10 else 0.00
-                                            except: val = 0.00
-                                                
-                                            try: days = int(float(parts[11].strip().replace(' ', '').strip())) if len(parts) > 11 and parts[11].strip() else 0
-                                            except: days = 0
-                                                
-                                            chassis = parts[13].strip() if len(parts) > 13 else ''
-                                            
-                                            try:
-                                                supabase.table("used_car_stock").upsert({
-                                                    "vsb_no": vsb, "description": desc, "into_stock": into_stk,
-                                                    "days_in_stock": days, "total_value": val, "location": current_franchise.strip(), "chassis_no": chassis,
-                                                    "floorplan_status": "⚪ PENDING RECON"
-                                                }).execute()
-                                            except Exception as e:
-                                                supabase.table("used_car_stock").upsert({
-                                                    "vsb_no": vsb, "description": desc, "into_stock": into_stk,
-                                                    "days_in_stock": days, "total_value": val, "location": current_franchise.strip(), "chassis_no": chassis
-                                                }).execute()
-                                            
-                                            records_processed += 1
-                                            
-                                    st.success(f"🎉 Stock refreshed successfully. {records_processed} units inserted.")
-                                    safe_rerun()
-                                except Exception as parse_ex:
-                                    st.error(f"Data processing failed: {str(parse_ex)}")
-                            else:
-                                st.warning("Please populate the data terminal before submitting.")
-                        
-                        st.markdown("---")
-                        
-                        st.markdown("#### 2. Run Daily Floorplan Recon")
-                        st.caption("Upload your daily CSV export reports (Current Units Summary) to automatically cross-reference VINs and identify unencumbered vs financed stock.")
-                        fp_files = st.file_uploader("Upload Floorplan & Bridge CSV Files", type=['csv'], accept_multiple_files=True)
-                        
-                        if st.button("RUN FLOORPLAN RECONCILIATION", key="run_recon_btn"):
-                            if fp_files:
-                                with st.spinner("Analyzing CSV reports and cross-referencing VINs against database..."):
-                                    fp_vsbs = set()
-                                    fp_chassis = set()
-                                    
-                                    for f in fp_files:
-                                        try:
-                                            content = f.read().decode("utf-8", errors="ignore").splitlines()
-                                            header_idx = 0
-                                            for i, line in enumerate(content):
-                                                if "Stock No" in line or "Chassis" in line:
-                                                    header_idx = i
-                                                    break
-                                            
-                                            f.seek(0)
-                                            df_fp = pd.read_csv(f, skiprows=header_idx)
-                                            
-                                            stock_col = next((c for c in df_fp.columns if 'stock no' in c.lower()), None)
-                                            if stock_col:
-                                                digits_only = df_fp[stock_col].astype(str).str.replace(r'\D', '', regex=True)
-                                                fp_vsbs.update(digits_only.tolist())
-                                                
-                                            chassis_col = next((c for c in df_fp.columns if 'chassis' in c.lower() or 'vin' in c.lower()), None)
-                                            if chassis_col:
-                                                clean_chassis = df_fp[chassis_col].astype(str).str.strip().str.upper()
-                                                fp_chassis.update(clean_chassis.tolist())
-                                        except Exception as e:
-                                            st.error(f"Error parsing {f.name}: {e}")
-                                            
-                                    try:
-                                        db_stock = supabase.table("used_car_stock").select("vsb_no, chassis_no").execute()
-                                    except:
-                                        db_stock = supabase.table("used_car_stock").select("vsb_no").execute()
-                                        
-                                    if db_stock.data:
-                                        update_count = 0
-                                        for row in db_stock.data:
-                                            db_chassis = str(row.get('chassis_no', '')).strip().upper()
-                                            db_vsb = str(row.get('vsb_no', '')).strip()
-                                            db_vsb_clean = ''.join(filter(str.isdigit, db_vsb))
-                                            
-                                            is_on_fp = False
-                                            if db_chassis and db_chassis in fp_chassis:
-                                                is_on_fp = True
-                                            elif db_vsb_clean and db_vsb_clean in fp_vsbs:
-                                                is_on_fp = True
-                                                
-                                            status = "ON FLOORPLAN" if is_on_fp else "UNENCUMBERED"
-                                            try:
-                                                supabase.table("used_car_stock").update({"floorplan_status": status}).eq("vsb_no", row['vsb_no']).execute()
-                                                update_count += 1
-                                            except:
-                                                pass
-                                            
-                                        st.success(f"✅ Recon complete! {update_count} units successfully cross-referenced using globally unique VIN strings.")
-                                        safe_rerun()
-                            else:
-                                st.warning("Please upload at least one CSV file to run the reconciliation engine.")
-                
                 loop_franchises = sorted(list(filtered_df["FRANCHISE DIVISION"].unique())) if not selected_franchises else selected_franchises
                 
                 for franchise in loop_franchises:
@@ -1091,10 +961,8 @@ if st.session_state['authenticated']:
                         if IS_MANAGEMENT: cols_to_render.append("FP STATUS")
                         cols_to_render.append("CAPITAL VAL (ZAR)")
                         
-                        try:
-                            st.table(render_df[cols_to_render].style.hide(axis="index"))
-                        except:
-                            st.table(render_df[cols_to_render].style.hide_index())
+                        # Native index hiding to fix header alignment
+                        st.dataframe(render_df[cols_to_render], hide_index=True, use_container_width=True)
             else:
                 st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
@@ -1169,10 +1037,7 @@ if st.session_state['authenticated']:
                 render_pipe["ESTIMATED VALUE (ZAR)"] = df_pipeline["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
                 render_pipe["DELIVERY DATE"] = pd.to_datetime(df_pipeline["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
                 
-                try:
-                    st.dataframe(render_pipe, hide_index=True, use_container_width=True)
-                except:
-                    st.table(render_pipe)
+                st.dataframe(render_pipe, hide_index=True, use_container_width=True)
                 
                 st.markdown("#### 🛠️ UPDATE ACTIVE PIPELINE DEALS")
                 for idx, row in df_pipeline.iterrows():
@@ -1248,10 +1113,7 @@ if st.session_state['authenticated']:
                 render_arch["DELIVERY DATE"] = pd.to_datetime(df_archive["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unknown")
                 render_arch["FINAL VALUE (ZAR)"] = df_archive["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
                 
-                try:
-                    st.dataframe(render_arch, hide_index=True, use_container_width=True)
-                except:
-                    st.table(render_arch)
+                st.dataframe(render_arch, hide_index=True, use_container_width=True)
                 
                 st.markdown("#### 📂 ARCHIVE DETAILS & REVISIONS")
                 for idx, row in df_archive.iterrows():
@@ -1378,28 +1240,19 @@ if st.session_state['authenticated']:
                     })
                 
                 df_sum_mat = pd.DataFrame(summary_matrix_data)
-                try:
-                    st.dataframe(df_sum_mat, hide_index=True, use_container_width=True)
-                except:
-                    st.table(df_sum_mat)
+                st.dataframe(df_sum_mat, hide_index=True, use_container_width=True)
                 
                 # --- OVERVIEW B: AGING PROVISION SUMMARY MATRIX ---
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("#### 🪙 DEALERSHIP VEHICLE AGING PROVISION MATRIX")
                 df_prov_mat = pd.DataFrame(provision_rows)
-                try:
-                    st.dataframe(df_prov_mat, hide_index=True, use_container_width=True)
-                except:
-                    st.table(df_prov_mat)
+                st.dataframe(df_prov_mat, hide_index=True, use_container_width=True)
 
                 # --- OVERVIEW C: NEW UNENCUMBERED STOCK OVERVIEW ---
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("#### 🟢 DEALERSHIP UNENCUMBERED STOCK MATRIX")
                 df_unenc_mat = pd.DataFrame(unencumbered_matrix_data)
-                try:
-                    st.dataframe(df_unenc_mat, hide_index=True, use_container_width=True)
-                except:
-                    st.table(df_unenc_mat)
+                st.dataframe(df_unenc_mat, hide_index=True, use_container_width=True)
                     
                 st.markdown("---")
                 try:
