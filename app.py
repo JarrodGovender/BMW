@@ -522,7 +522,25 @@ if st.session_state['authenticated']:
         with st.expander("➕ ADD NEW DEAL TO PIPELINE"):
             col_a, col_b = st.columns(2)
             client = col_a.text_input("CLIENT NAME")
-            deal_desc = col_b.text_input("VEHICLE / DEAL DESCRIPTION")
+            
+            # --- STOCKROOM LINKAGE LOGIC ---
+            try:
+                pipe_stock_res = supabase.table("used_car_stock").select("vsb_no, description").execute()
+                pipe_stock_list = pipe_stock_res.data if pipe_stock_res.data else []
+            except:
+                pipe_stock_list = []
+                
+            # Populates the dropdown. Uses standard Streamlit search filtering natively.
+            stock_options = ["✏️ CUSTOM ENTRY (Not in Stock / Buy-in)"] + [f"{s['vsb_no']} - {s['description']}" for s in pipe_stock_list]
+            stock_selection = col_b.selectbox("LINK TO INVENTORY (Type to search stock)", stock_options)
+            
+            # If the user leaves it on Custom Entry, render a text box. Otherwise, lock the selection as the deal description.
+            if stock_selection == "✏️ CUSTOM ENTRY (Not in Stock / Buy-in)":
+                deal_desc = col_b.text_input("ENTER CUSTOM VEHICLE / DEAL DESCRIPTION")
+            else:
+                deal_desc = stock_selection
+            # -------------------------------
+            
             stage = col_a.selectbox("CURRENT STAGE", PIPELINE_STAGES)
             value = col_b.number_input("ESTIMATED VALUE (ZAR)", min_value=0.0)
             
@@ -571,12 +589,10 @@ if st.session_state['authenticated']:
                         st.markdown(f"**REP:** `@{row['salesperson_username']}`")
                         st.markdown(f"**EST. VALUE:** R {float(row['estimated_value']):,.2f}")
                         
-                        # Find current stage index for default dropdown selection
                         current_index = PIPELINE_STAGES.index(row['stage']) if row['stage'] in PIPELINE_STAGES else 0
                         new_stage = st.selectbox("UPDATE STATUS", PIPELINE_STAGES, index=current_index, key=f"stage_{row['id']}")
                         
                     with c2:
-                        # Fetch existing notes, handle null values cleanly
                         current_notes = row.get('notes', '')
                         if pd.isna(current_notes) or current_notes is None: 
                             current_notes = ""
