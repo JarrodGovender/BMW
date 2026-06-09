@@ -143,12 +143,6 @@ st.markdown("""
         .stTable tbody tr td:nth-child(3) {
             text-align: center !important;
         }
-
-        /* Hides the default Pandas row numbers to prevent misalignment */
-        .stTable thead tr th:first-child,
-        .stTable tbody tr th {
-            display: none !important;
-        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -512,11 +506,10 @@ if st.session_state['authenticated']:
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
-    # ---- TAB 4: INTERACTIVE PIPELINE TRACKER (UPDATED CALENDAR FEATURE) ----
+    # ---- TAB 4: INTERACTIVE PIPELINE TRACKER ----
     with tab4:
         st.markdown("### 💼 SALES PIPELINE: OFF-LEAD DEALS")
         
-        # Array of possible deal progression stages
         PIPELINE_STAGES = ["Prospecting", "Test Drive", "Finance App", "Awaiting Delivery", "Delivered", "Cancelled"]
         
         with st.expander("➕ ADD NEW DEAL TO PIPELINE"):
@@ -537,7 +530,6 @@ if st.session_state['authenticated']:
             else:
                 deal_desc = stock_selection
             
-            # --- NEW CALENDAR ENTRY DATE ---
             stage = col_a.selectbox("CURRENT STAGE", PIPELINE_STAGES)
             delivery_date = col_a.date_input("PLANNED DELIVERY DATE (Estimated)", datetime.now(SAST))
             value = col_b.number_input("ESTIMATED VALUE (ZAR)", min_value=0.0)
@@ -572,18 +564,23 @@ if st.session_state['authenticated']:
         
         if not df_pipeline.empty:
             
-            # Formats visual display table columns dynamically to include the new delivery date
+            # 🚨 FIX: Clean data frame display aligning directly to index rules 
             render_pipe = pd.DataFrame()
             if st.session_state['role'] in MANAGEMENT_ROLES:
-                render_pipe["REP USERNAME"] = df_pipeline["salesperson_username"]
+                render_pipe["REP USERNAME"] = df_pipeline["salesperson_username"].apply(lambda x: f"@{x}")
                 
             render_pipe["CLIENT NAME"] = df_pipeline["client_name"]
             render_pipe["DEAL DESCRIPTION"] = df_pipeline["deal_description"]
             render_pipe["STAGE"] = df_pipeline["stage"]
             render_pipe["ESTIMATED VALUE (ZAR)"] = df_pipeline["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
-            
-            # Map robustly to prevent crashing on older items without a date string
             render_pipe["DELIVERY DATE"] = pd.to_datetime(df_pipeline["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
+            
+            # Explicit index setting drops the messy numeric Pandas row numbers
+            if st.session_state['role'] in MANAGEMENT_ROLES:
+                render_pipe.set_index("REP USERNAME", inplace=True)
+            else:
+                render_pipe.set_index("CLIENT NAME", inplace=True)
+                
             st.table(render_pipe)
             
             st.markdown("#### 🛠️ UPDATE ACTIVE PIPELINE DEALS")
@@ -602,7 +599,6 @@ if st.session_state['authenticated']:
                         st.markdown(f"**REP:** `@{row['salesperson_username']}`")
                         st.markdown(f"**EST. VALUE:** R {float(row['estimated_value']):,.2f}")
                         
-                        # Fallback robust parser for database strings 
                         db_date = row.get('planned_delivery_date')
                         if pd.isna(db_date) or not db_date:
                             curr_date = datetime.now(SAST).date()
@@ -614,8 +610,6 @@ if st.session_state['authenticated']:
                                 
                         current_index = PIPELINE_STAGES.index(row['stage']) if row['stage'] in PIPELINE_STAGES else 0
                         new_stage = st.selectbox("UPDATE STATUS", PIPELINE_STAGES, index=current_index, key=f"stage_{row['id']}")
-                        
-                        # Allow interactive live calendar re-adjustments inside the update form
                         new_date = st.date_input("UPDATE DELIVERY DATE", value=curr_date, key=f"date_{row['id']}")
                         
                     with c2:
