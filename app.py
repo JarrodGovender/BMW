@@ -817,7 +817,7 @@ if st.session_state['authenticated']:
                                         msg['Subject'] = f"📊 LIVE BMW SANDTON STOCKBOOK & OVERVIEWS - {datetime.now(SAST).strftime('%d %b %Y')}"
                                         msg['From'] = sender_email
                                         msg['To'] = target_email
-                                        msg.set_content("Good morning,\n\nPlease find attached the latest multi-sheet, live Used Car Stockbook generated directly from the Sandton Lead Hub platform.\n\nSheet 1: Executive Provision & Encumbrance Overviews\nAdditional Sheets: Individual Franchise Breakdowns\n\nAutomated Distribution System")
+                                        msg.set_content("Good Day,\n\nPlease find attached the latest multi-sheet, live Used Car Stockbook generated directly from the Sandton Lead Hub platform.\n\nSheet 1: Executive Provision & Encumbrance Overviews\nAdditional Sheets: Individual Franchise Breakdowns\n\nAutomated Distribution System")
                                         
                                         msg.add_attachment(
                                             excel_buffer.getvalue(),
