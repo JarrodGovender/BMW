@@ -133,24 +133,6 @@ st.markdown("""
             letter-spacing: 0.5px;
             text-transform: uppercase;
         }
-
-        /* Center alignment natively targeting data columns */
-        .stTable thead tr th:nth-of-type(4),
-        .stTable thead tr th:nth-of-type(5),
-        .stTable thead tr th:nth-of-type(6) {
-            text-align: center !important;
-        }
-        .stTable tbody tr td:nth-of-type(3),
-        .stTable tbody tr td:nth-of-type(4),
-        .stTable tbody tr td:nth-of-type(5) {
-            text-align: center !important;
-        }
-
-        /* Hides the default Pandas row numbers to prevent misalignment without overriding data */
-        .stTable thead tr th:first-child,
-        .stTable tbody tr th {
-            display: none !important;
-        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -370,7 +352,6 @@ if st.session_state['authenticated']:
         
         if st.session_state['role'] == 'finance_admin':
             with st.expander("🛠️ ADMIN CONSOLE: INVENTORY & FLOORPLAN MANAGEMENT", expanded=False):
-                # Section 1: Standard Paste Data
                 st.markdown("#### 1. Paste Daily Spreadsheet Data")
                 raw_paste_data = st.text_area("PASTE RAW DATA ROWS HERE", height=150, placeholder="Franchise: B - BMW\n109237\tX4 xDrive20d Sport A...")
                 
@@ -431,7 +412,6 @@ if st.session_state['authenticated']:
                 
                 st.markdown("---")
                 
-                # Section 2: Automated Recon Engine prioritizing VIN
                 st.markdown("#### 2. Run Daily Floorplan Recon")
                 st.caption("Upload your daily CSV export reports (Current Units Summary) to automatically cross-reference VINs and identify unencumbered vs financed stock.")
                 fp_files = st.file_uploader("Upload Floorplan & Bridge CSV Files", type=['csv'], accept_multiple_files=True)
@@ -633,7 +613,11 @@ if st.session_state['authenticated']:
                     if IS_MANAGEMENT: cols_to_render.append("FP STATUS")
                     cols_to_render.append("CAPITAL VAL (ZAR)")
                     
-                    st.table(render_df[cols_to_render].set_index("VSB NUMBER"))
+                    # 🚨 BULLETPROOF FIX: Natively hide index using pandas style
+                    try:
+                        st.table(render_df[cols_to_render].style.hide(axis="index"))
+                    except:
+                        st.table(render_df[cols_to_render].style.hide_index())
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
@@ -708,10 +692,11 @@ if st.session_state['authenticated']:
             render_pipe["ESTIMATED VALUE (ZAR)"] = df_pipeline["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
             render_pipe["DELIVERY DATE"] = pd.to_datetime(df_pipeline["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
             
-            if st.session_state['role'] in MANAGEMENT_ROLES:
-                st.table(render_pipe.set_index("REP USERNAME"))
-            else:
-                st.table(render_pipe.set_index("CLIENT NAME"))
+            # 🚨 BULLETPROOF FIX: Natively hide index using pandas style
+            try:
+                st.table(render_pipe.style.hide(axis="index"))
+            except:
+                st.table(render_pipe.style.hide_index())
             
             st.markdown("#### 🛠️ UPDATE ACTIVE PIPELINE DEALS")
             for idx, row in df_pipeline.iterrows():
@@ -787,10 +772,11 @@ if st.session_state['authenticated']:
             render_arch["DELIVERY DATE"] = pd.to_datetime(df_archive["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unknown")
             render_arch["FINAL VALUE (ZAR)"] = df_archive["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
             
-            if st.session_state['role'] in MANAGEMENT_ROLES:
-                st.table(render_arch.set_index("REP USERNAME"))
-            else:
-                st.table(render_arch.set_index("CLIENT NAME"))
+            # 🚨 BULLETPROOF FIX: Natively hide index using pandas style
+            try:
+                st.table(render_arch.style.hide(axis="index"))
+            except:
+                st.table(render_arch.style.hide_index())
             
             st.markdown("#### 📂 ARCHIVE DETAILS & REVISIONS")
             for idx, row in df_archive.iterrows():
@@ -910,28 +896,37 @@ if st.session_state['authenticated']:
                     "TOTAL PROVISION": f"R {p_total:,.2f}"
                 })
                 
-                # 🚨 FIX: Re-titled the column header as requested
+                # 🚨 FIX: Exact Header text implementation requested
                 unencumbered_matrix_data.append({
                     "STOCK DIVISION": cat_name,
                     "NO. OF UNENCUMBERED UNITS": f"{unenc_units:,}",
                     "UNENCUMBERED CAPITAL VALUE (ZAR)": f"R {unenc_val:,.2f}"
                 })
             
-            # 🚨 FIX: Applied set_index to ensure native alignment for all management matrices
+            # 🚨 BULLETPROOF FIX: Natively hide index using pandas style
             df_sum_mat = pd.DataFrame(summary_matrix_data)
-            st.table(df_sum_mat.set_index("STOCK DIVISION"))
+            try:
+                st.table(df_sum_mat.style.hide(axis="index"))
+            except:
+                st.table(df_sum_mat.style.hide_index())
             
             # --- OVERVIEW B: AGING PROVISION SUMMARY MATRIX ---
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("#### 🪙 DEALERSHIP VEHICLE AGING PROVISION MATRIX")
             df_prov_mat = pd.DataFrame(provision_rows)
-            st.table(df_prov_mat.set_index("STOCK DIVISION"))
+            try:
+                st.table(df_prov_mat.style.hide(axis="index"))
+            except:
+                st.table(df_prov_mat.style.hide_index())
 
             # --- OVERVIEW C: NEW UNENCUMBERED STOCK OVERVIEW ---
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("#### 🟢 DEALERSHIP UNENCUMBERED STOCK MATRIX")
             df_unenc_mat = pd.DataFrame(unencumbered_matrix_data)
-            st.table(df_unenc_mat.set_index("STOCK DIVISION"))
+            try:
+                st.table(df_unenc_mat.style.hide(axis="index"))
+            except:
+                st.table(df_unenc_mat.style.hide_index())
                 
             st.markdown("---")
             try:
