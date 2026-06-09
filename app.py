@@ -134,7 +134,19 @@ st.markdown("""
             text-transform: uppercase;
         }
 
-        /* Hides the default Pandas row numbers to prevent misalignment cleanly */
+        /* Center alignment natively targeting data columns */
+        .stTable thead tr th:nth-of-type(4),
+        .stTable thead tr th:nth-of-type(5),
+        .stTable thead tr th:nth-of-type(6) {
+            text-align: center !important;
+        }
+        .stTable tbody tr td:nth-of-type(3),
+        .stTable tbody tr td:nth-of-type(4),
+        .stTable tbody tr td:nth-of-type(5) {
+            text-align: center !important;
+        }
+
+        /* Hides the default Pandas row numbers to prevent misalignment without overriding data */
         .stTable thead tr th:first-child,
         .stTable tbody tr th {
             display: none !important;
@@ -621,11 +633,7 @@ if st.session_state['authenticated']:
                     if IS_MANAGEMENT: cols_to_render.append("FP STATUS")
                     cols_to_render.append("CAPITAL VAL (ZAR)")
                     
-                    # 🚨 Bulletproof fix: Styler handles the index hiding natively without altering headers
-                    try:
-                        st.table(render_df[cols_to_render].style.hide(axis="index"))
-                    except:
-                        st.table(render_df[cols_to_render].style.hide_index())
+                    st.table(render_df[cols_to_render].set_index("VSB NUMBER"))
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
@@ -700,11 +708,10 @@ if st.session_state['authenticated']:
             render_pipe["ESTIMATED VALUE (ZAR)"] = df_pipeline["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
             render_pipe["DELIVERY DATE"] = pd.to_datetime(df_pipeline["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
             
-            # 🚨 FIX: Natively hide the integer index properly via pandas styler to prevent header misalignment
-            try:
-                st.table(render_pipe.style.hide(axis="index"))
-            except:
-                st.table(render_pipe.style.hide_index())
+            if st.session_state['role'] in MANAGEMENT_ROLES:
+                st.table(render_pipe.set_index("REP USERNAME"))
+            else:
+                st.table(render_pipe.set_index("CLIENT NAME"))
             
             st.markdown("#### 🛠️ UPDATE ACTIVE PIPELINE DEALS")
             for idx, row in df_pipeline.iterrows():
@@ -780,11 +787,10 @@ if st.session_state['authenticated']:
             render_arch["DELIVERY DATE"] = pd.to_datetime(df_archive["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unknown")
             render_arch["FINAL VALUE (ZAR)"] = df_archive["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
             
-            # 🚨 FIX: Natively hide the integer index properly via pandas styler to prevent header misalignment
-            try:
-                st.table(render_arch.style.hide(axis="index"))
-            except:
-                st.table(render_arch.style.hide_index())
+            if st.session_state['role'] in MANAGEMENT_ROLES:
+                st.table(render_arch.set_index("REP USERNAME"))
+            else:
+                st.table(render_arch.set_index("CLIENT NAME"))
             
             st.markdown("#### 📂 ARCHIVE DETAILS & REVISIONS")
             for idx, row in df_archive.iterrows():
@@ -836,7 +842,6 @@ if st.session_state['authenticated']:
             # --- OVERVIEW A: STOCK SUMMARY MATRIX ---
             st.markdown("#### 📊 DEALERSHIP USED CAR STOCK SUMMARY OVERVIEW")
             try:
-                # 🚨 Ensure floorplan data is fetched cleanly for the new unencumbered matrix
                 try:
                     raw_res = supabase.table("used_car_stock").select("total_value, days_in_stock, location, floorplan_status").execute()
                     df_summary = pd.DataFrame(raw_res.data) if raw_res.data else pd.DataFrame()
@@ -846,7 +851,6 @@ if st.session_state['authenticated']:
             except:
                 df_summary = pd.DataFrame()
                 
-            # Safely inject missing statuses to prevent crashing
             if not df_summary.empty and 'floorplan_status' not in df_summary.columns:
                 df_summary['floorplan_status'] = "⚪ PENDING RECON"
                 
@@ -875,7 +879,6 @@ if st.session_state['authenticated']:
                     v_91_120 = cat_df[(cat_df["days_in_stock"] >= 91) & (cat_df["days_in_stock"] <= 120)]["total_value"].sum()
                     v_121_plus = cat_df[cat_df["days_in_stock"] >= 121]["total_value"].sum()
                     
-                    # 🟢 NEW CALCULATION: Unencumbered Capital Calculation
                     unenc_df = cat_df[cat_df['floorplan_status'] == 'UNENCUMBERED']
                     unenc_units = len(unenc_df)
                     unenc_val = unenc_df["total_value"].sum()
@@ -907,37 +910,28 @@ if st.session_state['authenticated']:
                     "TOTAL PROVISION": f"R {p_total:,.2f}"
                 })
                 
-                # Appends division breakdown for the new Unencumbered table
+                # 🚨 FIX: Re-titled the column header as requested
                 unencumbered_matrix_data.append({
                     "STOCK DIVISION": cat_name,
-                    "FREE UNITS": f"{unenc_units:,}",
+                    "NO. OF UNENCUMBERED UNITS": f"{unenc_units:,}",
                     "UNENCUMBERED CAPITAL VALUE (ZAR)": f"R {unenc_val:,.2f}"
                 })
             
+            # 🚨 FIX: Applied set_index to ensure native alignment for all management matrices
             df_sum_mat = pd.DataFrame(summary_matrix_data)
-            # 🚨 FIX applied to all Management overview matrices 
-            try:
-                st.table(df_sum_mat.style.hide(axis="index"))
-            except:
-                st.table(df_sum_mat.style.hide_index())
+            st.table(df_sum_mat.set_index("STOCK DIVISION"))
             
             # --- OVERVIEW B: AGING PROVISION SUMMARY MATRIX ---
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("#### 🪙 DEALERSHIP VEHICLE AGING PROVISION MATRIX")
             df_prov_mat = pd.DataFrame(provision_rows)
-            try:
-                st.table(df_prov_mat.style.hide(axis="index"))
-            except:
-                st.table(df_prov_mat.style.hide_index())
+            st.table(df_prov_mat.set_index("STOCK DIVISION"))
 
             # --- OVERVIEW C: NEW UNENCUMBERED STOCK OVERVIEW ---
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("#### 🟢 DEALERSHIP UNENCUMBERED STOCK MATRIX")
             df_unenc_mat = pd.DataFrame(unencumbered_matrix_data)
-            try:
-                st.table(df_unenc_mat.style.hide(axis="index"))
-            except:
-                st.table(df_unenc_mat.style.hide_index())
+            st.table(df_unenc_mat.set_index("STOCK DIVISION"))
                 
             st.markdown("---")
             try:
