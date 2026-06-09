@@ -1,0 +1,15 @@
+name: Keep-Alive Ping
+
+on:
+  schedule:
+    # Runs at 00:00, 04:00, 08:00, 12:00, 16:00, and 20:00 UTC
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # Allows you to manually trigger it for testing
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the application
+        run: |
+          curl -I https://https://bmwsandtonleads.streamlit.app/
