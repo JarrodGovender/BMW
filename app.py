@@ -134,13 +134,15 @@ st.markdown("""
             text-transform: uppercase;
         }
 
-        /* Center alignment for Date and Days columns */
-        .stTable thead tr th:nth-child(2),
-        .stTable thead tr th:nth-child(3) {
+        /* Center alignment for target data columns (adjusted for newly added floorplan column) */
+        .stTable thead tr th:nth-child(3),
+        .stTable thead tr th:nth-child(4),
+        .stTable thead tr th:nth-child(5) {
             text-align: center !important;
         }
-        .stTable tbody tr td:nth-child(2),
-        .stTable tbody tr td:nth-child(3) {
+        .stTable tbody tr td:nth-child(3),
+        .stTable tbody tr td:nth-child(4),
+        .stTable tbody tr td:nth-child(5) {
             text-align: center !important;
         }
 
@@ -207,7 +209,6 @@ if st.session_state['authenticated']:
     MANAGEMENT_ROLES = ['dealer_principal', 'finance_admin', 'sales_manager']
     
     if st.session_state['role'] in MANAGEMENT_ROLES:
-        # Added Tab 6 for Management Command Overview
         tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER", "📦 ARCHIVED DELIVERIES", "📊 COMMAND OVERVIEW"])
     else:
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER", "📦 ARCHIVED DELIVERIES"])
@@ -361,15 +362,16 @@ if st.session_state['authenticated']:
                         supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
                         safe_rerun()
 
-    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE ----
+    # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH NEW FLOORPLAN ENGINE ----
     with tab3:
         st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
         st.caption("Single source of truth inventory registry organized and separated by official franchise division lines.")
         
         if st.session_state['role'] == 'finance_admin':
-            with st.expander("🛠️ ADMIN CONSOLE: BULK CAR STOCK TERMINAL", expanded=False):
-                st.markdown("#### Paste Spreadsheet Data Rows Below")
-                raw_paste_data = st.text_area("PASTE RAW DATA ROWS HERE", height=250, placeholder="Franchise: B - BMW\n109237\tX4 xDrive20d Sport A...")
+            with st.expander("🛠️ ADMIN CONSOLE: INVENTORY & FLOORPLAN MANAGEMENT", expanded=False):
+                # Section 1: Standard Paste Data
+                st.markdown("#### 1. Paste Daily Spreadsheet Data")
+                raw_paste_data = st.text_area("PASTE RAW DATA ROWS HERE", height=150, placeholder="Franchise: B - BMW\n109237\tX4 xDrive20d Sport A...")
                 
                 if st.button("PROCESS AND OVERWRITE INVENTORY", key="process_stock_paste_btn"):
                     if raw_paste_data.strip():
@@ -397,39 +399,112 @@ if st.session_state['authenticated']:
                                     desc = parts[1].strip()
                                     into_stk = parts[2].strip() if len(parts) > 2 else ''
                                     
-                                    try:
-                                        val = float(parts[10].strip().replace(' ', '').replace(' ', '').replace(',', '')) if len(parts) > 10 else 0.00
-                                    except:
-                                        val = 0.00
+                                    try: val = float(parts[10].strip().replace(' ', '').replace(' ', '').replace(',', '')) if len(parts) > 10 else 0.00
+                                    except: val = 0.00
                                         
-                                    try:
-                                        days = int(float(parts[11].strip().replace(' ', '').strip())) if len(parts) > 11 and parts[11].strip() else 0
-                                    except:
-                                        days = 0
+                                    try: days = int(float(parts[11].strip().replace(' ', '').strip())) if len(parts) > 11 and parts[11].strip() else 0
+                                    except: days = 0
                                         
                                     chassis = parts[13].strip() if len(parts) > 13 else ''
                                     
                                     supabase.table("used_car_stock").upsert({
                                         "vsb_no": vsb, "description": desc, "into_stock": into_stk,
-                                        "days_in_stock": days, "total_value": val, "location": current_franchise.strip(), "chassis_no": chassis
+                                        "days_in_stock": days, "total_value": val, "location": current_franchise.strip(), "chassis_no": chassis,
+                                        "floorplan_status": "⚪ PENDING RECON" # Reset status upon new wipe
                                     }).execute()
                                     records_processed += 1
                                     
-                            st.success(f"🎉 Stock refreshed successfully. {records_processed} units assigned to their respective franchises inside cloud engine.")
+                            st.success(f"🎉 Stock refreshed successfully. {records_processed} units inserted.")
                             safe_rerun()
                         except Exception as parse_ex:
                             st.error(f"Data processing failed: {str(parse_ex)}")
                     else:
                         st.warning("Please populate the data terminal before submitting.")
+                
+                st.markdown("---")
+                # Section 2: Automated Recon Engine prioritizing VIN
+                st.markdown("#### 2. Run Daily Floorplan Recon")
+                st.caption("Upload your daily CSV export reports (Current Units Summary) to automatically cross-reference VINs and identify unencumbered vs financed stock.")
+                fp_files = st.file_uploader("Upload Floorplan & Bridge CSV Files", type=['csv'], accept_multiple_files=True)
+                
+                if st.button("RUN FLOORPLAN RECONCILIATION", key="run_recon_btn"):
+                    if fp_files:
+                        with st.spinner("Analyzing CSV reports and cross-referencing VINs against database..."):
+                            fp_vsbs = set()
+                            fp_chassis = set()
+                            
+                            # Parse uploaded CSVs safely
+                            for f in fp_files:
+                                try:
+                                    content = f.read().decode("utf-8", errors="ignore").splitlines()
+                                    header_idx = 0
+                                    # Dynamically find the row where the actual column headers live
+                                    for i, line in enumerate(content):
+                                        if "Stock No" in line and "Chassis" in line:
+                                            header_idx = i
+                                            break
+                                    
+                                    f.seek(0)
+                                    df_fp = pd.read_csv(f, skiprows=header_idx)
+                                    
+                                    if 'Stock No' in df_fp.columns:
+                                        # Clean the Stock number to pure digits as a fallback
+                                        digits_only = df_fp['Stock No'].astype(str).str.replace(r'\D', '', regex=True)
+                                        fp_vsbs.update(digits_only.tolist())
+                                    if 'Chassis \\ Dealer Ref No' in df_fp.columns:
+                                        # 🚨 CRITICAL: Clean VIN string for exact matching (uppercase, no whitespace)
+                                        clean_chassis = df_fp['Chassis \\ Dealer Ref No'].astype(str).str.strip().str.upper()
+                                        fp_chassis.update(clean_chassis.tolist())
+                                except Exception as e:
+                                    st.error(f"Error parsing {f.name}: {e}")
+                                    
+                            # Pull active live stock to reconcile
+                            db_stock = supabase.table("used_car_stock").select("id, vsb_no, chassis_no").execute()
+                            if db_stock.data:
+                                update_count = 0
+                                for row in db_stock.data:
+                                    # 🚨 Primary Matching Metric: VIN (Chassis)
+                                    db_chassis = str(row.get('chassis_no', '')).strip().upper()
+                                    
+                                    # Fallback Matching Metric: Stock Number
+                                    db_vsb = str(row.get('vsb_no', '')).strip()
+                                    db_vsb_clean = ''.join(filter(str.isdigit, db_vsb))
+                                    
+                                    # Matching Logic Engine
+                                    is_on_fp = False
+                                    if db_chassis and db_chassis in fp_chassis:
+                                        is_on_fp = True
+                                    elif db_vsb_clean and db_vsb_clean in fp_vsbs:
+                                        is_on_fp = True
+                                        
+                                    status = "ON FLOORPLAN" if is_on_fp else "UNENCUMBERED"
+                                    # Write back status to DB
+                                    supabase.table("used_car_stock").update({"floorplan_status": status}).eq("id", row['id']).execute()
+                                    update_count += 1
+                                    
+                                st.success(f"✅ Recon complete! {update_count} units successfully cross-referenced using globally unique VIN strings.")
+                                safe_rerun()
+                    else:
+                        st.warning("Please upload at least one CSV file to run the reconciliation engine.")
 
+        # ---- LIVE STOCK DATA FETCHING & DISPLAY ----
         try:
-            stock_res = supabase.table("used_car_stock").select("vsb_no, description, into_stock, days_in_stock, total_value, location").order("days_in_stock", desc=True).execute()
+            # Fallback wrapper just in case the SQL query column has not been added yet
+            try:
+                stock_res = supabase.table("used_car_stock").select("vsb_no, description, into_stock, days_in_stock, total_value, location, floorplan_status").order("days_in_stock", desc=True).execute()
+            except:
+                stock_res = supabase.table("used_car_stock").select("vsb_no, description, into_stock, days_in_stock, total_value, location").order("days_in_stock", desc=True).execute()
+                
             df_live_stock = pd.DataFrame(stock_res.data) if stock_res.data else pd.DataFrame()
         except:
             df_live_stock = pd.DataFrame()
 
         if not df_live_stock.empty:
-            df_live_stock.columns = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "FRANCHISE DIVISION"]
+            # Map columns safely depending on presence of floorplan_status
+            if 'floorplan_status' not in df_live_stock.columns:
+                df_live_stock['floorplan_status'] = "⚪ PENDING RECON"
+                
+            df_live_stock.columns = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "FRANCHISE DIVISION", "FP STATUS"]
             df_live_stock["FRANCHISE DIVISION"] = df_live_stock["FRANCHISE DIVISION"].astype(str).str.strip()
             
             total_units_global = len(df_live_stock)
@@ -490,26 +565,30 @@ if st.session_state['authenticated']:
                     for _, row in franchise_df.iterrows():
                         days = int(row["DAYS ON FLOOR"])
                         
-                        if days <= 3:
-                            days_badge = "🔥 NEW STOCK"
-                        elif days >= 121:
-                            days_badge = f"🚨 {days} DAYS (Critical Ageing: Max Prov)"
-                        elif days >= 91:
-                            days_badge = f"⚠️ {days} DAYS (Approaching max prov)"
-                        else:
-                            days_badge = f"{days} Days"
+                        if days <= 3: days_badge = "🔥 NEW STOCK"
+                        elif days >= 121: days_badge = f"🚨 {days} DAYS (Critical Ageing: Max Prov)"
+                        elif days >= 91: days_badge = f"⚠️ {days} DAYS (Approaching max prov)"
+                        else: days_badge = f"{days} Days"
+                        
+                        # Process Recon Display Status
+                        raw_fp = str(row.get("FP STATUS", ""))
+                        if raw_fp == "ON FLOORPLAN": fp_display = "🏦 ON FLOORPLAN"
+                        elif raw_fp == "UNENCUMBERED": fp_display = "🟢 UNENCUMBERED"
+                        else: fp_display = "⚪ PENDING RECON"
                             
                         render_rows.append({
                             "VSB NUMBER": row["VSB NUMBER"],
                             "VEHICLE DESCRIPTION": row["VEHICLE DESCRIPTION"],
                             "INTO STOCK DATE": row["INTO STOCK DATE"],
                             "DAYS ON FLOOR": days_badge,
+                            "FP STATUS": fp_display,
                             "CAPITAL VAL (ZAR)": f"R {float(row['CAPITAL VAL (ZAR)']):,.2f}"
                         })
                         
                     render_df = pd.DataFrame(render_rows)
                     render_df.set_index("VSB NUMBER", inplace=True)
-                    st.table(render_df[["VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"]])
+                    # Rendering the upgraded layout
+                    st.table(render_df[["VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "FP STATUS", "CAPITAL VAL (ZAR)"]])
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
@@ -560,7 +639,6 @@ if st.session_state['authenticated']:
                 else:
                     st.warning("Please enter both the client name and deal description.")
 
-        # 🚨 NEW LOGIC: Filter out "Delivered" deals so they vanish from the active pipeline
         if st.session_state['role'] in MANAGEMENT_ROLES:
             st.markdown("#### 🕵️ MANAGER VIEW: ALL ACTIVE DEALS")
             res = supabase.table("sales_pipeline").select("*").neq("stage", "Delivered").order("id", desc=True).execute()
@@ -637,12 +715,11 @@ if st.session_state['authenticated']:
         else:
             st.info("No active pipeline deals currently tracked.")
 
-    # ---- TAB 5: ARCHIVED DELIVERIES (NEW FEATURE) ----
+    # ---- TAB 5: ARCHIVED DELIVERIES ----
     with tab5:
         st.markdown("### 📦 ARCHIVED DELIVERIES")
         st.caption("Historical log of successfully delivered vehicles, ordered by the latest delivery date.")
         
-        # 🚨 Fetch only deals marked as "Delivered"
         if st.session_state['role'] in MANAGEMENT_ROLES:
             arc_res = supabase.table("sales_pipeline").select("*").eq("stage", "Delivered").execute()
         else:
@@ -651,7 +728,6 @@ if st.session_state['authenticated']:
         df_archive = pd.DataFrame(arc_res.data) if arc_res.data else pd.DataFrame()
         
         if not df_archive.empty:
-            # 🚨 Safely sort descending by the recorded delivery date natively in pandas to ensure perfect chronologic order
             df_archive['sort_date'] = pd.to_datetime(df_archive['planned_delivery_date'], errors='coerce')
             df_archive = df_archive.sort_values(by='sort_date', ascending=False).drop(columns=['sort_date'])
             
@@ -672,7 +748,6 @@ if st.session_state['authenticated']:
             st.table(render_arch)
             
             st.markdown("#### 📂 ARCHIVE DETAILS & REVISIONS")
-            # We keep the expanders active here so the team can review notes or un-archive a deal if someone made a mistake
             for idx, row in df_archive.iterrows():
                 with st.expander(f"✅ {row['client_name'].upper()} | {row['deal_description']} — DELIVERED ON: {pd.to_datetime(row['planned_delivery_date'], errors='coerce').strftime('%d %b %Y')}"):
                     c1, c2 = st.columns([1, 2])
@@ -693,7 +768,6 @@ if st.session_state['authenticated']:
                         PIPELINE_STAGES = ["Prospecting", "Test Drive", "Finance App", "Awaiting Delivery", "Delivered", "Cancelled"]
                         current_index = PIPELINE_STAGES.index(row['stage']) if row['stage'] in PIPELINE_STAGES else 4
                         
-                        # Allows reverting the deal status back into the active pipeline if accidentally marked as delivered
                         new_stage = st.selectbox("REVISE STATUS", PIPELINE_STAGES, index=current_index, key=f"arc_stage_{row['id']}")
                         new_date = st.date_input("REVISE DELIVERY DATE", value=curr_date, key=f"arc_date_{row['id']}")
                         
