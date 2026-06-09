@@ -3,6 +3,9 @@ import pandas as pd
 from datetime import datetime
 import pytz
 import os
+import smtplib
+from email.message import EmailMessage
+import io
 from supabase import create_client, Client
 
 # ==========================================
@@ -566,6 +569,56 @@ if st.session_state['authenticated']:
                 
             if show_hot_only:
                 filtered_df = filtered_df[filtered_df["DAYS ON FLOOR"] <= 3]
+                
+            # 🟢 NEW FEATURE: Email Distribution Engine
+            if IS_MANAGEMENT:
+                with st.expander("📤 DISTRIBUTE FILTERED STOCKBOOK VIA EMAIL"):
+                    st.markdown("#### Push Current Stockbook to Management")
+                    st.caption("This will attach the currently filtered stockbook as an Excel-compatible CSV and email it to the designated distribution list.")
+                    
+                    target_email = st.text_input("RECIPIENT EMAIL ADDRESS(ES)", placeholder="dp@bmwsandton.co.za, sm@bmwsandton.co.za", help="Separate multiple emails with a comma")
+                    
+                    if st.button("🚀 DISPATCH STOCKBOOK NOW", key="email_dispatch_btn"):
+                        if target_email:
+                            try:
+                                # Fetch secrets securely
+                                smtp_server = st.secrets["smtp"]["server"]
+                                smtp_port = int(st.secrets["smtp"]["port"])
+                                sender_email = st.secrets["smtp"]["sender_email"]
+                                smtp_pass = st.secrets["smtp"]["password"]
+                                
+                                with st.spinner("Compiling CSV and connecting to secure mail server..."):
+                                    # Create CSV in memory
+                                    csv_buffer = io.StringIO()
+                                    filtered_df.to_csv(csv_buffer, index=False)
+                                    
+                                    # Construct Email
+                                    msg = EmailMessage()
+                                    msg['Subject'] = f"📊 LIVE BMW SANDTON STOCKBOOK - {datetime.now(SAST).strftime('%d %b %Y')}"
+                                    msg['From'] = sender_email
+                                    msg['To'] = target_email
+                                    msg.set_content("Good morning,\n\nPlease find attached the latest, live Used Car Stockbook generated directly from the Sandton Lead Hub platform.\n\nAutomated Distribution System")
+                                    
+                                    msg.add_attachment(
+                                        csv_buffer.getvalue().encode('utf-8'),
+                                        maintype='text',
+                                        subtype='csv',
+                                        filename=f"BMW_Sandton_Stockbook_{datetime.now(SAST).strftime('%Y%m%d')}.csv"
+                                    )
+                                    
+                                    # Connect and send
+                                    with smtplib.SMTP(smtp_server, smtp_port) as server:
+                                        server.starttls()
+                                        server.login(sender_email, smtp_pass)
+                                        server.send_message(msg)
+                                        
+                                    st.success("✅ Stockbook successfully transmitted!")
+                            except KeyError:
+                                st.error("❌ Mail Settings Missing: Please configure your [smtp] credentials in the Streamlit App Secrets.")
+                            except Exception as e:
+                                st.error(f"❌ Mail Server Connection Failed. Error details: {e}")
+                        else:
+                            st.warning("Please enter at least one recipient email address.")
             
             loop_franchises = sorted(list(filtered_df["FRANCHISE DIVISION"].unique())) if not selected_franchises else selected_franchises
             
@@ -609,13 +662,15 @@ if st.session_state['authenticated']:
                         render_rows.append(row_dict)
                         
                     render_df = pd.DataFrame(render_rows)
-                    cols_to_render = ["VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR"]
+                    cols_to_render = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR"]
                     if IS_MANAGEMENT: cols_to_render.append("FP STATUS")
                     cols_to_render.append("CAPITAL VAL (ZAR)")
                     
-                    # Native Streamlit Index Setting - No CSS required, perfectly aligned headers
-                    render_df.set_index("VSB NUMBER", inplace=True)
-                    st.table(render_df[cols_to_render])
+                    # Natively hide index using pandas style
+                    try:
+                        st.table(render_df[cols_to_render].style.hide(axis="index"))
+                    except:
+                        st.table(render_df[cols_to_render].style.hide_index())
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
@@ -690,13 +745,10 @@ if st.session_state['authenticated']:
             render_pipe["ESTIMATED VALUE (ZAR)"] = df_pipeline["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
             render_pipe["DELIVERY DATE"] = pd.to_datetime(df_pipeline["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
             
-            # Native Streamlit Index Setting - No CSS required, perfectly aligned headers
-            if st.session_state['role'] in MANAGEMENT_ROLES:
-                render_pipe.set_index("REP USERNAME", inplace=True)
-            else:
-                render_pipe.set_index("CLIENT NAME", inplace=True)
-                
-            st.table(render_pipe)
+            try:
+                st.table(render_pipe.style.hide(axis="index"))
+            except:
+                st.table(render_pipe.style.hide_index())
             
             st.markdown("#### 🛠️ UPDATE ACTIVE PIPELINE DEALS")
             for idx, row in df_pipeline.iterrows():
@@ -772,13 +824,10 @@ if st.session_state['authenticated']:
             render_arch["DELIVERY DATE"] = pd.to_datetime(df_archive["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unknown")
             render_arch["FINAL VALUE (ZAR)"] = df_archive["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
             
-            # Native Streamlit Index Setting
-            if st.session_state['role'] in MANAGEMENT_ROLES:
-                render_arch.set_index("REP USERNAME", inplace=True)
-            else:
-                render_arch.set_index("CLIENT NAME", inplace=True)
-                
-            st.table(render_arch)
+            try:
+                st.table(render_arch.style.hide(axis="index"))
+            except:
+                st.table(render_arch.style.hide_index())
             
             st.markdown("#### 📂 ARCHIVE DETAILS & REVISIONS")
             for idx, row in df_archive.iterrows():
@@ -904,21 +953,29 @@ if st.session_state['authenticated']:
                     "UNENCUMBERED CAPITAL VALUE (ZAR)": f"R {unenc_val:,.2f}"
                 })
             
-            # Native Streamlit Index Setting - No CSS required, perfectly aligned headers
             df_sum_mat = pd.DataFrame(summary_matrix_data)
-            st.table(df_sum_mat.set_index("STOCK DIVISION"))
+            try:
+                st.table(df_sum_mat.style.hide(axis="index"))
+            except:
+                st.table(df_sum_mat.style.hide_index())
             
             # --- OVERVIEW B: AGING PROVISION SUMMARY MATRIX ---
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("#### 🪙 DEALERSHIP VEHICLE AGING PROVISION MATRIX")
             df_prov_mat = pd.DataFrame(provision_rows)
-            st.table(df_prov_mat.set_index("STOCK DIVISION"))
+            try:
+                st.table(df_prov_mat.style.hide(axis="index"))
+            except:
+                st.table(df_prov_mat.style.hide_index())
 
             # --- OVERVIEW C: NEW UNENCUMBERED STOCK OVERVIEW ---
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("#### 🟢 DEALERSHIP UNENCUMBERED STOCK MATRIX")
             df_unenc_mat = pd.DataFrame(unencumbered_matrix_data)
-            st.table(df_unenc_mat.set_index("STOCK DIVISION"))
+            try:
+                st.table(df_unenc_mat.style.hide(axis="index"))
+            except:
+                st.table(df_unenc_mat.style.hide_index())
                 
             st.markdown("---")
             try:
