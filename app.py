@@ -817,7 +817,7 @@ if st.session_state['authenticated']:
                                         msg['Subject'] = f"📊 LIVE BMW SANDTON STOCKBOOK & OVERVIEWS - {datetime.now(SAST).strftime('%d %b %Y')}"
                                         msg['From'] = sender_email
                                         msg['To'] = target_email
-                                        msg.set_content("Good Day,\n\nPlease find attached the latest multi-sheet, live Used Car Stockbook generated directly from the Sandton Lead Hub platform.\n\nSheet 1: Executive Provision & Encumbrance Overviews\nAdditional Sheets: Individual Franchise Breakdowns\n\nAutomated Distribution System")
+                                        msg.set_content("Good morning,\n\nPlease find attached the latest multi-sheet, live Used Car Stockbook generated directly from the Sandton Lead Hub platform.\n\nSheet 1: Executive Provision & Encumbrance Overviews\nAdditional Sheets: Individual Franchise Breakdowns\n\nAutomated Distribution System")
                                         
                                         msg.add_attachment(
                                             excel_buffer.getvalue(),
@@ -1230,13 +1230,13 @@ else:
     with gate_col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
         st.markdown(f"""
-            <div class='bmw-logo-centered-header'>
-                <img src='{BMW_LOGO_URL}' width='82' style='height: auto; display: block;'>
-                <img src='{M_SPORT_LOGO_URL}' width='98' style='height: auto; display: block; margin-top: 6px;'>
+            <div style='display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 10px;'>
+                <img src='{BMW_LOGO_URL}' width='80' style='height: auto;'>
+                <img src='{M_SPORT_LOGO_URL}' width='100' style='height: auto; margin-top: 4px;'>
             </div>
         """, unsafe_allow_html=True)
             
-        st.markdown("<h2 style='text-align: center; font-weight: 300; letter-spacing: 1px; margin-top:25px; margin-bottom: 0;'>BMW SANDTON</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; font-weight: 300; letter-spacing: 1px; margin-top: 10px; margin-bottom: 0;'>BMW SANDTON</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; font-size:0.85rem; color:#666666; letter-spacing:1px; margin-top: 5px;'>SALES LEADS PORTAL</p>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
     
