@@ -324,7 +324,6 @@ if st.session_state['authenticated']:
 
         # ---- TAB 1: AVAILABLE DAILY FEED ----
         with tab1:
-            # 🟢 NEW FEATURE: Admin mock lead generator
             if IS_MANAGEMENT:
                 with st.expander("🤖 LEAD INJECTION ENGINE (DEMO & TESTING)"):
                     st.markdown("#### Force-Spawn New Leads")
@@ -453,9 +452,21 @@ if st.session_state['authenticated']:
                             }).execute()
                             st.success("Note committed to cloud registry.")
                             safe_rerun()
-                        if st.button("CLOSE ACCOUNT AS CONVERTED", key=f"cl_c_{row['id']}"):
-                            supabase.table("leads").update({"status": "Closed"}).eq("id", row['id']).execute()
-                            safe_rerun()
+                        
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        action_c1, action_c2, action_c3 = st.columns(3)
+                        with action_c1:
+                            if st.button("✅ CLOSE AS CONVERTED", key=f"cl_c_{row['id']}"):
+                                supabase.table("leads").update({"status": "Closed"}).eq("id", row['id']).execute()
+                                safe_rerun()
+                        with action_c2:
+                            if st.button("💀 MARK DEAD LEAD", key=f"dead_c_{row['id']}"):
+                                supabase.table("leads").update({"status": "Dead"}).eq("id", row['id']).execute()
+                                safe_rerun()
+                        with action_c3:
+                            if st.button("🔄 UNCLAIM (RETURN TO POOL)", key=f"uncl_c_{row['id']}"):
+                                supabase.table("leads").update({"status": "Unassigned", "assigned_to": None}).eq("id", row['id']).execute()
+                                safe_rerun()
 
             st.markdown("---")
             st.markdown("### 🚗 MY CLAIMED PRIVATE LUXURY CLIENTS")
@@ -479,9 +490,21 @@ if st.session_state['authenticated']:
                             }).execute()
                             st.success("Client updates cataloged.")
                             safe_rerun()
-                        if st.button("MARK UNIT SECURED & DELIVERED 🔑", key=f"cl_i_{row['id']}"):
-                            supabase.table("individual_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
-                            safe_rerun()
+                            
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        action_i1, action_i2, action_i3 = st.columns(3)
+                        with action_i1:
+                            if st.button("✅ CLOSE AS CONVERTED", key=f"cl_i_{row['id']}"):
+                                supabase.table("individual_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
+                                safe_rerun()
+                        with action_i2:
+                            if st.button("💀 MARK DEAD LEAD", key=f"dead_i_{row['id']}"):
+                                supabase.table("individual_leads").update({"status": "Dead"}).eq("id", row['id']).execute()
+                                safe_rerun()
+                        with action_i3:
+                            if st.button("🔄 UNCLAIM (RETURN TO POOL)", key=f"uncl_i_{row['id']}"):
+                                supabase.table("individual_leads").update({"status": "Unassigned", "assigned_to": None}).eq("id", row['id']).execute()
+                                safe_rerun()
 
             st.markdown("---")
             st.markdown("### 🏛️ CLAIMED TENDER VENDORS")
@@ -506,9 +529,21 @@ if st.session_state['authenticated']:
                             }).execute()
                             st.success("Engagement data safely written.")
                             safe_rerun()
-                        if st.button("MARK CONTRACT LOGISTICS SECURED 🚚", key=f"cl_t_{row['id']}"):
-                            supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
-                            safe_rerun()
+                            
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        action_t1, action_t2, action_t3 = st.columns(3)
+                        with action_t1:
+                            if st.button("✅ CLOSE AS CONVERTED", key=f"cl_t_{row['id']}"):
+                                supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute()
+                                safe_rerun()
+                        with action_t2:
+                            if st.button("💀 MARK DEAD LEAD", key=f"dead_t_{row['id']}"):
+                                supabase.table("tender_leads").update({"status": "Dead"}).eq("id", row['id']).execute()
+                                safe_rerun()
+                        with action_t3:
+                            if st.button("🔄 UNCLAIM (RETURN TO POOL)", key=f"uncl_t_{row['id']}"):
+                                supabase.table("tender_leads").update({"status": "Unassigned", "assigned_to": None}).eq("id", row['id']).execute()
+                                safe_rerun()
 
         # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE WITH NEW FLOORPLAN ENGINE ----
         with tab3:
