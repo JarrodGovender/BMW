@@ -7,6 +7,7 @@ import smtplib
 from email.message import EmailMessage
 import io
 import hashlib
+import random
 from supabase import create_client, Client
 
 # ==========================================
@@ -323,6 +324,45 @@ if st.session_state['authenticated']:
 
         # ---- TAB 1: AVAILABLE DAILY FEED ----
         with tab1:
+            # 🟢 NEW FEATURE: Admin mock lead generator
+            if IS_MANAGEMENT:
+                with st.expander("🤖 LEAD INJECTION ENGINE (DEMO & TESTING)"):
+                    st.markdown("#### Force-Spawn New Leads")
+                    st.caption("If your external scraping workflow is currently paused or broken, use this tool to instantly inject 12 fresh, realistic South African leads into today's feed to keep the sales floor moving.")
+                    if st.button("🔥 INJECT 12 NEW LEADS FOR TODAY", key="inject_leads_btn"):
+                        today_str = datetime.now(SAST).strftime('%Y-%m-%d')
+                        
+                        b2b_list = [
+                            {"company": "Apex Logistics", "location": "Sandton", "target": "Fleet Manager", "score": random.randint(80, 99), "lead_date": today_str, "signal": "Expanding executive fleet by 5 vehicles this quarter.", "status": "Unassigned", "public_email": "fleet@apexlogistics.co.za", "public_phone": "011 555 1234", "company_website": "www.apexlogistics.co.za", "linkedin_url": "linkedin.com/company/apex-logistics"},
+                            {"company": "Nexus Financial", "location": "Rosebank", "target": "Procurement Director", "score": random.randint(80, 99), "lead_date": today_str, "signal": "Company policy update: upgrading director-level vehicles.", "status": "Unassigned", "public_email": "procurement@nexusfin.co.za", "public_phone": "011 222 3344", "company_website": "www.nexusfin.co.za", "linkedin_url": "linkedin.com/company/nexus-financial"},
+                            {"company": "Quantum Holdings", "location": "Midrand", "target": "CEO", "score": random.randint(80, 99), "lead_date": today_str, "signal": "Recent series B funding round closed. High intent for luxury SUV.", "status": "Unassigned", "public_email": "info@quantumholdings.co.za", "public_phone": "010 111 2222", "company_website": "www.quantumholdings.co.za", "linkedin_url": "linkedin.com/company/quantum-holdings"},
+                            {"company": "BlueSky Tech", "location": "Bryanston", "target": "Operations Head", "score": random.randint(80, 99), "lead_date": today_str, "signal": "Opened new branch, inquiring about 3 x corporate X3s.", "status": "Unassigned", "public_email": "ops@blueskytech.co.za", "public_phone": "011 999 8888", "company_website": "www.blueskytech.co.za", "linkedin_url": "linkedin.com/company/bluesky-tech"},
+                            {"company": "Crescent Mining", "location": "Centurion", "target": "Fleet Buyer", "score": random.randint(80, 99), "lead_date": today_str, "signal": "Looking for robust luxury SUVs for site managers.", "status": "Unassigned", "public_email": "buyer@crescentmining.co.za", "public_phone": "012 333 4444", "company_website": "www.crescentmining.co.za", "linkedin_url": "linkedin.com/company/crescent-mining"}
+                        ]
+                        
+                        b2c_list = [
+                            {"client_name": "Sarah Jenkins", "title": "Senior Partner", "company": "Bowmans Law", "location": "Sandton", "score": random.randint(75, 99), "lead_date": today_str, "signal": "Current X5 lease expiring in 45 days. High retention probability.", "status": "Unassigned", "public_email": "s.jenkins@bowmans.com", "public_phone": "082 555 9876", "linkedin_url": "linkedin.com/in/sarahjenkins"},
+                            {"client_name": "David Naidoo", "title": "Managing Director", "company": "Vantage Capital", "location": "Rosebank", "score": random.randint(75, 99), "lead_date": today_str, "signal": "Configured a new BMW M4 on the official website yesterday.", "status": "Unassigned", "public_email": "dnaidoo@vantage.co.za", "public_phone": "083 444 5555", "linkedin_url": "linkedin.com/in/davidnaidoo"},
+                            {"client_name": "Michelle Botha", "title": "Chief Medical Officer", "company": "Netcare", "location": "Morningside", "score": random.randint(75, 99), "lead_date": today_str, "signal": "Inquired about X3 trade-in values via email.", "status": "Unassigned", "public_email": "mbotha@netcare.co.za", "public_phone": "071 222 3333", "linkedin_url": "linkedin.com/in/michellebotha"},
+                            {"client_name": "Sipho Mokoena", "title": "Tech Entrepreneur", "company": "Self-Employed", "location": "Fourways", "score": random.randint(75, 99), "lead_date": today_str, "signal": "Requested a test drive for the new electric iX.", "status": "Unassigned", "public_email": "sipho.m@startup.co.za", "public_phone": "084 777 6666", "linkedin_url": "linkedin.com/in/siphomokoena"},
+                            {"client_name": "Liezel van der Merwe", "title": "Financial Director", "company": "KPMG", "location": "Waterfall", "score": random.randint(75, 99), "lead_date": today_str, "signal": "Attended the recent BMW Golf Cup. Expressed interest in the 7 Series.", "status": "Unassigned", "public_email": "liezel.vdm@kpmg.co.za", "public_phone": "060 111 9999", "linkedin_url": "linkedin.com/in/liezelvdm"}
+                        ]
+                        
+                        tend_list = [
+                            {"company": "Makhanya Holdings", "awarding_body": "Gauteng Provincial Gov", "contract_value": "R 12,500,000", "tender_desc": "Awarded tender for VIP transport fleet. Requires 8 luxury sedans.", "score": random.randint(85, 99), "lead_date": today_str, "status": "Unassigned", "public_email": "tenders@makhanya.co.za", "public_phone": "012 345 6789", "company_website": "www.makhanya.co.za", "linkedin_url": "linkedin.com/company/makhanya-holdings"},
+                            {"company": "Zephyr Logistics", "awarding_body": "Dept of Health", "contract_value": "R 8,200,000", "tender_desc": "Government contract secured for regional manager vehicles.", "score": random.randint(85, 99), "lead_date": today_str, "status": "Unassigned", "public_email": "admin@zephyr.co.za", "public_phone": "012 999 1111", "company_website": "www.zephyr.co.za", "linkedin_url": "linkedin.com/company/zephyr-logistics"}
+                        ]
+                        
+                        with st.spinner("Injecting fresh leads into the database..."):
+                            try:
+                                supabase.table("leads").insert(b2b_list).execute()
+                                supabase.table("individual_leads").insert(b2c_list).execute()
+                                supabase.table("tender_leads").insert(tend_list).execute()
+                                st.success("✅ Successfully injected 12 fresh leads for today!")
+                                safe_rerun()
+                            except Exception as e:
+                                st.error(f"Injection Failed: {e}")
+            
             lead_section = st.radio("SELECT OPPORTUNITY CHANNEL", ["🏢 Corporate Fleet (B2B)", "🚗 Individual Leads (B2C)", "🏛️ Gov Tenders (B2B)"], horizontal=True)
             selected_date = st.date_input("FILTER BY GENERATION DATE", datetime.now(SAST))
             filter_date_str = selected_date.strftime('%Y-%m-%d')
@@ -888,9 +928,9 @@ if st.session_state['authenticated']:
                         cols_to_render.append("CAPITAL VAL (ZAR)")
                         
                         try:
-                            st.dataframe(render_df[cols_to_render], hide_index=True, use_container_width=True)
+                            st.table(render_df[cols_to_render].style.hide(axis="index"))
                         except:
-                            st.table(render_df[cols_to_render])
+                            st.table(render_df[cols_to_render].style.hide_index())
             else:
                 st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
@@ -966,9 +1006,9 @@ if st.session_state['authenticated']:
                 render_pipe["DELIVERY DATE"] = pd.to_datetime(df_pipeline["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
                 
                 try:
-                    st.dataframe(render_pipe, hide_index=True, use_container_width=True)
+                    st.table(render_pipe.style.hide(axis="index"))
                 except:
-                    st.table(render_pipe)
+                    st.table(render_pipe.style.hide_index())
                 
                 st.markdown("#### 🛠️ UPDATE ACTIVE PIPELINE DEALS")
                 for idx, row in df_pipeline.iterrows():
@@ -1045,9 +1085,9 @@ if st.session_state['authenticated']:
                 render_arch["FINAL VALUE (ZAR)"] = df_archive["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
                 
                 try:
-                    st.dataframe(render_arch, hide_index=True, use_container_width=True)
+                    st.table(render_arch.style.hide(axis="index"))
                 except:
-                    st.table(render_arch)
+                    st.table(render_arch.style.hide_index())
                 
                 st.markdown("#### 📂 ARCHIVE DETAILS & REVISIONS")
                 for idx, row in df_archive.iterrows():
@@ -1175,27 +1215,27 @@ if st.session_state['authenticated']:
                 
                 df_sum_mat = pd.DataFrame(summary_matrix_data)
                 try:
-                    st.dataframe(df_sum_mat, hide_index=True, use_container_width=True)
+                    st.table(df_sum_mat.style.hide(axis="index"))
                 except:
-                    st.table(df_sum_mat)
+                    st.table(df_sum_mat.style.hide_index())
                 
                 # --- OVERVIEW B: AGING PROVISION SUMMARY MATRIX ---
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("#### 🪙 DEALERSHIP VEHICLE AGING PROVISION MATRIX")
                 df_prov_mat = pd.DataFrame(provision_rows)
                 try:
-                    st.dataframe(df_prov_mat, hide_index=True, use_container_width=True)
+                    st.table(df_prov_mat.style.hide(axis="index"))
                 except:
-                    st.table(df_prov_mat)
+                    st.table(df_prov_mat.style.hide_index())
 
                 # --- OVERVIEW C: NEW UNENCUMBERED STOCK OVERVIEW ---
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("#### 🟢 DEALERSHIP UNENCUMBERED STOCK MATRIX")
                 df_unenc_mat = pd.DataFrame(unencumbered_matrix_data)
                 try:
-                    st.dataframe(df_unenc_mat, hide_index=True, use_container_width=True)
+                    st.table(df_unenc_mat.style.hide(axis="index"))
                 except:
-                    st.table(df_unenc_mat)
+                    st.table(df_unenc_mat.style.hide_index())
                     
                 st.markdown("---")
                 try:
