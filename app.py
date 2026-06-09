@@ -134,19 +134,19 @@ st.markdown("""
             text-transform: uppercase;
         }
 
-        /* Center alignment for Date and Days columns */
-        .stTable thead tr th:nth-child(2),
-        .stTable thead tr th:nth-child(3),
-        .stTable thead tr th:nth-child(4) {
+        /* Center alignment natively targeting data columns */
+        .stTable thead tr th:nth-of-type(4),
+        .stTable thead tr th:nth-of-type(5),
+        .stTable thead tr th:nth-of-type(6) {
             text-align: center !important;
         }
-        .stTable tbody tr td:nth-child(2),
-        .stTable tbody tr td:nth-child(3),
-        .stTable tbody tr td:nth-child(4) {
+        .stTable tbody tr td:nth-of-type(3),
+        .stTable tbody tr td:nth-of-type(4),
+        .stTable tbody tr td:nth-of-type(5) {
             text-align: center !important;
         }
 
-        /* Hides the default Pandas row numbers to prevent misalignment */
+        /* Hides the default Pandas row numbers to prevent misalignment without overriding data */
         .stTable thead tr th:first-child,
         .stTable tbody tr th {
             display: none !important;
@@ -207,8 +207,9 @@ if st.session_state['authenticated']:
     st.markdown("---")
 
     MANAGEMENT_ROLES = ['dealer_principal', 'finance_admin', 'sales_manager']
+    IS_MANAGEMENT = st.session_state['role'] in MANAGEMENT_ROLES
     
-    if st.session_state['role'] in MANAGEMENT_ROLES:
+    if IS_MANAGEMENT:
         tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER", "📦 ARCHIVED DELIVERIES", "📊 COMMAND OVERVIEW"])
     else:
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER", "📦 ARCHIVED DELIVERIES"])
@@ -414,7 +415,6 @@ if st.session_state['authenticated']:
                                             "floorplan_status": "⚪ PENDING RECON"
                                         }).execute()
                                     except Exception as e:
-                                        # Self-Healing Fallback if the user hasn't created the floorplan_status column yet
                                         supabase.table("used_car_stock").upsert({
                                             "vsb_no": vsb, "description": desc, "into_stock": into_stk,
                                             "days_in_stock": days, "total_value": val, "location": current_franchise.strip(), "chassis_no": chassis
@@ -454,7 +454,6 @@ if st.session_state['authenticated']:
                                     f.seek(0)
                                     df_fp = pd.read_csv(f, skiprows=header_idx)
                                     
-                                    # Fallback key matching to handle slight CSV format changes
                                     stock_col = next((c for c in df_fp.columns if 'stock no' in c.lower()), None)
                                     if stock_col:
                                         digits_only = df_fp[stock_col].astype(str).str.replace(r'\D', '', regex=True)
@@ -490,7 +489,6 @@ if st.session_state['authenticated']:
                                         supabase.table("used_car_stock").update({"floorplan_status": status}).eq("vsb_no", row['vsb_no']).execute()
                                         update_count += 1
                                     except:
-                                        # Fails silently if the database column wasn't added yet
                                         pass
                                     
                                 st.success(f"✅ Recon complete! {update_count} units successfully cross-referenced using globally unique VIN strings.")
@@ -511,9 +509,17 @@ if st.session_state['authenticated']:
 
         if not df_live_stock.empty:
             
-            # 🚨 WATERPROOF FIX: Rename columns using map to prevent KeyErrors entirely regardless of data shape
+            # Map and format display fields cleanly
             if 'floorplan_status' not in df_live_stock.columns:
                 df_live_stock['floorplan_status'] = "⚪ PENDING RECON"
+            
+            def map_fp_status(status):
+                s = str(status)
+                if s == "ON FLOORPLAN": return "🏦 ON FLOORPLAN"
+                elif s == "UNENCUMBERED": return "🟢 UNENCUMBERED"
+                return "⚪ PENDING RECON"
+
+            df_live_stock["floorplan_status"] = df_live_stock["floorplan_status"].apply(map_fp_status)
                 
             df_live_stock = df_live_stock.rename(columns={
                 "vsb_no": "VSB NUMBER",
@@ -525,7 +531,6 @@ if st.session_state['authenticated']:
                 "floorplan_status": "FP STATUS"
             })
             
-            # Additional fallback check
             if "FP STATUS" not in df_live_stock.columns:
                 df_live_stock["FP STATUS"] = "⚪ PENDING RECON"
                 
@@ -544,18 +549,36 @@ if st.session_state['authenticated']:
             unique_franchises_options = sorted(list(df_live_stock["FRANCHISE DIVISION"].unique()))
             unique_franchises_options = [f for f in unique_franchises_options if f.strip() != "LHP" and f.strip()]
             
-            col_filter1, col_filter2, col_filter3 = st.columns([2, 2, 1])
-            with col_filter1:
-                selected_franchises = st.multiselect("FILTER BY FRANCHISE DIVISION(S)", options=unique_franchises_options, key="franchise_multi_selector")
-            with col_filter2:
-                search_query = st.text_input("🔍 LIVE GLOBAL VEHICLE SEARCH", "").strip().lower()
-            with col_filter3:
-                st.markdown("<br>", unsafe_allow_html=True)
-                show_hot_only = st.checkbox("🔥 SHOW HOT STOCKS ONLY", value=False, key="hot_stocks_toggle")
+            # 🚨 FILTER UPGRADE: Responsive column split for management filters
+            if IS_MANAGEMENT:
+                col_filter1, col_filter2, col_filter3, col_filter4 = st.columns([2, 2, 2, 1])
+                with col_filter1:
+                    selected_franchises = st.multiselect("FILTER BY FRANCHISE DIVISION(S)", options=unique_franchises_options, key="franchise_multi_selector")
+                with col_filter2:
+                    search_query = st.text_input("🔍 LIVE GLOBAL VEHICLE SEARCH", "").strip().lower()
+                with col_filter3:
+                    fp_opts = ["ALL", "🏦 ON FLOORPLAN", "🟢 UNENCUMBERED", "⚪ PENDING RECON"]
+                    selected_fp = st.selectbox("FILTER BY FLOORPLAN STATUS", fp_opts)
+                with col_filter4:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    show_hot_only = st.checkbox("🔥 HOT STOCKS", value=False, key="hot_stocks_toggle")
+            else:
+                col_filter1, col_filter2, col_filter3 = st.columns([2, 2, 1])
+                with col_filter1:
+                    selected_franchises = st.multiselect("FILTER BY FRANCHISE DIVISION(S)", options=unique_franchises_options, key="franchise_multi_selector")
+                with col_filter2:
+                    search_query = st.text_input("🔍 LIVE GLOBAL VEHICLE SEARCH", "").strip().lower()
+                with col_filter3:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    show_hot_only = st.checkbox("🔥 SHOW HOT STOCKS ONLY", value=False, key="hot_stocks_toggle")
+                selected_fp = "ALL"
             
             filtered_df = df_live_stock.copy()
             if selected_franchises:
                 filtered_df = filtered_df[filtered_df["FRANCHISE DIVISION"].isin(selected_franchises)]
+                
+            if selected_fp != "ALL":
+                filtered_df = filtered_df[filtered_df["FP STATUS"] == selected_fp]
                 
             if search_query:
                 filtered_df = filtered_df[
@@ -594,23 +617,32 @@ if st.session_state['authenticated']:
                         elif days >= 91: days_badge = f"⚠️ {days} DAYS (Approaching max prov)"
                         else: days_badge = f"{days} Days"
                         
-                        raw_fp = str(row.get("FP STATUS", ""))
-                        if raw_fp == "ON FLOORPLAN": fp_display = "🏦 ON FLOORPLAN"
-                        elif raw_fp == "UNENCUMBERED": fp_display = "🟢 UNENCUMBERED"
-                        else: fp_display = "⚪ PENDING RECON"
-                            
-                        render_rows.append({
+                        row_dict = {
                             "VSB NUMBER": row.get("VSB NUMBER", ""),
                             "VEHICLE DESCRIPTION": row.get("VEHICLE DESCRIPTION", ""),
                             "INTO STOCK DATE": row.get("INTO STOCK DATE", ""),
-                            "DAYS ON FLOOR": days_badge,
-                            "FP STATUS": fp_display,
-                            "CAPITAL VAL (ZAR)": f"R {float(row.get('CAPITAL VAL (ZAR)', 0)):,.2f}"
-                        })
+                            "DAYS ON FLOOR": days_badge
+                        }
+                        
+                        if IS_MANAGEMENT:
+                            row_dict["FP STATUS"] = row.get("FP STATUS", "")
+                            
+                        row_dict["CAPITAL VAL (ZAR)"] = f"R {float(row.get('CAPITAL VAL (ZAR)', 0)):,.2f}"
+                        
+                        render_rows.append(row_dict)
                         
                     render_df = pd.DataFrame(render_rows)
-                    render_df.set_index("VSB NUMBER", inplace=True)
-                    st.table(render_df[["VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "FP STATUS", "CAPITAL VAL (ZAR)"]])
+                    
+                    # 🚨 FIX: Do not set index so VSB number stays visible as Column 1
+                    # Custom CSS removes the blank index numbering natively!
+                    
+                    # Determine columns to explicitly show based on role
+                    cols_to_render = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR"]
+                    if IS_MANAGEMENT:
+                        cols_to_render.append("FP STATUS")
+                    cols_to_render.append("CAPITAL VAL (ZAR)")
+                    
+                    st.table(render_df[cols_to_render])
         else:
             st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
@@ -671,7 +703,6 @@ if st.session_state['authenticated']:
         df_pipeline = pd.DataFrame(res.data) if res.data else pd.DataFrame()
         
         if not df_pipeline.empty:
-            # 🚨 WATERPROOF FIX: Inject empty columns immediately to prevent KeyErrors
             if 'planned_delivery_date' not in df_pipeline.columns: df_pipeline['planned_delivery_date'] = None
             if 'notes' not in df_pipeline.columns: df_pipeline['notes'] = ""
             if 'estimated_value' not in df_pipeline.columns: df_pipeline['estimated_value'] = 0.0
@@ -686,11 +717,6 @@ if st.session_state['authenticated']:
             render_pipe["ESTIMATED VALUE (ZAR)"] = df_pipeline["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
             render_pipe["DELIVERY DATE"] = pd.to_datetime(df_pipeline["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
             
-            if st.session_state['role'] in MANAGEMENT_ROLES:
-                render_pipe.set_index("REP USERNAME", inplace=True)
-            else:
-                render_pipe.set_index("CLIENT NAME", inplace=True)
-                
             st.table(render_pipe)
             
             st.markdown("#### 🛠️ UPDATE ACTIVE PIPELINE DEALS")
@@ -751,7 +777,6 @@ if st.session_state['authenticated']:
         df_archive = pd.DataFrame(arc_res.data) if arc_res.data else pd.DataFrame()
         
         if not df_archive.empty:
-            # 🚨 WATERPROOF FIX: Inject empty columns immediately to prevent KeyErrors
             if 'planned_delivery_date' not in df_archive.columns: df_archive['planned_delivery_date'] = None
             if 'notes' not in df_archive.columns: df_archive['notes'] = ""
             if 'estimated_value' not in df_archive.columns: df_archive['estimated_value'] = 0.0
@@ -768,11 +793,6 @@ if st.session_state['authenticated']:
             render_arch["DELIVERY DATE"] = pd.to_datetime(df_archive["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unknown")
             render_arch["FINAL VALUE (ZAR)"] = df_archive["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
             
-            if st.session_state['role'] in MANAGEMENT_ROLES:
-                render_arch.set_index("REP USERNAME", inplace=True)
-            else:
-                render_arch.set_index("CLIENT NAME", inplace=True)
-                
             st.table(render_arch)
             
             st.markdown("#### 📂 ARCHIVE DETAILS & REVISIONS")
