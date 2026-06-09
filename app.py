@@ -192,11 +192,6 @@ st.markdown(f"""
         .stTable tbody tr td:nth-of-type(5) {{
             text-align: center !important;
         }}
-
-        .stTable thead tr th:first-child,
-        .stTable tbody tr th {{
-            display: none !important;
-        }}
         
         /* Dark Mode Fixes for Tables & Expanders */
         table {{ background-color: {bg_color} !important; color: {text_color} !important; }}
@@ -715,7 +710,6 @@ if st.session_state['authenticated']:
                                     
                                     with st.spinner("Rendering styled Excel templates and connecting to secure mail server..."):
                                         
-                                        # 1. Build Overview Matrices raw numbers
                                         categories_def_export = [
                                             ("Used BMW", lambda df: df["FRANCHISE DIVISION"].str.lower().str.contains("b -") | df["FRANCHISE DIVISION"].str.lower().str.contains("i -")),
                                             ("Used MINI", lambda df: df["FRANCHISE DIVISION"].str.lower().str.contains("m -")),
@@ -753,12 +747,10 @@ if st.session_state['authenticated']:
                                         df_prov_export = pd.DataFrame(prov_data)
                                         df_unenc_export = pd.DataFrame(unenc_data)
                                         
-                                        # 2. Excel Format Construction
                                         excel_buffer = io.BytesIO()
                                         with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                                             workbook = writer.book
                                             
-                                            # Define Executive Styles
                                             title_format = workbook.add_format({
                                                 'bold': True, 'font_size': 14, 'bg_color': '#003366', 
                                                 'font_color': '#FFFFFF', 'align': 'center', 'valign': 'vcenter', 'border': 1
@@ -785,7 +777,6 @@ if st.session_state['authenticated']:
                                                         elif isinstance(val, (int, float)): ws.write_number(start_row + 2 + r_idx, start_col + c_idx, val, fmt)
                                                         else: ws.write(start_row + 2 + r_idx, start_col + c_idx, str(val), fmt)
                                             
-                                            # OVERVIEW SHEET
                                             ws_exec = workbook.add_worksheet('EXECUTIVE OVERVIEWS')
                                             ws_exec.hide_gridlines(2)
                                             ws_exec.set_column('A:A', 30)
@@ -800,7 +791,6 @@ if st.session_state['authenticated']:
                                             
                                             draw_executive_table(ws_exec, df_unenc_export, row_cursor, 0, "DEALERSHIP UNENCUMBERED STOCK MATRIX", [text_format, num_format, curr_format])
                                             
-                                            # INDIVIDUAL FRANCHISE SHEETS
                                             loop_export = sorted(list(filtered_df["FRANCHISE DIVISION"].unique()))
                                             for franchise in loop_export:
                                                 if franchise.strip() == "LHP" or not franchise.strip(): continue
@@ -817,14 +807,12 @@ if st.session_state['authenticated']:
                                                     ws_f.set_column('E:E', 25)
                                                     ws_f.set_column('F:F', 25)
                                                     
-                                                    # Keep raw numeric data for excel rendering
                                                     export_cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "FP STATUS", "CAPITAL VAL (ZAR)"]
                                                     f_exp = franchise_export_df[export_cols]
                                                     
                                                     f_fmts = [text_format, text_format, text_format, num_format, text_format, curr_format]
                                                     draw_executive_table(ws_f, f_exp, 1, 0, f"FRANCHISE INVENTORY: {franchise.upper()}", f_fmts)
                                                     
-                                        # Construct Email
                                         msg = EmailMessage()
                                         msg['Subject'] = f"📊 LIVE BMW SANDTON STOCKBOOK & OVERVIEWS - {datetime.now(SAST).strftime('%d %b %Y')}"
                                         msg['From'] = sender_email
@@ -838,7 +826,6 @@ if st.session_state['authenticated']:
                                             filename=f"BMW_Sandton_Stockbook_{datetime.now(SAST).strftime('%Y%m%d')}.xlsx"
                                         )
                                         
-                                        # Connect and send
                                         with smtplib.SMTP(smtp_server, smtp_port) as server:
                                             server.starttls()
                                             server.login(sender_email, smtp_pass)
@@ -901,9 +888,9 @@ if st.session_state['authenticated']:
                         cols_to_render.append("CAPITAL VAL (ZAR)")
                         
                         try:
-                            st.table(render_df[cols_to_render].style.hide(axis="index"))
+                            st.dataframe(render_df[cols_to_render], hide_index=True, use_container_width=True)
                         except:
-                            st.table(render_df[cols_to_render].style.hide_index())
+                            st.table(render_df[cols_to_render])
             else:
                 st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
 
@@ -979,9 +966,9 @@ if st.session_state['authenticated']:
                 render_pipe["DELIVERY DATE"] = pd.to_datetime(df_pipeline["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
                 
                 try:
-                    st.table(render_pipe.style.hide(axis="index"))
+                    st.dataframe(render_pipe, hide_index=True, use_container_width=True)
                 except:
-                    st.table(render_pipe.style.hide_index())
+                    st.table(render_pipe)
                 
                 st.markdown("#### 🛠️ UPDATE ACTIVE PIPELINE DEALS")
                 for idx, row in df_pipeline.iterrows():
@@ -1058,9 +1045,9 @@ if st.session_state['authenticated']:
                 render_arch["FINAL VALUE (ZAR)"] = df_archive["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
                 
                 try:
-                    st.table(render_arch.style.hide(axis="index"))
+                    st.dataframe(render_arch, hide_index=True, use_container_width=True)
                 except:
-                    st.table(render_arch.style.hide_index())
+                    st.table(render_arch)
                 
                 st.markdown("#### 📂 ARCHIVE DETAILS & REVISIONS")
                 for idx, row in df_archive.iterrows():
@@ -1188,27 +1175,27 @@ if st.session_state['authenticated']:
                 
                 df_sum_mat = pd.DataFrame(summary_matrix_data)
                 try:
-                    st.table(df_sum_mat.style.hide(axis="index"))
+                    st.dataframe(df_sum_mat, hide_index=True, use_container_width=True)
                 except:
-                    st.table(df_sum_mat.style.hide_index())
+                    st.table(df_sum_mat)
                 
                 # --- OVERVIEW B: AGING PROVISION SUMMARY MATRIX ---
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("#### 🪙 DEALERSHIP VEHICLE AGING PROVISION MATRIX")
                 df_prov_mat = pd.DataFrame(provision_rows)
                 try:
-                    st.table(df_prov_mat.style.hide(axis="index"))
+                    st.dataframe(df_prov_mat, hide_index=True, use_container_width=True)
                 except:
-                    st.table(df_prov_mat.style.hide_index())
+                    st.table(df_prov_mat)
 
                 # --- OVERVIEW C: NEW UNENCUMBERED STOCK OVERVIEW ---
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("#### 🟢 DEALERSHIP UNENCUMBERED STOCK MATRIX")
                 df_unenc_mat = pd.DataFrame(unencumbered_matrix_data)
                 try:
-                    st.table(df_unenc_mat.style.hide(axis="index"))
+                    st.dataframe(df_unenc_mat, hide_index=True, use_container_width=True)
                 except:
-                    st.table(df_unenc_mat.style.hide_index())
+                    st.table(df_unenc_mat)
                     
                 st.markdown("---")
                 try:
