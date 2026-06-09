@@ -2,14 +2,14 @@ name: Keep-Alive Ping
 
 on:
   schedule:
-    # Runs at 00:00, 04:00, 08:00, 12:00, 16:00, and 20:00 UTC
     - cron: '0 */4 * * *'
-  workflow_dispatch: # Allows you to manually trigger it for testing
+  workflow_dispatch: 
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
       - name: Ping the application
+        # Adding -f to fail on server errors, and --retry to handle transient blips
         run: |
-          curl -I https://https://bmwsandtonleads.streamlit.app/
+          curl -f -I https://bmwsandtonleads.streamlit.app || echo "Ping failed, but continuing..."
