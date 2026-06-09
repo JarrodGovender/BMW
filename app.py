@@ -133,6 +133,12 @@ st.markdown("""
             letter-spacing: 0.5px;
             text-transform: uppercase;
         }
+
+        /* Hides the default Pandas row numbers to prevent misalignment cleanly */
+        .stTable thead tr th:first-child,
+        .stTable tbody tr th {
+            display: none !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -615,7 +621,7 @@ if st.session_state['authenticated']:
                     if IS_MANAGEMENT: cols_to_render.append("FP STATUS")
                     cols_to_render.append("CAPITAL VAL (ZAR)")
                     
-                    # 🚨 FIX: Natively hide the integer index properly via pandas styler to prevent header misalignment
+                    # 🚨 Bulletproof fix: Styler handles the index hiding natively without altering headers
                     try:
                         st.table(render_df[cols_to_render].style.hide(axis="index"))
                     except:
@@ -830,10 +836,19 @@ if st.session_state['authenticated']:
             # --- OVERVIEW A: STOCK SUMMARY MATRIX ---
             st.markdown("#### 📊 DEALERSHIP USED CAR STOCK SUMMARY OVERVIEW")
             try:
-                raw_res = supabase.table("used_car_stock").select("total_value, days_in_stock, location").execute()
-                df_summary = pd.DataFrame(raw_res.data) if raw_res.data else pd.DataFrame()
+                # 🚨 Ensure floorplan data is fetched cleanly for the new unencumbered matrix
+                try:
+                    raw_res = supabase.table("used_car_stock").select("total_value, days_in_stock, location, floorplan_status").execute()
+                    df_summary = pd.DataFrame(raw_res.data) if raw_res.data else pd.DataFrame()
+                except:
+                    raw_res = supabase.table("used_car_stock").select("total_value, days_in_stock, location").execute()
+                    df_summary = pd.DataFrame(raw_res.data) if raw_res.data else pd.DataFrame()
             except:
                 df_summary = pd.DataFrame()
+                
+            # Safely inject missing statuses to prevent crashing
+            if not df_summary.empty and 'floorplan_status' not in df_summary.columns:
+                df_summary['floorplan_status'] = "⚪ PENDING RECON"
                 
             categories_def = [
                 ("Used BMW", lambda df: df["location"].str.lower().str.contains("b -") | df["location"].str.lower().str.contains("i -")),
@@ -844,6 +859,7 @@ if st.session_state['authenticated']:
             
             summary_matrix_data = []
             provision_rows = []
+            unencumbered_matrix_data = []
             
             for cat_name, mask_func in categories_def:
                 if not df_summary.empty:
@@ -858,10 +874,17 @@ if st.session_state['authenticated']:
                     v_61_90 = cat_df[(cat_df["days_in_stock"] >= 61) & (cat_df["days_in_stock"] <= 90)]["total_value"].sum()
                     v_91_120 = cat_df[(cat_df["days_in_stock"] >= 91) & (cat_df["days_in_stock"] <= 120)]["total_value"].sum()
                     v_121_plus = cat_df[cat_df["days_in_stock"] >= 121]["total_value"].sum()
+                    
+                    # 🟢 NEW CALCULATION: Unencumbered Capital Calculation
+                    unenc_df = cat_df[cat_df['floorplan_status'] == 'UNENCUMBERED']
+                    unenc_units = len(unenc_df)
+                    unenc_val = unenc_df["total_value"].sum()
                 else:
                     units = 0
                     val_sum = 0.00
                     v_30_60 = v_61_90 = v_91_120 = v_121_plus = 0.00
+                    unenc_units = 0
+                    unenc_val = 0.00
                 
                 p_2_5 = v_30_60 * 0.025
                 p_5_0 = v_61_90 * 0.050
@@ -883,17 +906,38 @@ if st.session_state['authenticated']:
                     "10.0% (121+ Days)": f"R {p_10_0:,.2f}",
                     "TOTAL PROVISION": f"R {p_total:,.2f}"
                 })
+                
+                # Appends division breakdown for the new Unencumbered table
+                unencumbered_matrix_data.append({
+                    "STOCK DIVISION": cat_name,
+                    "FREE UNITS": f"{unenc_units:,}",
+                    "UNENCUMBERED CAPITAL VALUE (ZAR)": f"R {unenc_val:,.2f}"
+                })
             
             df_sum_mat = pd.DataFrame(summary_matrix_data)
-            df_sum_mat.set_index("STOCK DIVISION", inplace=True)
-            st.table(df_sum_mat)
+            # 🚨 FIX applied to all Management overview matrices 
+            try:
+                st.table(df_sum_mat.style.hide(axis="index"))
+            except:
+                st.table(df_sum_mat.style.hide_index())
             
             # --- OVERVIEW B: AGING PROVISION SUMMARY MATRIX ---
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("#### 🪙 DEALERSHIP VEHICLE AGING PROVISION MATRIX")
             df_prov_mat = pd.DataFrame(provision_rows)
-            df_prov_mat.set_index("STOCK DIVISION", inplace=True)
-            st.table(df_prov_mat)
+            try:
+                st.table(df_prov_mat.style.hide(axis="index"))
+            except:
+                st.table(df_prov_mat.style.hide_index())
+
+            # --- OVERVIEW C: NEW UNENCUMBERED STOCK OVERVIEW ---
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("#### 🟢 DEALERSHIP UNENCUMBERED STOCK MATRIX")
+            df_unenc_mat = pd.DataFrame(unencumbered_matrix_data)
+            try:
+                st.table(df_unenc_mat.style.hide(axis="index"))
+            except:
+                st.table(df_unenc_mat.style.hide_index())
                 
             st.markdown("---")
             try:
