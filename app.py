@@ -143,6 +143,12 @@ st.markdown("""
         .stTable tbody tr td:nth-child(3) {
             text-align: center !important;
         }
+
+        /* Hides the default Pandas row numbers to prevent misalignment */
+        .stTable thead tr th:first-child,
+        .stTable tbody tr th {
+            display: none !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -201,9 +207,10 @@ if st.session_state['authenticated']:
     MANAGEMENT_ROLES = ['dealer_principal', 'finance_admin', 'sales_manager']
     
     if st.session_state['role'] in MANAGEMENT_ROLES:
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER", "📊 COMMAND OVERVIEW"])
+        # Added Tab 6 for Management Command Overview
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER", "📦 ARCHIVED DELIVERIES", "📊 COMMAND OVERVIEW"])
     else:
-        tab1, tab2, tab3, tab4 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER", "📦 ARCHIVED DELIVERIES"])
 
     # ---- TAB 1: AVAILABLE DAILY FEED ----
     with tab1:
@@ -508,7 +515,7 @@ if st.session_state['authenticated']:
 
     # ---- TAB 4: INTERACTIVE PIPELINE TRACKER ----
     with tab4:
-        st.markdown("### 💼 SALES PIPELINE: OFF-LEAD DEALS")
+        st.markdown("### 💼 SALES PIPELINE: ACTIVE DEALS")
         
         PIPELINE_STAGES = ["Prospecting", "Test Drive", "Finance App", "Awaiting Delivery", "Delivered", "Cancelled"]
         
@@ -553,18 +560,17 @@ if st.session_state['authenticated']:
                 else:
                     st.warning("Please enter both the client name and deal description.")
 
+        # 🚨 NEW LOGIC: Filter out "Delivered" deals so they vanish from the active pipeline
         if st.session_state['role'] in MANAGEMENT_ROLES:
             st.markdown("#### 🕵️ MANAGER VIEW: ALL ACTIVE DEALS")
-            res = supabase.table("sales_pipeline").select("*").order("id", desc=True).execute()
+            res = supabase.table("sales_pipeline").select("*").neq("stage", "Delivered").order("id", desc=True).execute()
         else:
             st.markdown("#### 👤 MY ACTIVE DEALS")
-            res = supabase.table("sales_pipeline").select("*").eq("salesperson_username", st.session_state['user']).order("id", desc=True).execute()
+            res = supabase.table("sales_pipeline").select("*").eq("salesperson_username", st.session_state['user']).neq("stage", "Delivered").order("id", desc=True).execute()
         
         df_pipeline = pd.DataFrame(res.data) if res.data else pd.DataFrame()
         
         if not df_pipeline.empty:
-            
-            # 🚨 FIX: Clean data frame display aligning directly to index rules 
             render_pipe = pd.DataFrame()
             if st.session_state['role'] in MANAGEMENT_ROLES:
                 render_pipe["REP USERNAME"] = df_pipeline["salesperson_username"].apply(lambda x: f"@{x}")
@@ -575,7 +581,6 @@ if st.session_state['authenticated']:
             render_pipe["ESTIMATED VALUE (ZAR)"] = df_pipeline["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
             render_pipe["DELIVERY DATE"] = pd.to_datetime(df_pipeline["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
             
-            # Explicit index setting drops the messy numeric Pandas row numbers
             if st.session_state['role'] in MANAGEMENT_ROLES:
                 render_pipe.set_index("REP USERNAME", inplace=True)
             else:
@@ -587,8 +592,6 @@ if st.session_state['authenticated']:
             for idx, row in df_pipeline.iterrows():
                 if row['stage'] == "Cancelled":
                     stage_icon = "🛑"
-                elif row['stage'] == "Delivered":
-                    stage_icon = "✅"
                 else:
                     stage_icon = "⏳"
                 
@@ -634,9 +637,91 @@ if st.session_state['authenticated']:
         else:
             st.info("No active pipeline deals currently tracked.")
 
-    # ---- TAB 5: COMMAND OVERVIEW & EXECUTIVE SUMMARIES ----
+    # ---- TAB 5: ARCHIVED DELIVERIES (NEW FEATURE) ----
+    with tab5:
+        st.markdown("### 📦 ARCHIVED DELIVERIES")
+        st.caption("Historical log of successfully delivered vehicles, ordered by the latest delivery date.")
+        
+        # 🚨 Fetch only deals marked as "Delivered"
+        if st.session_state['role'] in MANAGEMENT_ROLES:
+            arc_res = supabase.table("sales_pipeline").select("*").eq("stage", "Delivered").execute()
+        else:
+            arc_res = supabase.table("sales_pipeline").select("*").eq("salesperson_username", st.session_state['user']).eq("stage", "Delivered").execute()
+            
+        df_archive = pd.DataFrame(arc_res.data) if arc_res.data else pd.DataFrame()
+        
+        if not df_archive.empty:
+            # 🚨 Safely sort descending by the recorded delivery date natively in pandas to ensure perfect chronologic order
+            df_archive['sort_date'] = pd.to_datetime(df_archive['planned_delivery_date'], errors='coerce')
+            df_archive = df_archive.sort_values(by='sort_date', ascending=False).drop(columns=['sort_date'])
+            
+            render_arch = pd.DataFrame()
+            if st.session_state['role'] in MANAGEMENT_ROLES:
+                render_arch["REP USERNAME"] = df_archive["salesperson_username"].apply(lambda x: f"@{x}")
+                
+            render_arch["CLIENT NAME"] = df_archive["client_name"]
+            render_arch["DEAL DESCRIPTION"] = df_archive["deal_description"]
+            render_arch["DELIVERY DATE"] = pd.to_datetime(df_archive["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unknown")
+            render_arch["FINAL VALUE (ZAR)"] = df_archive["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
+            
+            if st.session_state['role'] in MANAGEMENT_ROLES:
+                render_arch.set_index("REP USERNAME", inplace=True)
+            else:
+                render_arch.set_index("CLIENT NAME", inplace=True)
+                
+            st.table(render_arch)
+            
+            st.markdown("#### 📂 ARCHIVE DETAILS & REVISIONS")
+            # We keep the expanders active here so the team can review notes or un-archive a deal if someone made a mistake
+            for idx, row in df_archive.iterrows():
+                with st.expander(f"✅ {row['client_name'].upper()} | {row['deal_description']} — DELIVERED ON: {pd.to_datetime(row['planned_delivery_date'], errors='coerce').strftime('%d %b %Y')}"):
+                    c1, c2 = st.columns([1, 2])
+                    
+                    with c1:
+                        st.markdown(f"**REP:** `@{row['salesperson_username']}`")
+                        st.markdown(f"**EST. VALUE:** R {float(row['estimated_value']):,.2f}")
+                        
+                        db_date = row.get('planned_delivery_date')
+                        if pd.isna(db_date) or not db_date:
+                            curr_date = datetime.now(SAST).date()
+                        else:
+                            try:
+                                curr_date = datetime.strptime(str(db_date).split("T")[0], '%Y-%m-%d').date()
+                            except:
+                                curr_date = datetime.now(SAST).date()
+                                
+                        PIPELINE_STAGES = ["Prospecting", "Test Drive", "Finance App", "Awaiting Delivery", "Delivered", "Cancelled"]
+                        current_index = PIPELINE_STAGES.index(row['stage']) if row['stage'] in PIPELINE_STAGES else 4
+                        
+                        # Allows reverting the deal status back into the active pipeline if accidentally marked as delivered
+                        new_stage = st.selectbox("REVISE STATUS", PIPELINE_STAGES, index=current_index, key=f"arc_stage_{row['id']}")
+                        new_date = st.date_input("REVISE DELIVERY DATE", value=curr_date, key=f"arc_date_{row['id']}")
+                        
+                    with c2:
+                        current_notes = row.get('notes', '')
+                        if pd.isna(current_notes) or current_notes is None: 
+                            current_notes = ""
+                        
+                        new_notes = st.text_area("DEAL NOTES", value=str(current_notes), height=180, key=f"arc_notes_{row['id']}")
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("SAVE REVISIONS", key=f"arc_update_{row['id']}"):
+                        try:
+                            supabase.table("sales_pipeline").update({
+                                "stage": new_stage,
+                                "planned_delivery_date": new_date.strftime('%Y-%m-%d'),
+                                "notes": new_notes
+                            }).eq("id", row['id']).execute()
+                            st.success("Archive record updated successfully.")
+                            safe_rerun()
+                        except Exception as e:
+                            st.error(f"Failed to update. Error: {e}")
+        else:
+            st.info("No delivered deals have been archived yet.")
+
+    # ---- TAB 6: COMMAND OVERVIEW & EXECUTIVE SUMMARIES ----
     if st.session_state['role'] in MANAGEMENT_ROLES:
-        with tab5:
+        with tab6:
             st.markdown("### 👑 MANAGEMENT COMMAND OVERVIEW & AUDITS")
             
             # --- OVERVIEW A: STOCK SUMMARY MATRIX ---
