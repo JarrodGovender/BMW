@@ -6,7 +6,7 @@ from supabase import create_client, Client
 # ==========================================
 # 1. YOUR SECURE CREDENTIALS
 # ==========================================
-APOLLO_API_KEY = "YOUR_APOLLO_API_KEY"
+APOLLO_API_KEY = "3UHsfp2j7fgkoKU4WST8tg"
 SUPABASE_URL = "YOUR_SUPABASE_URL"
 SUPABASE_KEY = "ofvsqtdoezesycsstkkh"
 
