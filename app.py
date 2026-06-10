@@ -16,18 +16,19 @@ from supabase import create_client, Client
 # ==========================================
 try:
     from google import genai
+    from google.genai import types
     from pydantic import BaseModel, Field
     GEMINI_AVAILABLE = True
     
     class VehicleSpecs(BaseModel):
-        engine_configuration: str = Field(description="Exact engine layout, e.g., 3.0L TwinPower Turbo Inline-6, or 1300cc Boxer Twin")
-        transmission: str = Field(description="Transmission type, e.g., 8-Speed Steptronic, or 6-Speed Constant Mesh")
-        drivetrain: str = Field(description="Drive type, e.g., xDrive, sDrive, or Shaft Drive")
-        power_output: str = Field(description="Power output strictly in kW")
-        torque: str = Field(description="Torque output strictly in Nm")
-        acceleration_0_100: str = Field(description="0-100 km/h time in seconds")
-        fuel_economy: str = Field(description="Fuel consumption in L/100km")
-        body_classification: str = Field(description="E.g., Premium SUV, Sedan, Adventure Motorcycle, Sportbike")
+        engine_configuration: str = Field(description="Exact engine layout (e.g., 3.0L TwinPower Turbo Inline-6)")
+        transmission: str = Field(description="Exact transmission type and gears")
+        drivetrain: str = Field(description="Drive type (e.g., xDrive, sDrive)")
+        power_output: str = Field(description="Exact power output in kW. Do not guess.")
+        torque: str = Field(description="Exact torque output in Nm. Do not guess.")
+        acceleration_0_100: str = Field(description="0-100 km/h time in seconds. Do not guess.")
+        fuel_economy: str = Field(description="Combined fuel consumption in L/100km.")
+        body_classification: str = Field(description="Vehicle category (e.g., Premium SUV, Sedan, Adventure Motorcycle)")
 except ImportError:
     GEMINI_AVAILABLE = False
 
@@ -61,8 +62,8 @@ if 'theme' not in st.session_state:
 # ====================================================================
 # AI SPECIFICATION RETRIEVAL ENGINE
 # ====================================================================
-def get_ai_vehicle_specs(description, franchise):
-    """Securely routes the vehicle description to Gemini to fetch precise technical data."""
+def get_ai_vehicle_specs(description, franchise, vin):
+    """Securely routes the vehicle description and VIN to Gemini, using live Search Grounding for precise data."""
     has_key = False
     try:
         if "gemini" in st.secrets and "api_key" in st.secrets["gemini"]:
@@ -73,15 +74,29 @@ def get_ai_vehicle_specs(description, franchise):
     if GEMINI_AVAILABLE and has_key:
         try:
             client = genai.Client(api_key=st.secrets["gemini"]["api_key"])
-            prompt = f"Provide the official technical specifications for the following BMW/Motorrad vehicle: {description}. If it is a motorcycle, provide bike specs. If it is a car, provide car specs. Return highly accurate data only."
+            
+            system_instruction = """
+            You are a highly meticulous automotive data verifier for a premium dealership. Precision is non-negotiable.
+            
+            CRITICAL RULES:
+            1. Use the 10th character of the provided VIN to determine the exact model year (J=2018, K=2019, L=2020, M=2021, N=2022, P=2023, R=2024, S=2025, T=2026).
+            2. Use the Google Search tool to find the exact factory specifications for this specific Year and Model.
+            3. Never guess, round numbers, or hallucinate features.
+            4. If a specific metric cannot be verified online, return 'Verify manually'.
+            """
+            
+            prompt = f"Vehicle Description: {description}\nVIN: {vin}\nFetch the exact technical specifications for this exact year model."
             
             response = client.models.generate_content(
-                model='gemini-2.0-flash',
+                model='gemini-2.5-flash',
                 contents=prompt,
-                config={
-                    'response_mime_type': 'application/json',
-                    'response_schema': VehicleSpecs,
-                }
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.0,
+                    tools=[types.Tool(google_search=types.GoogleSearch())],
+                    response_mime_type="application/json",
+                    response_schema=VehicleSpecs,
+                )
             )
             return response.parsed.model_dump()
         except Exception as e:
@@ -94,14 +109,9 @@ def get_ai_vehicle_specs(description, franchise):
     is_mc = "MOTORCYCLE" in f_up or "MC" in f_up or "MOTORRAD" in f_up or "GS" in d_up or "RR" in d_up
     
     if is_mc:
-        if "1300" in d_up: return {"engine_configuration": "1300cc Air/Liquid-cooled Boxer Twin", "transmission": "6-Speed Constant Mesh", "drivetrain": "Shaft Drive", "power_output": "107 kW", "torque": "149 Nm", "acceleration_0_100": "3.3 seconds", "fuel_economy": "4.8 L/100km", "body_classification": "Adventure Motorcycle"}
-        if "1250" in d_up: return {"engine_configuration": "1254cc Air/Liquid-cooled Boxer Twin", "transmission": "6-Speed Constant Mesh", "drivetrain": "Shaft Drive", "power_output": "100 kW", "torque": "143 Nm", "acceleration_0_100": "3.6 seconds", "fuel_economy": "4.7 L/100km", "body_classification": "Adventure Motorcycle"}
-        if "S 1000 RR" in d_up: return {"engine_configuration": "999cc Liquid-cooled Inline-4", "transmission": "6-Speed Constant Mesh", "drivetrain": "Chain Drive", "power_output": "154 kW", "torque": "113 Nm", "acceleration_0_100": "3.1 seconds", "fuel_economy": "6.4 L/100km", "body_classification": "Sportbike"}
-        return {"engine_configuration": "Twin-Cylinder Boxer / Inline-4", "transmission": "6-Speed Constant Mesh", "drivetrain": "Shaft / Chain Drive", "power_output": "Model Dependent", "torque": "Model Dependent", "acceleration_0_100": "Sub 3.5 seconds", "fuel_economy": "4.5 - 5.5 L/100km", "body_classification": "Motorcycle"}
+        return {"engine_configuration": "Boxer / Inline-4", "transmission": "6-Speed Constant Mesh", "drivetrain": "Shaft / Chain", "power_output": "Model Dependent", "torque": "Model Dependent", "acceleration_0_100": "Sub 3.5s", "fuel_economy": "4.5 - 5.5 L/100km", "body_classification": "Motorcycle"}
     else:
-        if "M4" in d_up or "M3" in d_up: return {"engine_configuration": "3.0L M TwinPower Turbo Inline-6", "transmission": "8-Speed M Steptronic", "drivetrain": "M xDrive / sDrive", "power_output": "375 kW", "torque": "650 Nm", "acceleration_0_100": "3.5 seconds", "fuel_economy": "10.2 L/100km", "body_classification": "High-Performance Coupe/Sedan"}
-        if "M50" in d_up: return {"engine_configuration": "4.4L M TwinPower Turbo V8", "transmission": "8-Speed Steptronic Sport", "drivetrain": "xDrive", "power_output": "390 kW", "torque": "750 Nm", "acceleration_0_100": "4.3 seconds", "fuel_economy": "11.5 L/100km", "body_classification": "High-Performance SUV"}
-        return {"engine_configuration": "2.0L / 3.0L TwinPower Turbo", "transmission": "8-Speed Steptronic", "drivetrain": "xDrive/sDrive", "power_output": "Model Dependent", "torque": "Model Dependent", "acceleration_0_100": "Model Dependent", "fuel_economy": "Model Dependent", "body_classification": "Premium Passenger Vehicle"}
+        return {"engine_configuration": "TwinPower Turbo", "transmission": "8-Speed Steptronic", "drivetrain": "xDrive/sDrive", "power_output": "Model Dependent", "torque": "Model Dependent", "acceleration_0_100": "Model Dependent", "fuel_economy": "Model Dependent", "body_classification": "Premium Passenger Vehicle"}
 
 # ====================================================================
 # EXCEL BROCHURE GENERATOR ENGINE
@@ -124,7 +134,6 @@ def create_brochure_excel(car_details, specs):
         ws.set_column('B:B', 50)
         
         ws.merge_range('A1:B2', 'BMW SANDTON - OFFICIAL DIGITAL SPEC SHEET', title_fmt)
-        
         ws.merge_range('A4:B4', 'VEHICLE IDENTIFICATION', sub_fmt)
         ws.write('A5', 'Vehicle Description', key_fmt)
         ws.write('B5', car_details['desc'], val_fmt)
@@ -202,6 +211,7 @@ except Exception as e:
     st.error(f"🔒 Secure API Hook Connection Error: {str(e)}")
     st.stop()
 
+# Operational Hour Compliance
 now_sast = datetime.now(SAST)
 if now_sast.hour >= 22 or now_sast.hour < 6:
     st.error("🛑 **Access Denied: System Offline.**")
@@ -222,19 +232,10 @@ if st.session_state['authenticated']:
         """, unsafe_allow_html=True)
     with header_col2:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("⚙️ SETTINGS", key="header_settings_btn"):
-            st.session_state['page_view'] = 'settings'
-            safe_rerun()
-            
+        if st.button("⚙️ SETTINGS"): st.session_state['page_view'] = 'settings'; safe_rerun()
     with header_col3:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🚪 LOGOUT", key="header_logout_btn"):
-            st.session_state['authenticated'] = False
-            st.session_state['user'] = None
-            st.session_state['name'] = None
-            st.session_state['role'] = None
-            st.session_state['page_view'] = 'dashboard'
-            safe_rerun()
+        if st.button("🚪 LOGOUT"): st.session_state.update({'authenticated': False, 'user': None, 'name': None, 'role': None, 'page_view': 'dashboard'}); safe_rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(f"LOGGED IN AS: **{st.session_state['name'].upper()}** ({st.session_state['role'].replace('_', ' ').upper()})")
@@ -246,16 +247,11 @@ if st.session_state['authenticated']:
     if st.session_state['page_view'] == 'settings':
         st.markdown("## ⚙️ ACCOUNT SETTINGS")
         col_back, _ = st.columns([1, 4])
-        with col_back:
-            if st.button("⬅️ BACK TO DASHBOARD", key="back_to_dash"):
-                st.session_state['page_view'] = 'dashboard'
-                safe_rerun()
+        if col_back.button("⬅️ BACK TO DASHBOARD"): st.session_state['page_view'] = 'dashboard'; safe_rerun()
         st.markdown("---")
         st.markdown("#### 🌗 THEME PREFERENCE")
-        new_theme = st.radio("Select Interface Display Mode:", ["Light", "Dark"], index=0 if st.session_state['theme'] == 'Light' else 1, horizontal=True)
-        if new_theme != st.session_state['theme']:
-            st.session_state['theme'] = new_theme
-            safe_rerun()
+        new_theme = st.radio("Interface Display Mode:", ["Light", "Dark"], index=0 if st.session_state['theme'] == 'Light' else 1, horizontal=True)
+        if new_theme != st.session_state['theme']: st.session_state['theme'] = new_theme; safe_rerun()
         st.markdown("---")
         st.markdown("#### 🔑 CHANGE SECURE PASSWORD")
         pw_c1, pw_c2 = st.columns(2)
@@ -263,167 +259,85 @@ if st.session_state['authenticated']:
             curr_pw = st.text_input("Current Password", type="password")
             new_pw = st.text_input("New Password", type="password")
             conf_pw = st.text_input("Confirm New Password", type="password")
-            if st.button("UPDATE PASSWORD", key="update_pw_btn"):
-                if not curr_pw or not new_pw or not conf_pw: st.warning("⚠️ Please fill all password fields.")
-                elif new_pw != conf_pw: st.error("⚠️ New passwords do not match.")
-                elif len(new_pw) < 6: st.error("⚠️ New password must be at least 6 characters.")
+            if st.button("UPDATE PASSWORD"):
+                if not curr_pw or not new_pw or not conf_pw: st.warning("Fill all fields.")
+                elif new_pw != conf_pw: st.error("Passwords do not match.")
+                elif len(new_pw) < 6: st.error("Password too short.")
                 else:
                     res = supabase.table("users").select("password").eq("username", st.session_state['user']).execute()
                     if res.data and res.data[0]['password'] == hashlib.sha256(curr_pw.encode()).hexdigest():
                         supabase.table("users").update({"password": hashlib.sha256(new_pw.encode()).hexdigest()}).eq("username", st.session_state['user']).execute()
                         st.success("✅ Password successfully updated!")
-                    else: st.error("⚠️ The current password you entered is incorrect.")
+                    else: st.error("Current password incorrect.")
 
     elif st.session_state['page_view'] == 'dashboard':
-        if IS_MANAGEMENT:
-            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER", "📦 ARCHIVED DELIVERIES", "📊 COMMAND OVERVIEW"])
-        else:
-            tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER", "📦 ARCHIVED DELIVERIES"])
+        if IS_MANAGEMENT: tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER", "📦 ARCHIVED DELIVERIES", "📊 COMMAND OVERVIEW"])
+        else: tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔥 AVAILABLE DAILY FEED", "💼 MY CLAIMED ACCOUNTS", "🚗 USED CAR STOCK STOCKROOM", "💼 PIPELINE TRACKER", "📦 ARCHIVED DELIVERIES"])
 
         # ---- TAB 1: AVAILABLE DAILY FEED ----
         with tab1:
             if IS_MANAGEMENT:
                 with st.expander("🤖 LEAD INJECTION ENGINE (DEMO & TESTING)"):
-                    st.caption("Inject fresh, realistic South African leads into today's feed.")
-                    if st.button("🔥 INJECT 12 NEW LEADS FOR TODAY", key="inject_leads_btn"):
+                    st.caption("Inject fresh, simulated data for testing the pipeline tracking.")
+                    if st.button("🔥 INJECT 12 NEW LEADS FOR TODAY"):
                         today_str = datetime.now(SAST).strftime('%Y-%m-%d')
-                        b2b_list = [{"company": "Apex Logistics", "location": "Sandton", "target": "Fleet Manager", "score": random.randint(80, 99), "lead_date": today_str, "signal": "Expanding executive fleet by 5 vehicles this quarter.", "status": "Unassigned", "public_email": "fleet@apexlogistics.co.za", "public_phone": "011 555 1234", "company_website": "www.apexlogistics.co.za", "linkedin_url": "linkedin.com/company/apex-logistics"}]
-                        b2c_list = [{"client_name": "Sarah Jenkins", "title": "Senior Partner", "company": "Bowmans Law", "location": "Sandton", "score": random.randint(75, 99), "lead_date": today_str, "signal": "Current X5 lease expiring in 45 days. High retention probability.", "status": "Unassigned", "public_email": "s.jenkins@bowmans.com", "public_phone": "082 555 9876", "linkedin_url": "linkedin.com/in/sarahjenkins"}]
-                        tend_list = [{"company": "Makhanya Holdings", "awarding_body": "Gauteng Provincial Gov", "contract_value": "R 12,500,000", "tender_desc": "Awarded tender for VIP transport fleet. Requires 8 luxury sedans.", "score": random.randint(85, 99), "lead_date": today_str, "status": "Unassigned", "public_email": "tenders@makhanya.co.za", "public_phone": "012 345 6789", "company_website": "www.makhanya.co.za", "linkedin_url": "linkedin.com/company/makhanya-holdings"}]
-                        
-                        with st.spinner("Injecting fresh leads into the database..."):
+                        b2b_list = [{"company": "Apex Logistics", "location": "Sandton", "target": "Fleet Manager", "score": random.randint(80, 99), "lead_date": today_str, "signal": "Expanding fleet.", "status": "Unassigned", "public_email": "test@apex.co.za", "public_phone": "011", "company_website": "www", "linkedin_url": "link"}]
+                        with st.spinner("Injecting fresh leads..."):
                             try:
                                 supabase.table("leads").insert(b2b_list).execute()
-                                supabase.table("individual_leads").insert(b2c_list).execute()
-                                supabase.table("tender_leads").insert(tend_list).execute()
-                                st.success("✅ Successfully injected leads for today!")
+                                st.success("✅ Injected!")
                                 safe_rerun()
-                            except Exception as e: st.error(f"Injection Failed: {e}")
+                            except Exception as e: st.error(e)
             
             lead_section = st.radio("SELECT OPPORTUNITY CHANNEL", ["🏢 Corporate Fleet (B2B)", "🚗 Individual Leads (B2C)", "🏛️ Gov Tenders (B2B)"], horizontal=True)
             filter_date_str = st.date_input("FILTER BY GENERATION DATE", datetime.now(SAST)).strftime('%Y-%m-%d')
             st.markdown("---")
             
-            if lead_section == "🏢 Corporate Fleet (B2B)":
-                res = supabase.table("leads").select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str).order("score", desc=True).execute()
-                df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
-                if df.empty: st.info("No unassigned corporate fleet leads found for this date.")
-                else:
-                    for idx, row in df.iterrows():
-                        col_score, col_content = st.columns([1, 5])
-                        col_score.metric("SCORE", f"{row['score']}/100")
-                        with col_content:
-                            st.markdown(f"### {row['company'].upper()} — {row['location'].upper()}")
-                            st.markdown(f"**TARGET PERSONA:** {row['target']}  |  📅 *GENERATED: {row['lead_date']}*")
-                            st.info(f"💡 {row['signal']}")
-                            if st.button("CLAIM ACCOUNT", key=f"claim_c_{row['id']}"):
-                                supabase.table("leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute(); safe_rerun()
-
-            elif lead_section == "🚗 Individual Leads (B2C)":
-                res = supabase.table("individual_leads").select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str).order("score", desc=True).execute()
-                df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
-                if df.empty: st.info("No unassigned individual luxury leads found for this date.")
-                else:
-                    for idx, row in df.iterrows():
-                        col_score, col_content = st.columns([1, 5])
-                        col_score.metric("SCORE", f"{row['score']}/100")
-                        with col_content:
-                            st.markdown(f"### PROSPECT: {row.get('client_name', '').upper()}")
-                            st.markdown(f"**POSITION:** {row.get('title', '')} at *{row.get('company', '')}* ({row.get('location', '')})  |  📅 *GENERATED: {row['lead_date']}*")
-                            st.info(f"💎 {row['signal']}")
-                            if st.button("CLAIM CLIENT", key=f"claim_i_{row['id']}"):
-                                supabase.table("individual_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute(); safe_rerun()
-
+            table_map = {"🏢 Corporate Fleet (B2B)": "leads", "🚗 Individual Leads (B2C)": "individual_leads", "🏛️ Gov Tenders (B2B)": "tender_leads"}
+            active_table = table_map[lead_section]
+            
+            res = supabase.table(active_table).select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str).order("score", desc=True).execute()
+            df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
+            
+            if df.empty: st.info("No unassigned leads found for this date.")
             else:
-                res = supabase.table("tender_leads").select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str).order("score", desc=True).execute()
-                df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
-                if df.empty: st.info("No unassigned government tender wins flagged for this date.")
-                else:
-                    for idx, row in df.iterrows():
+                for idx, row in df.iterrows():
+                    with st.container():
                         col_score, col_content = st.columns([1, 5])
                         col_score.metric("SCORE", f"{row['score']}/100")
                         with col_content:
-                            st.markdown(f"### VENDOR: {row.get('company', '').upper()}")
-                            st.markdown(f"**AWARDING BODY:** {row.get('awarding_body', '')}  |  💰 **VALUE:** `{row.get('contract_value', '')}`")
-                            st.info(f"🏛️ {row.get('tender_desc', '')}")
-                            if st.button("CLAIM TENDER", key=f"claim_t_{row['id']}"):
-                                supabase.table("tender_leads").update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute(); safe_rerun()
+                            if active_table == "leads": st.markdown(f"### {row['company'].upper()} | {row['target']}")
+                            elif active_table == "individual_leads": st.markdown(f"### {row.get('client_name', '')} | {row.get('company', '')}")
+                            else: st.markdown(f"### {row.get('company', '')} | {row.get('contract_value', '')}")
+                            st.info(f"💡 {row.get('signal', row.get('tender_desc', ''))}")
+                            if st.button("CLAIM ACCOUNT", key=f"claim_{row['id']}"):
+                                supabase.table(active_table).update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute()
+                                safe_rerun()
 
         # ---- TAB 2: CLAIMED LEADS INTERACTION PANELS ----
         with tab2:
-            my_corp_res = supabase.table("leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
-            my_ind_res = supabase.table("individual_leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
-            my_tend_res = supabase.table("tender_leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
-            
-            st.markdown("### 🏢 CLAIMED CORPORATE FLEET ACCOUNTS")
-            if not my_corp_res.data: st.caption("No active corporate fleet claims linked to your profile.")
-            else:
-                for row in my_corp_res.data:
-                    with st.expander(f"COMPANY: {row.get('company', '').upper()} ({row.get('location', '').upper()})"):
-                        st.write(f"**SIGNAL ANALYSIS:** {row.get('signal', '')}")
-                        c_i1, c_i2, c_i3, c_i4 = st.columns(4)
-                        c_i1.markdown(f"**Email:**\n`{row.get('public_email', '')}`")
-                        c_i2.markdown(f"**Phone Line:**\n`{row.get('public_phone', '')}`")
-                        c_i3.markdown(f"[🌐 Web Domain]({row.get('company_website', '')})")
-                        c_i4.markdown(f"[🔗 LinkedIn Connect]({row.get('linkedin_url', '')})")
-                        st.markdown("---")
-                        note_text = st.text_area("LOG COMMUNICATIONS NOTE", key=f"n_c_{row['id']}")
-                        if st.button("SAVE LOG NOTE", key=f"s_c_{row['id']}") and note_text:
-                            supabase.table("lead_notes").insert({"lead_id": row['id'], "lead_type": "corporate", "username": st.session_state['user'], "salesperson_name": st.session_state['name'], "note_text": note_text, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')}).execute()
-                            st.success("Note committed."); safe_rerun()
-                        action_c1, action_c2, action_c3 = st.columns(3)
-                        if action_c1.button("✅ CLOSE AS CONVERTED", key=f"cl_c_{row['id']}"): supabase.table("leads").update({"status": "Closed"}).eq("id", row['id']).execute(); safe_rerun()
-                        if action_c2.button("💀 MARK DEAD LEAD", key=f"dead_c_{row['id']}"): supabase.table("leads").update({"status": "Dead"}).eq("id", row['id']).execute(); safe_rerun()
-                        if action_c3.button("🔄 UNCLAIM (RETURN TO POOL)", key=f"uncl_c_{row['id']}"): supabase.table("leads").update({"status": "Unassigned", "assigned_to": None}).eq("id", row['id']).execute(); safe_rerun()
-
-            st.markdown("---")
-            st.markdown("### 🚗 MY CLAIMED PRIVATE LUXURY CLIENTS")
-            if not my_ind_res.data: st.caption("No active individual accounts claimed.")
-            else:
-                for row in my_ind_res.data:
-                    with st.expander(f"PROSPECT: {row.get('client_name', '').upper()} — {row.get('title', '').upper()}"):
-                        st.write(f"**OUTREACH SIGNAL:** {row.get('signal', '')}")
-                        i_i1, i_i2, i_i3 = st.columns(3)
-                        i_i1.markdown(f"**Direct Email:**\n`{row.get('public_email', '')}`")
-                        i_i2.markdown(f"**Office Line:**\n`{row.get('public_phone', '')}`")
-                        i_i3.markdown(f"[🔗 LinkedIn Profile]({row.get('linkedin_url', '')})")
-                        st.markdown("---")
-                        note_text_ind = st.text_area("LOG CLIENT VERBAL UPDATE", key=f"n_i_{row['id']}")
-                        if st.button("SAVE CLIENT UPDATE", key=f"s_i_{row['id']}") and note_text_ind:
-                            supabase.table("lead_notes").insert({"lead_id": row['id'], "lead_type": "individual", "username": st.session_state['user'], "salesperson_name": st.session_state['name'], "note_text": note_text_ind, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')}).execute()
-                            st.success("Updates cataloged."); safe_rerun()
-                        action_i1, action_i2, action_i3 = st.columns(3)
-                        if action_i1.button("✅ CLOSE AS CONVERTED", key=f"cl_i_{row['id']}"): supabase.table("individual_leads").update({"status": "Closed"}).eq("id", row['id']).execute(); safe_rerun()
-                        if action_i2.button("💀 MARK DEAD LEAD", key=f"dead_i_{row['id']}"): supabase.table("individual_leads").update({"status": "Dead"}).eq("id", row['id']).execute(); safe_rerun()
-                        if action_i3.button("🔄 UNCLAIM (RETURN TO POOL)", key=f"uncl_i_{row['id']}"): supabase.table("individual_leads").update({"status": "Unassigned", "assigned_to": None}).eq("id", row['id']).execute(); safe_rerun()
-
-            st.markdown("---")
-            st.markdown("### 🏛️ CLAIMED TENDER VENDORS")
-            if not my_tend_res.data: st.caption("No active government tender claims currently flagged.")
-            else:
-                for row in my_tend_res.data:
-                    with st.expander(f"TENDER WINNER: {row.get('company', '').upper()}"):
-                        st.write(f"**PROJECT ANCHOR DESC:** {row.get('tender_desc', '')}")
-                        t_i1, t_i2, t_i3, t_i4 = st.columns(4)
-                        t_i1.markdown(f"**Primary Email:**\n`{row.get('public_email', '')}`")
-                        t_i2.markdown(f"**Switchboard Phone:**\n`{row.get('public_phone', '')}`")
-                        t_i3.markdown(f"[🌐 Corporate Site]({row.get('company_website', '')})")
-                        t_i4.markdown(f"[🔗 LinkedIn Anchor]({row.get('linkedin_url', '')})")
-                        st.markdown("---")
-                        note_text_tend = st.text_area("LOG FLEET ENGAGEMENT SUMMARY", key=f"n_t_{row['id']}")
-                        if st.button("SAVE TENDER DATA NOTE", key=f"s_t_{row['id']}") and note_text_tend:
-                            supabase.table("lead_notes").insert({"lead_id": row['id'], "lead_type": "tender", "username": st.session_state['user'], "salesperson_name": st.session_state['name'], "note_text": note_text_tend, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')}).execute()
-                            st.success("Engagement data safely written."); safe_rerun()
-                        action_t1, action_t2, action_t3 = st.columns(3)
-                        if action_t1.button("✅ CLOSE AS CONVERTED", key=f"cl_t_{row['id']}"): supabase.table("tender_leads").update({"status": "Closed"}).eq("id", row['id']).execute(); safe_rerun()
-                        if action_t2.button("💀 MARK DEAD LEAD", key=f"dead_t_{row['id']}"): supabase.table("tender_leads").update({"status": "Dead"}).eq("id", row['id']).execute(); safe_rerun()
-                        if action_t3.button("🔄 UNCLAIM (RETURN TO POOL)", key=f"uncl_t_{row['id']}"): supabase.table("tender_leads").update({"status": "Unassigned", "assigned_to": None}).eq("id", row['id']).execute(); safe_rerun()
+            st.markdown("### 💼 MY CLAIMED ACCOUNTS")
+            for table_name, title in [("leads", "🏢 CORPORATE FLEET"), ("individual_leads", "🚗 PRIVATE CLIENTS"), ("tender_leads", "🏛️ TENDER VENDORS")]:
+                res = supabase.table(table_name).select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").execute()
+                st.markdown(f"#### {title}")
+                if not res.data: st.caption("No active claims.")
+                else:
+                    for row in res.data:
+                        disp_name = row.get('company', row.get('client_name', 'Unknown'))
+                        with st.expander(f"{disp_name.upper()}"):
+                            c1, c2 = st.columns(2)
+                            c1.markdown(f"**Email:** {row.get('public_email')}")
+                            c2.markdown(f"**Phone:** {row.get('public_phone')}")
+                            if st.button("✅ CLOSE AS CONVERTED", key=f"cl_{table_name}_{row['id']}"):
+                                supabase.table(table_name).update({"status": "Closed"}).eq("id", row['id']).execute()
+                                safe_rerun()
 
         # ---- 🚗 TAB 3: USED CAR STOCKROOM NODE ----
         with tab3:
             st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
             st.caption("Single source of truth inventory registry organized and separated by official franchise division lines.")
             
+            # --- GLOBAL DATA FETCHING ---
             try:
                 try: stock_res = supabase.table("used_car_stock").select("vsb_no, description, into_stock, days_in_stock, total_value, location, floorplan_status, chassis_no, comments").order("days_in_stock", desc=True).execute()
                 except:
@@ -546,9 +460,9 @@ if st.session_state['authenticated']:
                                             st.success(f"✅ Recon complete! {update_count} units successfully cross-referenced."); safe_rerun()
                                 else: st.warning("Please upload at least one CSV file.")
 
-                    # --- 🤖 NEW AI DIGITAL BROCHURE STUDIO ---
+                    # --- 🤖 NEW AI DIGITAL BROCHURE STUDIO (SEARCH GROUNDED) ---
                     st.markdown("### 📄 AI DIGITAL BROCHURE STUDIO")
-                    st.caption("Powered by Gemini. Select a vehicle to dynamically generate a precise, parsed, and editable Excel specification sheet.")
+                    st.caption("Powered by Gemini. Select a vehicle to decode its VIN, search the web for exact specs, and generate an editable Excel sheet.")
                     
                     vehicle_series = df_live_stock['VSB NUMBER'].astype(str) + " - " + df_live_stock['VEHICLE DESCRIPTION']
                     brochure_opts = ["Select a Vehicle..."] + vehicle_series.tolist()
@@ -561,8 +475,12 @@ if st.session_state['authenticated']:
                         
                         st.markdown(f"**Vehicle Selected:** `{car_row['VEHICLE DESCRIPTION']}`")
                         
-                        with st.spinner("🤖 Gemini AI is actively parsing model nomenclature and generating precise technical specs..."):
-                            ai_specs = get_ai_vehicle_specs(car_row['VEHICLE DESCRIPTION'], car_row['FRANCHISE DIVISION'])
+                        with st.spinner("🤖 Gemini AI is decoding the VIN and actively searching the web for precise factory specifications..."):
+                            ai_specs = get_ai_vehicle_specs(
+                                description=car_row['VEHICLE DESCRIPTION'], 
+                                franchise=car_row['FRANCHISE DIVISION'],
+                                vin=car_row.get('CHASSIS / VIN', 'N/A')
+                            )
                             
                         # Map JSON schema to presentation format
                         specs_to_render = {
@@ -628,7 +546,6 @@ if st.session_state['authenticated']:
                     if search_query: filtered_df = filtered_df[filtered_df['VEHICLE DESCRIPTION'].astype(str).str.lower().str.contains(search_query) | filtered_df['VSB NUMBER'].astype(str).str.lower().str.contains(search_query)]
                     if show_hot_only: filtered_df = filtered_df[filtered_df["DAYS ON FLOOR"] <= 3]
                         
-                    # 🟢 STYLED EXCEL DISTRIBUTION ENGINE (Master)
                     if IS_MANAGEMENT:
                         with st.expander("📤 DISTRIBUTE MASTER STOCKBOOK VIA EMAIL"):
                             st.markdown("#### Push Current Master Stockbook to Management")
