@@ -1132,15 +1132,18 @@ if st.session_state['authenticated']:
                                                 workbook = writer.book
                                                 t_fmt = workbook.add_format({'bold': True, 'font_size': 14, 'bg_color': '#003366', 'font_color': '#FFFFFF', 'align': 'center', 'valign': 'vcenter', 'border': 1})
                                                 h_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'align': 'center', 'valign': 'vcenter', 'border': 1})
-                                                n_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter'})
+                                                n_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'num_format': '#,##0'})
                                                 c_fmt = workbook.add_format({'border': 1, 'valign': 'vcenter', 'num_format': 'R #,##0.00'})
                                                 txt_fmt = workbook.add_format({'border': 1, 'valign': 'vcenter'})
+                                                pct_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'num_format': '0.0%'})
+                                                h_pct_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'align': 'center', 'valign': 'vcenter', 'border': 1, 'num_format': '0.0%'})
                                                 
-                                                # Sheet 1: Executive Summary (Without Aging Provision)
+                                                # Sheet 1: Executive Summary (Without Aging Provision, With Floorplan Ratio Matrix)
                                                 ws_exec = workbook.add_worksheet('EXECUTIVE OVERVIEW')
                                                 ws_exec.hide_gridlines(2)
                                                 ws_exec.set_column('A:A', 30); ws_exec.set_column('B:C', 25)
                                                 
+                                                # Matrix 1: Unencumbered Division Breakdown
                                                 cat_defs = [("Used BMW", "b -|i -"), ("Used MINI", "m -"), ("Used MC", "a -|c -"), ("Tier Sandton", "z -")]
                                                 summary_data = []
                                                 for name, mask in cat_defs:
@@ -1151,8 +1154,43 @@ if st.session_state['authenticated']:
                                                 ws_exec.set_row(0, 30); ws_exec.set_row(1, 35)
                                                 ws_exec.write(1, 0, "STOCK DIVISION", h_fmt); ws_exec.write(1, 1, "NO. OF UNITS", h_fmt); ws_exec.write(1, 2, "CAPITAL VALUE (ZAR)", h_fmt)
                                                 
+                                                r_idx = 1
                                                 for r_idx, row in enumerate(summary_data, 2):
                                                     ws_exec.write(r_idx, 0, row[0], txt_fmt); ws_exec.write(r_idx, 1, row[1], n_fmt); ws_exec.write_number(r_idx, 2, row[2], c_fmt)
+
+                                                # Matrix 2: Floorplan Ratio & Capital Allocation (NEW)
+                                                row_cursor = r_idx + 3
+                                                ws_exec.merge_range(row_cursor, 0, row_cursor, 2, "FLOORPLAN RATIO & CAPITAL ALLOCATION", t_fmt)
+                                                ws_exec.set_row(row_cursor, 30)
+                                                ws_exec.set_row(row_cursor + 1, 35)
+                                                ws_exec.write(row_cursor + 1, 0, "FINANCE STATUS", h_fmt)
+                                                ws_exec.write(row_cursor + 1, 1, "TOTAL UNITS", h_fmt)
+                                                ws_exec.write(row_cursor + 1, 2, "% OF TOTAL STOCK", h_fmt)
+                                                
+                                                tot_units = len(df_live_stock)
+                                                u_units = len(unenc_df)
+                                                fp_units = len(df_live_stock[df_live_stock["FP STATUS"] == "🏦 ON FLOORPLAN"])
+                                                pend_units = len(df_live_stock[df_live_stock["FP STATUS"] == "⚪ PENDING RECON"])
+                                                
+                                                u_pct = u_units / tot_units if tot_units else 0
+                                                fp_pct = fp_units / tot_units if tot_units else 0
+                                                pend_pct = pend_units / tot_units if tot_units else 0
+                                                
+                                                data_matrix = [
+                                                    ("🟢 UNENCUMBERED", u_units, u_pct),
+                                                    ("🏦 ON FLOORPLAN", fp_units, fp_pct),
+                                                    ("⚪ PENDING RECON", pend_units, pend_pct)
+                                                ]
+                                                
+                                                for i, (status, count, pct) in enumerate(data_matrix, row_cursor + 2):
+                                                    ws_exec.write(i, 0, status, txt_fmt)
+                                                    ws_exec.write(i, 1, count, n_fmt)
+                                                    ws_exec.write(i, 2, pct, pct_fmt)
+                                                    
+                                                final_row = row_cursor + 5
+                                                ws_exec.write(final_row, 0, "TOTAL DEALERSHIP STOCK", h_fmt)
+                                                ws_exec.write(final_row, 1, tot_units, h_fmt)
+                                                ws_exec.write(final_row, 2, 1.0, h_pct_fmt)
 
                                                 # Sheet 2+: Franchise Data with Comments
                                                 for fran in sorted(unenc_df["FRANCHISE DIVISION"].unique()):
@@ -1167,15 +1205,15 @@ if st.session_state['authenticated']:
                                                     ws.set_row(0, 30); ws.set_row(1, 35)
                                                     for c_idx, c_name in enumerate(cols): ws.write(1, c_idx, c_name, h_fmt)
                                                     
-                                                    for r_idx, row in enumerate(f_df[cols].values, 2):
-                                                        ws.write(r_idx, 0, row[0], txt_fmt); ws.write(r_idx, 1, row[1], txt_fmt); ws.write(r_idx, 2, row[2], txt_fmt)
-                                                        ws.write(r_idx, 3, row[3], n_fmt); ws.write_number(r_idx, 4, float(row[4]), c_fmt); ws.write(r_idx, 5, str(row[5]), txt_fmt)
+                                                    for row_idx, row_val in enumerate(f_df[cols].values, 2):
+                                                        ws.write(row_idx, 0, row_val[0], txt_fmt); ws.write(row_idx, 1, row_val[1], txt_fmt); ws.write(row_idx, 2, row_val[2], txt_fmt)
+                                                        ws.write(row_idx, 3, row_val[3], n_fmt); ws.write_number(row_idx, 4, float(row_val[4]), c_fmt); ws.write(row_idx, 5, str(row_val[5]), txt_fmt)
                                             
                                             msg = EmailMessage()
-                                            msg['Subject'] = f"🟢 LIVE UNENCUMBERED STOCKBOOK - {datetime.now(SAST).strftime('%d %b %Y')}"
+                                            msg['Subject'] = f"🟢 LIVE UNENCUMBERED STOCKBOOK & RATIOS - {datetime.now(SAST).strftime('%d %b %Y')}"
                                             msg['From'] = st.secrets["smtp"]["sender_email"]
                                             msg['To'] = u_email
-                                            msg.set_content("Good morning,\n\nAttached is the Live Unencumbered Stockbook featuring direct administrative comments.\n\nAutomated Distribution System")
+                                            msg.set_content("Good morning,\n\nAttached is the Live Unencumbered Stockbook featuring direct administrative comments and the global Floorplan Allocation Matrix.\n\nAutomated Distribution System")
                                             msg.add_attachment(excel_buffer.getvalue(), maintype='application', subtype='vnd.openxmlformats-officedocument.spreadsheetml.sheet', filename=f"BMW_Unencumbered_Stockbook_{datetime.now(SAST).strftime('%Y%m%d')}.xlsx")
                                             
                                             with smtplib.SMTP(st.secrets["smtp"]["server"], int(st.secrets["smtp"]["port"])) as server:
