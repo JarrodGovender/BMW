@@ -8,7 +8,7 @@ from supabase import create_client, Client
 # ==========================================
 APOLLO_API_KEY = "3UHsfp2j7fgkoKU4WST8tg"
 SUPABASE_URL = "https://ofvsqtdoezesycsstkkh.supabase.co"
-SUPABASE_KEY = "sb_publishable_9C4lD6aJd1h9cIq0SqVanA_6Yz_mvs_"
+SUPABASE_KEY = "sb_secret_kUj0BWaKzfiDSfDQS-1nQg_Bh1brErP"
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
