@@ -650,9 +650,15 @@ if st.session_state['authenticated']:
                 st.markdown("---")
                 
                 # ==========================================
-                # DUAL-TAB STOCKROOM ARCHITECTURE
+                # DUAL-TAB STOCKROOM ARCHITECTURE (CONDITIONAL)
                 # ==========================================
-                stock_tab_main, stock_tab_unenc = st.tabs(["🌍 MASTER INVENTORY PORTAL", "🟢 UNENCUMBERED ASSETS"])
+                # Executive Security Gate: Only Dealer Principal and Finance Admin see Unencumbered Asset tabs
+                SHOW_UNENCUMBERED = st.session_state['role'] in ['finance_admin', 'dealer_principal']
+                
+                if SHOW_UNENCUMBERED:
+                    stock_tab_main, stock_tab_unenc = st.tabs(["🌍 MASTER INVENTORY PORTAL", "🟢 UNENCUMBERED ASSETS"])
+                else:
+                    stock_tab_main = st.tabs(["🌍 MASTER INVENTORY PORTAL"])[0]
                 
                 with stock_tab_main:
                     # --- RESTORED ADMIN CONSOLE ---
@@ -1075,154 +1081,153 @@ if st.session_state['authenticated']:
                             st.dataframe(render_df[cols_to_render], hide_index=True, use_container_width=True)
 
                 # ==========================================
-                # 🟢 UNENCUMBERED ASSETS TAB (NEW)
+                # 🟢 UNENCUMBERED ASSETS TAB (CONDITIONAL VISIBILITY)
                 # ==========================================
-                with stock_tab_unenc:
-                    st.markdown("#### 🟢 UNENCUMBERED VEHICLES REGISTER")
-                    st.caption("Manage administrative comments and securely export the unencumbered-only executive stockbook.")
-                    
-                    unenc_df = df_live_stock[df_live_stock["FP STATUS"] == "🟢 UNENCUMBERED"].copy().reset_index(drop=True)
-                    
-                    if unenc_df.empty:
-                        st.info("No unencumbered vehicles currently logged on the floorplan.")
-                    else:
-                        st.markdown("##### 📝 EDIT ADMIN COMMENTS")
-                        edit_cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "ADMIN COMMENTS"]
+                if SHOW_UNENCUMBERED:
+                    with stock_tab_unenc:
+                        st.markdown("#### 🟢 UNENCUMBERED VEHICLES REGISTER")
+                        st.caption("Manage administrative comments and securely export the unencumbered-only executive stockbook.")
                         
-                        # Interactive Data Editor for Comments
-                        edited_unenc = st.data_editor(
-                            unenc_df[edit_cols],
-                            disabled=["VSB NUMBER", "VEHICLE DESCRIPTION", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"],
-                            hide_index=True,
-                            use_container_width=True,
-                            key="unencumbered_editor"
-                        )
+                        unenc_df = df_live_stock[df_live_stock["FP STATUS"] == "🟢 UNENCUMBERED"].copy().reset_index(drop=True)
                         
-                        if st.button("💾 SAVE COMMENTS TO DATABASE", key="save_unenc"):
-                            update_count = 0
-                            for i in range(len(edited_unenc)):
-                                orig = str(unenc_df.iloc[i]["ADMIN COMMENTS"]).strip()
-                                new_val = str(edited_unenc.iloc[i]["ADMIN COMMENTS"]).strip()
-                                if orig != new_val:
-                                    vsb = edited_unenc.iloc[i]["VSB NUMBER"]
-                                    try:
-                                        supabase.table("used_car_stock").update({"comments": new_val}).eq("vsb_no", vsb).execute()
-                                        update_count += 1
-                                    except Exception as e:
-                                        st.error(f"Failed to save {vsb}: {e}")
+                        if unenc_df.empty:
+                            st.info("No unencumbered vehicles currently logged on the floorplan.")
+                        else:
+                            st.markdown("##### 📝 EDIT ADMIN COMMENTS")
+                            edit_cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "ADMIN COMMENTS"]
                             
-                            if update_count > 0: 
-                                st.success(f"✅ {update_count} comments permanently saved to the cloud.")
-                                safe_rerun()
-                            else: 
-                                st.info("No changes made to comments.")
+                            # Interactive Data Editor for Comments
+                            edited_unenc = st.data_editor(
+                                unenc_df[edit_cols],
+                                disabled=["VSB NUMBER", "VEHICLE DESCRIPTION", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"],
+                                hide_index=True,
+                                use_container_width=True,
+                                key="unencumbered_editor"
+                            )
                             
-                        st.markdown("---")
-                        
-                        if IS_MANAGEMENT:
-                            with st.expander("📤 DISTRIBUTE UNENCUMBERED LIST VIA EMAIL"):
-                                st.markdown("#### Send Targeted Unencumbered Matrix")
-                                u_email = st.text_input("RECIPIENT EMAIL ADDRESS(ES)", key="u_email_in")
-                                
-                                if st.button("🚀 DISPATCH UNENCUMBERED STOCKBOOK", key="u_dispatch_btn") and u_email:
-                                    with st.spinner("Formatting Unencumbered Matrix..."):
+                            if st.button("💾 SAVE COMMENTS TO DATABASE", key="save_unenc"):
+                                update_count = 0
+                                for i in range(len(edited_unenc)):
+                                    orig = str(unenc_df.iloc[i]["ADMIN COMMENTS"]).strip()
+                                    new_val = str(edited_unenc.iloc[i]["ADMIN COMMENTS"]).strip()
+                                    if orig != new_val:
+                                        vsb = edited_unenc.iloc[i]["VSB NUMBER"]
                                         try:
-                                            excel_buffer = io.BytesIO()
-                                            with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                                                workbook = writer.book
-                                                t_fmt = workbook.add_format({'bold': True, 'font_size': 14, 'bg_color': '#003366', 'font_color': '#FFFFFF', 'align': 'center', 'valign': 'vcenter', 'border': 1})
-                                                h_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'align': 'center', 'valign': 'vcenter', 'border': 1})
-                                                n_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'num_format': '#,##0'})
-                                                c_fmt = workbook.add_format({'border': 1, 'valign': 'vcenter', 'num_format': 'R #,##0.00'})
-                                                txt_fmt = workbook.add_format({'border': 1, 'valign': 'vcenter'})
-                                                pct_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'num_format': '0.0%'})
-                                                h_pct_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'align': 'center', 'valign': 'vcenter', 'border': 1, 'num_format': '0.0%'})
-                                                
-                                                # Sheet 1: Executive Summary (Without Aging Provision, With Floorplan Ratio Matrix)
-                                                ws_exec = workbook.add_worksheet('EXECUTIVE OVERVIEW')
-                                                ws_exec.hide_gridlines(2)
-                                                ws_exec.set_column('A:A', 30); ws_exec.set_column('B:C', 25)
-                                                
-                                                # Matrix 1: Unencumbered Division Breakdown
-                                                cat_defs = [("Used BMW", "b -|i -"), ("Used MINI", "m -"), ("Used MC", "a -|c -"), ("Tier Sandton", "z -")]
-                                                summary_data = []
-                                                for name, mask in cat_defs:
-                                                    sub_df = unenc_df[unenc_df["FRANCHISE DIVISION"].str.lower().str.contains(mask, regex=True)]
-                                                    summary_data.append([name, len(sub_df), float(sub_df["CAPITAL VAL (ZAR)"].sum())])
-                                                
-                                                ws_exec.merge_range('A1:C1', "DEALERSHIP UNENCUMBERED STOCK MATRIX", t_fmt)
-                                                ws_exec.set_row(0, 30); ws_exec.set_row(1, 35)
-                                                ws_exec.write(1, 0, "STOCK DIVISION", h_fmt); ws_exec.write(1, 1, "NO. OF UNITS", h_fmt); ws_exec.write(1, 2, "CAPITAL VALUE (ZAR)", h_fmt)
-                                                
-                                                r_idx = 1
-                                                for r_idx, row in enumerate(summary_data, 2):
-                                                    ws_exec.write(r_idx, 0, row[0], txt_fmt); ws_exec.write(r_idx, 1, row[1], n_fmt); ws_exec.write_number(r_idx, 2, row[2], c_fmt)
-
-                                                # Matrix 2: Floorplan Ratio & Capital Allocation (NEW)
-                                                row_cursor = r_idx + 3
-                                                ws_exec.merge_range(row_cursor, 0, row_cursor, 2, "FLOORPLAN RATIO & CAPITAL ALLOCATION", t_fmt)
-                                                ws_exec.set_row(row_cursor, 30)
-                                                ws_exec.set_row(row_cursor + 1, 35)
-                                                ws_exec.write(row_cursor + 1, 0, "FINANCE STATUS", h_fmt)
-                                                ws_exec.write(row_cursor + 1, 1, "TOTAL UNITS", h_fmt)
-                                                ws_exec.write(row_cursor + 1, 2, "% OF TOTAL STOCK", h_fmt)
-                                                
-                                                tot_units = len(df_live_stock)
-                                                u_units = len(unenc_df)
-                                                fp_units = len(df_live_stock[df_live_stock["FP STATUS"] == "🏦 ON FLOORPLAN"])
-                                                pend_units = len(df_live_stock[df_live_stock["FP STATUS"] == "⚪ PENDING RECON"])
-                                                
-                                                u_pct = u_units / tot_units if tot_units else 0
-                                                fp_pct = fp_units / tot_units if tot_units else 0
-                                                pend_pct = pend_units / tot_units if tot_units else 0
-                                                
-                                                data_matrix = [
-                                                    ("🟢 UNENCUMBERED", u_units, u_pct),
-                                                    ("🏦 ON FLOORPLAN", fp_units, fp_pct),
-                                                    ("⚪ PENDING RECON", pend_units, pend_pct)
-                                                ]
-                                                
-                                                for i, (status, count, pct) in enumerate(data_matrix, row_cursor + 2):
-                                                    ws_exec.write(i, 0, status, txt_fmt)
-                                                    ws_exec.write(i, 1, count, n_fmt)
-                                                    ws_exec.write(i, 2, pct, pct_fmt)
-                                                    
-                                                final_row = row_cursor + 5
-                                                ws_exec.write(final_row, 0, "TOTAL DEALERSHIP STOCK", h_fmt)
-                                                ws_exec.write(final_row, 1, tot_units, h_fmt)
-                                                ws_exec.write(final_row, 2, 1.0, h_pct_fmt)
-
-                                                # Sheet 2+: Franchise Data with Comments
-                                                for fran in sorted(unenc_df["FRANCHISE DIVISION"].unique()):
-                                                    f_df = unenc_df[unenc_df["FRANCHISE DIVISION"] == fran]
-                                                    if f_df.empty or fran.strip() == "LHP": continue
-                                                    ws = workbook.add_worksheet(str(fran).replace('/', '-')[:31])
-                                                    ws.hide_gridlines(2)
-                                                    ws.set_column('A:A', 15); ws.set_column('B:B', 40); ws.set_column('C:E', 15); ws.set_column('F:F', 45)
-                                                    
-                                                    cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "ADMIN COMMENTS"]
-                                                    ws.merge_range(0, 0, 0, 5, f"UNENCUMBERED ASSETS: {fran.upper()}", t_fmt)
-                                                    ws.set_row(0, 30); ws.set_row(1, 35)
-                                                    for c_idx, c_name in enumerate(cols): ws.write(1, c_idx, c_name, h_fmt)
-                                                    
-                                                    for row_idx, row_val in enumerate(f_df[cols].values, 2):
-                                                        ws.write(row_idx, 0, row_val[0], txt_fmt); ws.write(row_idx, 1, row_val[1], txt_fmt); ws.write(row_idx, 2, row_val[2], txt_fmt)
-                                                        ws.write(row_idx, 3, row_val[3], n_fmt); ws.write_number(row_idx, 4, float(row_val[4]), c_fmt); ws.write(row_idx, 5, str(row_val[5]), txt_fmt)
-                                            
-                                            msg = EmailMessage()
-                                            msg['Subject'] = f"🟢 LIVE UNENCUMBERED STOCKBOOK & RATIOS - {datetime.now(SAST).strftime('%d %b %Y')}"
-                                            msg['From'] = st.secrets["smtp"]["sender_email"]
-                                            msg['To'] = u_email
-                                            msg.set_content("Good morning,\n\nAttached is the Live Unencumbered Stockbook featuring direct administrative comments and the global Floorplan Allocation Matrix.\n\nAutomated Distribution System")
-                                            msg.add_attachment(excel_buffer.getvalue(), maintype='application', subtype='vnd.openxmlformats-officedocument.spreadsheetml.sheet', filename=f"BMW_Unencumbered_Stockbook_{datetime.now(SAST).strftime('%Y%m%d')}.xlsx")
-                                            
-                                            with smtplib.SMTP(st.secrets["smtp"]["server"], int(st.secrets["smtp"]["port"])) as server:
-                                                server.starttls(); server.login(st.secrets["smtp"]["sender_email"], st.secrets["smtp"]["password"]); server.send_message(msg)
-                                            st.success("✅ Unencumbered Stockbook Dispatched!")
+                                            supabase.table("used_car_stock").update({"comments": new_val}).eq("vsb_no", vsb).execute()
+                                            update_count += 1
                                         except Exception as e:
-                                            st.error(f"❌ Transmission Failed: {e}")
-            else:
-                st.info("💡 The used vehicle stock register is currently empty. Waiting for Finance/Admin profile sync.")
+                                            st.error(f"Failed to save {vsb}: {e}")
+                                
+                                if update_count > 0: 
+                                    st.success(f"✅ {update_count} comments permanently saved to the cloud.")
+                                    safe_rerun()
+                                else: 
+                                    st.info("No changes made to comments.")
+                                
+                            st.markdown("---")
+                            
+                            if IS_MANAGEMENT:
+                                with st.expander("📤 DISTRIBUTE UNENCUMBERED LIST VIA EMAIL"):
+                                    st.markdown("#### Send Targeted Unencumbered Matrix")
+                                    u_email = st.text_input("RECIPIENT EMAIL ADDRESS(ES)", key="u_email_in")
+                                    
+                                    if st.button("🚀 DISPATCH UNENCUMBERED STOCKBOOK", key="u_dispatch_btn") and u_email:
+                                        with st.spinner("Formatting Unencumbered Matrix..."):
+                                            try:
+                                                excel_buffer = io.BytesIO()
+                                                with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                                                    workbook = writer.book
+                                                    t_fmt = workbook.add_format({'bold': True, 'font_size': 14, 'bg_color': '#003366', 'font_color': '#FFFFFF', 'align': 'center', 'valign': 'vcenter', 'border': 1})
+                                                    h_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'align': 'center', 'valign': 'vcenter', 'border': 1})
+                                                    n_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'num_format': '#,##0'})
+                                                    c_fmt = workbook.add_format({'border': 1, 'valign': 'vcenter', 'num_format': 'R #,##0.00'})
+                                                    txt_fmt = workbook.add_format({'border': 1, 'valign': 'vcenter'})
+                                                    pct_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'num_format': '0.0%'})
+                                                    h_pct_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'align': 'center', 'valign': 'vcenter', 'border': 1, 'num_format': '0.0%'})
+                                                    
+                                                    # Sheet 1: Executive Summary (Without Aging Provision, With Floorplan Ratio Matrix)
+                                                    ws_exec = workbook.add_worksheet('EXECUTIVE OVERVIEW')
+                                                    ws_exec.hide_gridlines(2)
+                                                    ws_exec.set_column('A:A', 30); ws_exec.set_column('B:C', 25)
+                                                    
+                                                    # Matrix 1: Unencumbered Division Breakdown
+                                                    cat_defs = [("Used BMW", "b -|i -"), ("Used MINI", "m -"), ("Used MC", "a -|c -"), ("Tier Sandton", "z -")]
+                                                    summary_data = []
+                                                    for name, mask in cat_defs:
+                                                        sub_df = unenc_df[unenc_df["FRANCHISE DIVISION"].str.lower().str.contains(mask, regex=True)]
+                                                        summary_data.append([name, len(sub_df), float(sub_df["CAPITAL VAL (ZAR)"].sum())])
+                                                    
+                                                    ws_exec.merge_range('A1:C1', "DEALERSHIP UNENCUMBERED STOCK MATRIX", t_fmt)
+                                                    ws_exec.set_row(0, 30); ws_exec.set_row(1, 35)
+                                                    ws_exec.write(1, 0, "STOCK DIVISION", h_fmt); ws_exec.write(1, 1, "NO. OF UNITS", h_fmt); ws_exec.write(1, 2, "CAPITAL VALUE (ZAR)", h_fmt)
+                                                    
+                                                    r_idx = 1
+                                                    for r_idx, row in enumerate(summary_data, 2):
+                                                        ws_exec.write(r_idx, 0, row[0], txt_fmt); ws_exec.write(r_idx, 1, row[1], n_fmt); ws_exec.write_number(r_idx, 2, row[2], c_fmt)
+
+                                                    # Matrix 2: Floorplan Ratio & Capital Allocation
+                                                    row_cursor = r_idx + 3
+                                                    ws_exec.merge_range(row_cursor, 0, row_cursor, 2, "FLOORPLAN RATIO & CAPITAL ALLOCATION", t_fmt)
+                                                    ws_exec.set_row(row_cursor, 30)
+                                                    ws_exec.set_row(row_cursor + 1, 35)
+                                                    ws_exec.write(row_cursor + 1, 0, "FINANCE STATUS", h_fmt)
+                                                    ws_exec.write(row_cursor + 1, 1, "TOTAL UNITS", h_fmt)
+                                                    ws_exec.write(row_cursor + 1, 2, "% OF TOTAL STOCK", h_fmt)
+                                                    
+                                                    tot_units = len(df_live_stock)
+                                                    u_units = len(unenc_df)
+                                                    fp_units = len(df_live_stock[df_live_stock["FP STATUS"] == "🏦 ON FLOORPLAN"])
+                                                    pend_units = len(df_live_stock[df_live_stock["FP STATUS"] == "⚪ PENDING RECON"])
+                                                    
+                                                    u_pct = u_units / tot_units if tot_units else 0
+                                                    fp_pct = fp_units / tot_units if tot_units else 0
+                                                    pend_pct = pend_units / tot_units if tot_units else 0
+                                                    
+                                                    data_matrix = [
+                                                        ("🟢 UNENCUMBERED", u_units, u_pct),
+                                                        ("🏦 ON FLOORPLAN", fp_units, fp_pct),
+                                                        ("⚪ PENDING RECON", pend_units, pend_pct)
+                                                    ]
+                                                    
+                                                    for i, (status, count, pct) in enumerate(data_matrix, row_cursor + 2):
+                                                        ws_exec.write(i, 0, status, txt_fmt)
+                                                        ws_exec.write(i, 1, count, n_fmt)
+                                                        ws_exec.write(i, 2, pct, pct_fmt)
+                                                        
+                                                    final_row = row_cursor + 5
+                                                    ws_exec.write(final_row, 0, "TOTAL DEALERSHIP STOCK", h_fmt)
+                                                    ws_exec.write(final_row, 1, tot_units, h_fmt)
+                                                    ws_exec.write(final_row, 2, 1.0, h_pct_fmt)
+
+                                                    # Sheet 2+: Franchise Data with Comments
+                                                    for fran in sorted(unenc_df["FRANCHISE DIVISION"].unique()):
+                                                        f_df = unenc_df[unenc_df["FRANCHISE DIVISION"] == fran]
+                                                        if f_df.empty or fran.strip() == "LHP": continue
+                                                        ws = workbook.add_worksheet(str(fran).replace('/', '-')[:31])
+                                                        ws.hide_gridlines(2)
+                                                        ws.set_column('A:A', 15); ws.set_column('B:B', 40); ws.set_column('C:E', 15); ws.set_column('F:F', 45)
+                                                        
+                                                        cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "ADMIN COMMENTS"]
+                                                        ws.merge_range(0, 0, 0, 5, f"UNENCUMBERED ASSETS: {fran.upper()}", t_fmt)
+                                                        ws.set_row(0, 30); ws.set_row(1, 35)
+                                                        for c_idx, c_name in enumerate(cols): ws.write(1, c_idx, c_name, h_fmt)
+                                                        
+                                                        for row_idx, row_val in enumerate(f_df[cols].values, 2):
+                                                            ws.write(row_idx, 0, row_val[0], txt_fmt); ws.write(row_idx, 1, row_val[1], txt_fmt); ws.write(row_idx, 2, row_val[2], txt_fmt)
+                                                            ws.write(row_idx, 3, row_val[3], n_fmt); ws.write_number(row_idx, 4, float(row_val[4]), c_fmt); ws.write(row_idx, 5, str(row_val[5]), txt_fmt)
+                                                
+                                                msg = EmailMessage()
+                                                msg['Subject'] = f"🟢 LIVE UNENCUMBERED STOCKBOOK & RATIOS - {datetime.now(SAST).strftime('%d %b %Y')}"
+                                                msg['From'] = st.secrets["smtp"]["sender_email"]
+                                                msg['To'] = u_email
+                                                msg.set_content("Good morning,\n\nAttached is the Live Unencumbered Stockbook featuring direct administrative comments and the global Floorplan Allocation Matrix.\n\nAutomated Distribution System")
+                                                msg.add_attachment(excel_buffer.getvalue(), maintype='application', subtype='vnd.openxmlformats-officedocument.spreadsheetml.sheet', filename=f"BMW_Unencumbered_Stockbook_{datetime.now(SAST).strftime('%Y%m%d')}.xlsx")
+                                                
+                                                with smtplib.SMTP(st.secrets["smtp"]["server"], int(st.secrets["smtp"]["port"])) as server:
+                                                    server.starttls(); server.login(st.secrets["smtp"]["sender_email"], st.secrets["smtp"]["password"]); server.send_message(msg)
+                                                st.success("✅ Unencumbered Stockbook Dispatched!")
+                                            except Exception as e:
+                                                st.error(f"❌ Transmission Failed: {e}")
 
         # ---- TAB 4: INTERACTIVE PIPELINE TRACKER ----
         with tab4:
