@@ -290,17 +290,27 @@ if st.session_state['authenticated']:
                         current_site = sites[idx]
                         site_id = current_site['id']
                         
-                        col_add, _ = st.columns([1, 2])
+                        col_add, _ = st.columns([1, 1])
                         with col_add:
-                            new_task_title = st.text_input("ENTER NEW TASK", key=f"new_task_{site_id}")
+                            st.markdown("#### DEPLOY NEW TASK")
+                            new_task_title = st.text_input("TASK TITLE", key=f"new_task_{site_id}", placeholder="e.g., HVAC Maintenance Request")
+                            new_task_desc = st.text_area("DETAILED DESCRIPTION", key=f"new_desc_{site_id}", placeholder="Enter specific instructions or requirements here...")
+                            new_priority = st.selectbox("PRIORITY LEVEL", ["🔴 High", "🟡 Medium", "🟢 Low"], index=1, key=f"new_pri_{site_id}")
+                            
                             if st.button("CREATE TASK", key=f"btn_create_{site_id}"):
                                 if new_task_title:
                                     supabase.table("site_tasks").insert({
-                                        "site_id": site_id, "task_title": new_task_title, "created_by": st.session_state['name']
+                                        "site_id": site_id, 
+                                        "task_title": new_task_title, 
+                                        "task_description": new_task_desc,
+                                        "priority": new_priority,
+                                        "created_by": st.session_state['name']
                                     }).execute()
                                     st.success("Task deployed."); safe_rerun()
+                                else:
+                                    st.warning("Task Title is required.")
                                     
-                        st.markdown("<br>", unsafe_allow_html=True)
+                        st.markdown("<br><hr>", unsafe_allow_html=True)
                         
                         # Fetch tasks for this specific site
                         tasks_data = supabase.table("site_tasks").select("*").eq("site_id", site_id).execute().data
@@ -309,7 +319,7 @@ if st.session_state['authenticated']:
                         col_open, col_prog, col_arch = st.columns(3)
                         
                         # Kanban Logic
-                        for status, col, icon in [("Open", col_open, "🔴"), ("In Progress", col_prog, "🟡"), ("Completed", col_arch, "🟢")]:
+                        for status, col, icon in [("Open", col_open, "⚪"), ("In Progress", col_prog, "🔵"), ("Completed", col_arch, "🏁")]:
                             with col:
                                 st.markdown(f"#### {icon} {status.upper()}")
                                 if df_tasks.empty:
@@ -320,10 +330,22 @@ if st.session_state['authenticated']:
                                 if subset.empty:
                                     st.caption("No tasks.")
                                 else:
+                                    # Sort so high priority is at the top conceptually
+                                    subset = subset.sort_values('created_at', ascending=False)
                                     for _, task_row in subset.iterrows():
                                         task_id = task_row['id']
-                                        with st.expander(f"📌 {task_row['task_title']}"):
+                                        
+                                        # Extract the emoji badge for visual aid
+                                        pri_badge = task_row.get('priority', '🟡 Medium')
+                                        pri_emoji = pri_badge.split()[0] if pri_badge else "🟡"
+                                        
+                                        with st.expander(f"{pri_emoji} {task_row['task_title']}"):
+                                            st.markdown(f"**Priority:** {pri_badge}")
+                                            if task_row.get('task_description'):
+                                                st.info(f"{task_row['task_description']}")
+                                                
                                             st.caption(f"Created by: {task_row.get('created_by', 'System')} | {str(task_row['created_at']).split('T')[0]}")
+                                            st.markdown("---")
                                             
                                             # Status Updater
                                             new_status = st.radio("Move to:", ["Open", "In Progress", "Completed"], index=["Open", "In Progress", "Completed"].index(status), horizontal=True, key=f"rad_{task_id}")
@@ -391,7 +413,6 @@ if st.session_state['authenticated']:
                 # Create a pivot table counting status per site
                 pivot_df = pd.crosstab(df_t['site_name'], df_t['status'])
                 
-                # Ensure columns exist even if no tasks have that status yet
                 for col in ["Open", "In Progress", "Completed"]:
                     if col not in pivot_df.columns:
                         pivot_df[col] = 0
@@ -400,16 +421,75 @@ if st.session_state['authenticated']:
                 
                 st.markdown("---")
                 
-                st.markdown("#### 🚨 ACTIVE BOTTLENECKS (OPEN & IN PROGRESS)")
-                active_df = df_t[df_t['status'] != 'Completed'].copy()
-                if not active_df.empty:
-                    active_df['Created Date'] = pd.to_datetime(active_df['created_at']).dt.strftime('%Y-%m-%d')
-                    render_active = active_df[['site_name', 'task_title', 'status', 'created_by', 'Created Date']].rename(columns={
-                        'site_name': 'PROPERTY SITE', 'task_title': 'TASK REQUIREMENT', 'status': 'CURRENT STATUS', 'created_by': 'ISSUED BY'
-                    })
-                    st.dataframe(render_active, hide_index=True, use_container_width=True)
+                # ----------------------------------------------------
+                # NEW FEATURE: DIRECTOR DRILL-DOWN & NOTE MODULE
+                # ----------------------------------------------------
+                st.markdown("#### 🔎 PORTFOLIO TASK DRILL-DOWN")
+                st.caption("Investigate specific property task flows and append Executive directives.")
+                
+                dir_c1, dir_c2, dir_c3 = st.columns([2, 1, 1])
+                site_filter = dir_c1.selectbox("FILTER BY PROPERTY", ["All Sites"] + df_s['site_name'].tolist())
+                status_filter = dir_c2.selectbox("STATUS", ["All", "Open", "In Progress", "Completed"])
+                pri_filter = dir_c3.selectbox("PRIORITY", ["All", "🔴 High", "🟡 Medium", "🟢 Low"])
+                
+                # Apply Filters
+                drill_df = df_t.copy()
+                if site_filter != "All Sites": drill_df = drill_df[drill_df['site_name'] == site_filter]
+                if status_filter != "All": drill_df = drill_df[drill_df['status'] == status_filter]
+                if pri_filter != "All": drill_df = drill_df[drill_df['priority'] == pri_filter]
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                if drill_df.empty:
+                    st.success("No tasks match the current executive filter parameters.")
                 else:
-                    st.success("All portfolio tasks have been resolved.")
+                    drill_df = drill_df.sort_values(by='created_at', ascending=False)
+                    for _, task_row in drill_df.iterrows():
+                        task_id = task_row['id']
+                        
+                        # Generate status and priority icons for quick visual reading
+                        s_icon = "🏁" if task_row['status'] == "Completed" else ("🔵" if task_row['status'] == "In Progress" else "⚪")
+                        p_icon = str(task_row.get('priority', '🟡 Medium')).split()[0]
+                        
+                        with st.expander(f"{s_icon} [{task_row['site_name'].upper()}] {p_icon} {task_row['task_title']}"):
+                            col_info1, col_info2 = st.columns(2)
+                            with col_info1:
+                                st.markdown(f"**Current Status:** {task_row['status']}")
+                                st.markdown(f"**Priority Level:** {task_row.get('priority', 'Medium')}")
+                            with col_info2:
+                                st.markdown(f"**Delegated By:** {task_row.get('created_by', 'System')}")
+                                st.markdown(f"**Logged Date:** {str(task_row['created_at']).split('T')[0]}")
+                                
+                            if pd.notna(task_row.get('task_description')) and task_row.get('task_description'):
+                                st.info(f"**Requirement Details:**\n\n{task_row['task_description']}")
+                                
+                            st.markdown("---")
+                            st.markdown("##### 📋 AUDIT & DIRECTIVE TRAIL")
+                            
+                            notes_data = supabase.table("task_notes").select("*").eq("task_id", task_id).order("created_at").execute().data
+                            if notes_data:
+                                for note in notes_data:
+                                    bg = container_bg
+                                    border = text_color
+                                    # Visually highlight notes left by the director
+                                    if "(Director)" in note['author_name']:
+                                        bg = "#2b1c1c" if theme == 'Dark' else "#ffe6e6"
+                                        border = "#ff4b4b"
+                                        
+                                    st.markdown(f"<div style='background-color:{bg}; padding:10px; margin-bottom:8px; border-left:4px solid {border};'><small style='color:{metric_label};'><b>{note['author_name']}</b> - {str(note['created_at']).replace('T', ' ')[:16]}</small><br>{note['note_text']}</div>", unsafe_allow_html=True)
+                            else:
+                                st.caption("No operational updates logged.")
+                                
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            new_dir_note = st.text_area("APPEND EXECUTIVE DIRECTIVE", key=f"dir_note_in_{task_id}", placeholder="Type directive or query for the property manager here...")
+                            if st.button("ISSUE DIRECTIVE", key=f"dir_note_btn_{task_id}"):
+                                if new_dir_note:
+                                    author_tag = f"{st.session_state['name']} (Director)"
+                                    supabase.table("task_notes").insert({
+                                        "task_id": task_id, "note_text": new_dir_note, "author_name": author_tag
+                                    }).execute()
+                                    st.success("Directive published to task timeline.")
+                                    safe_rerun()
 
         # ====================================================================
         # ROUTER 3: DEALERSHIP OPERATIONS (SALES, DP, ADMIN)
@@ -1384,7 +1464,6 @@ else:
             new_username = st.text_input("CHOOSE SYSTEM USERNAME", key="reg_user").strip().lower()
             new_password = st.text_input("CHOOSE ACCESS PASSWORD", type="password", key="reg_pass")
             
-            # Expanded Role Options
             chosen_role = st.selectbox(
                 "SELECT POSITION", 
                 ["Sales Representative", "Dealer Principal", "Finance/Admin", "Sales Manager", "Property Manager", "Group Director"], 
