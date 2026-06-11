@@ -407,8 +407,9 @@ if st.session_state['authenticated']:
                 # Cross-Site Activity Breakdown
                 st.markdown("#### 📊 TASK DISTRIBUTION BY PROPERTY")
                 
-                # Merge tasks with site names for analytics
-                df_t = df_t.merge(df_s[['id', 'site_name']], left_on='site_id', right_on='id', how='left')
+                # --- BUG FIX: Safely merge the tasks and sites without causing an 'id' overlap crash ---
+                df_s_clean = df_s[['id', 'site_name']].rename(columns={'id': 'site_id'})
+                df_t = df_t.merge(df_s_clean, on='site_id', how='left')
                 
                 # Create a pivot table counting status per site
                 pivot_df = pd.crosstab(df_t['site_name'], df_t['status'])
@@ -422,7 +423,7 @@ if st.session_state['authenticated']:
                 st.markdown("---")
                 
                 # ----------------------------------------------------
-                # NEW FEATURE: DIRECTOR DRILL-DOWN & NOTE MODULE
+                # DIRECTOR DRILL-DOWN & NOTE MODULE
                 # ----------------------------------------------------
                 st.markdown("#### 🔎 PORTFOLIO TASK DRILL-DOWN")
                 st.caption("Investigate specific property task flows and append Executive directives.")
@@ -486,7 +487,7 @@ if st.session_state['authenticated']:
                                 if new_dir_note:
                                     author_tag = f"{st.session_state['name']} (Director)"
                                     supabase.table("task_notes").insert({
-                                        "task_id": task_id, "note_text": new_dir_note, "author_name": author_tag
+                                        "task_id": int(task_id), "note_text": new_dir_note, "author_name": author_tag
                                     }).execute()
                                     st.success("Directive published to task timeline.")
                                     safe_rerun()
