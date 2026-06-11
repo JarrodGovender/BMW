@@ -38,8 +38,12 @@ except ImportError:
 st.set_page_config(page_title="Phase V Enterprise Hub", layout="wide")
 SAST = pytz.timezone('Africa/Johannesburg')
 
+# Public CDN URLs for Official Brand Assets
 BMW_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg"
 M_SPORT_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/b/b3/BMW_M_logo.svg"
+MINI_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/e/ea/MINI_logo.svg"
+MOTORRAD_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/1/13/BMW_Motorrad_Logo.svg"
+MG_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/MG_logo.svg/512px-MG_logo.svg.png"
 
 def safe_rerun():
     if hasattr(st, "rerun"):
@@ -283,7 +287,6 @@ if st.session_state['authenticated']:
             if not sites:
                 st.info("No sites registered. Expand the menu above to build your portfolio.")
             else:
-                # Add Archive to the end of the site tabs
                 tab_names = [s['site_name'] for s in sites] + ["🗄️ ARCHIVED TASKS"]
                 site_tabs = st.tabs(tab_names)
                 
@@ -314,14 +317,12 @@ if st.session_state['authenticated']:
                                     
                         st.markdown("<br><hr>", unsafe_allow_html=True)
                         
-                        # Fetch tasks for this specific site
                         tasks_data = supabase.table("site_tasks").select("*").eq("site_id", site_id).execute().data
                         df_tasks = pd.DataFrame(tasks_data) if tasks_data else pd.DataFrame()
                         
                         if not df_tasks.empty and 'is_archived' not in df_tasks.columns:
                             df_tasks['is_archived'] = False
                         
-                        # Only show NON-ARCHIVED tasks on the Kanban
                         if not df_tasks.empty:
                             df_active = df_tasks[df_tasks['is_archived'] != True]
                         else:
@@ -340,7 +341,6 @@ if st.session_state['authenticated']:
                                 if subset.empty:
                                     st.caption("No tasks.")
                                 else:
-                                    # Sort so high priority is at the top conceptually
                                     subset = subset.sort_values('created_at', ascending=False)
                                     for _, task_row in subset.iterrows():
                                         task_id = task_row['id']
@@ -355,22 +355,18 @@ if st.session_state['authenticated']:
                                             st.caption(f"Created by: {task_row.get('created_by', 'System')} | {str(task_row['created_at']).split('T')[0]}")
                                             st.markdown("---")
                                             
-                                            # Status Updater
                                             new_status = st.radio("Move to:", ["Open", "In Progress", "Completed"], index=["Open", "In Progress", "Completed"].index(status), horizontal=True, key=f"rad_{task_id}")
                                             if new_status != status:
                                                 if st.button("UPDATE STATUS", key=f"upd_{task_id}"):
                                                     supabase.table("site_tasks").update({"status": new_status}).eq("id", task_id).execute()
                                                     safe_rerun()
                                             
-                                            # Allow Archiving if Completed
                                             if status == "Completed":
                                                 if st.button("🗃️ MOVE TO ARCHIVE", key=f"arch_btn_{task_id}"):
                                                     supabase.table("site_tasks").update({"is_archived": True}).eq("id", task_id).execute()
                                                     safe_rerun()
                                                     
                                             st.markdown("---")
-                                            
-                                            # Notes System
                                             notes_data = supabase.table("task_notes").select("*").eq("task_id", task_id).order("created_at").execute().data
                                             if notes_data:
                                                 for note in notes_data:
@@ -400,7 +396,6 @@ if st.session_state['authenticated']:
                     if df_archived.empty:
                         st.info("No tasks have been moved to the archive yet.")
                     else:
-                        # Pull site names for context
                         site_mapping = {s['id']: s['site_name'] for s in sites}
                         df_archived['site_name'] = df_archived['site_id'].map(site_mapping)
                         
@@ -451,10 +446,8 @@ if st.session_state['authenticated']:
                 if df_s.empty or df_t.empty:
                     st.info("Insufficient data available in the portfolio network to generate executive metrics.")
                 else:
-                    # Filter active tasks for dashboard metrics
                     df_active = df_t[df_t['is_archived'] != True]
                     
-                    # Global KPIs
                     total_sites = len(df_s)
                     total_tasks = len(df_active)
                     completed_tasks = len(df_active[df_active['status'] == 'Completed'])
@@ -468,7 +461,7 @@ if st.session_state['authenticated']:
                     st.markdown("---")
                     
                     st.markdown("#### 📊 TASK DISTRIBUTION BY PROPERTY")
-                    # Safe merge using clean columns to avoid 'id_x'/'id_y' KeyErrors
+                    # Safe merge for Director active tab
                     df_s_clean = df_s[['id', 'site_name']].rename(columns={'id': 'site_id'})
                     df_active = df_active.merge(df_s_clean, on='site_id', how='left')
                     
@@ -542,7 +535,7 @@ if st.session_state['authenticated']:
                 if not df_t.empty:
                     df_arch = df_t[df_t['is_archived'] == True]
                     if not df_arch.empty:
-                        # Fix: Changed desc=True to ascending=False for Python logic
+                        # SAFE MERGE & CORRECT PANDAS SORTING
                         df_s_clean = df_s[['id', 'site_name']].rename(columns={'id': 'site_id'})
                         df_arch = df_arch.merge(df_s_clean, on='site_id', how='left').sort_values(by='created_at', ascending=False)
                         
@@ -1502,14 +1495,26 @@ else:
     gate_col1, gate_col2, gate_col3 = st.columns([1.5, 3, 1.5])
     with gate_col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        # 1. Main Phase V Executive Logo
+        col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
+        with col_logo2:
+            try:
+                st.image("PhaseV-Automotive-logo.png", use_container_width=True)
+            except Exception:
+                st.markdown("<h2 style='text-align: center; font-weight: 300; letter-spacing: 1px; margin-bottom: 0;'>PHASE V MOTOR INVESTMENTS</h2>", unsafe_allow_html=True)
+        
+        # 2. Manufacturer Brand Portfolio Ribbon
         st.markdown(f"""
-            <div style='display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 10px;'>
-                <img src='{BMW_LOGO_URL}' width='80' style='height: auto;'>
-                <img src='{M_SPORT_LOGO_URL}' width='100' style='height: auto; margin-top: 4px;'>
+            <div style='display: flex; justify-content: center; align-items: center; gap: 30px; margin-top: 15px; margin-bottom: 15px; flex-wrap: wrap;'>
+                <img src='{BMW_LOGO_URL}' width='45' style='height: auto;'>
+                <img src='{M_SPORT_LOGO_URL}' width='60' style='height: auto; margin-top: 4px;'>
+                <img src='{MINI_LOGO_URL}' width='65' style='height: auto;'>
+                <img src='{MOTORRAD_LOGO_URL}' width='50' style='height: auto;'>
+                <img src='{MG_LOGO_URL}' width='55' style='height: auto;'>
             </div>
         """, unsafe_allow_html=True)
             
-        st.markdown("<h2 style='text-align: center; font-weight: 300; letter-spacing: 1px; margin-top: 10px; margin-bottom: 0;'>PHASE V MOTOR INVESTMENTS</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; font-size:0.85rem; color:#666666; letter-spacing:1px; margin-top: 5px;'>ENTERPRISE SECURE GATEWAY</p>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
     
