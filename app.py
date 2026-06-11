@@ -9,6 +9,7 @@ import io
 import hashlib
 import random
 import time
+import base64
 from supabase import create_client, Client
 
 # ==========================================
@@ -33,17 +34,27 @@ except ImportError:
     GEMINI_AVAILABLE = False
 
 # ==========================================
-# 2. INITIALIZATION & PRODUCTION API SETUP
+# 2. LOCAL ASSET ENCODER & INITIALIZATION
 # ==========================================
 st.set_page_config(page_title="Phase V Enterprise Hub", layout="wide")
 SAST = pytz.timezone('Africa/Johannesburg')
 
-# Public CDN URLs for Official Brand Assets
-BMW_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg"
-M_SPORT_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/b/b3/BMW_M_logo.svg"
-MINI_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/e/ea/MINI_logo.svg"
-MOTORRAD_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/1/13/BMW_Motorrad_Logo.svg"
-MG_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/MG_logo.svg/512px-MG_logo.svg.png"
+def get_local_img(file_name, cdn_fallback):
+    """Converts local PNGs to base64 for secure HTML rendering, falls back to CDN if missing."""
+    if os.path.exists(file_name):
+        try:
+            with open(file_name, "rb") as f:
+                data = f.read()
+                return f"data:image/png;base64,{base64.b64encode(data).decode()}"
+        except Exception:
+            return cdn_fallback
+    return cdn_fallback
+
+BMW_LOGO = get_local_img("BMW.png", "https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg")
+MINI_LOGO = get_local_img("MINI.png", "https://upload.wikimedia.org/wikipedia/commons/e/ea/MINI_logo.svg")
+MG_LOGO = get_local_img("MG.png", "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/MG_logo.svg/512px-MG_logo.svg.png")
+M_SPORT_LOGO = get_local_img("M_SPORT.png", "https://upload.wikimedia.org/wikipedia/commons/b/b3/BMW_M_logo.svg")
+MOTORRAD_LOGO = get_local_img("MOTORRAD.png", "https://upload.wikimedia.org/wikipedia/commons/1/13/BMW_Motorrad_Logo.svg")
 
 def safe_rerun():
     if hasattr(st, "rerun"):
@@ -207,8 +218,8 @@ if st.session_state['authenticated']:
     with header_col1:
         st.markdown(f"""
             <div class='bmw-logo-left-header'>
-                <img src='{BMW_LOGO_URL}' width='50' style='height: auto;'>
-                <img src='{M_SPORT_LOGO_URL}' width='65' style='height: auto; margin-top: 4px;'>
+                <img src='{BMW_LOGO}' width='50' style='height: auto;'>
+                <img src='{M_SPORT_LOGO}' width='65' style='height: auto; margin-top: 4px;'>
                 <div style='margin-left: 10px;'>
                     <h3 style='margin: 0; padding: 0; font-size: 1.4rem; font-weight: 400; letter-spacing: 0.5px;'>PHASE V MOTOR INVESTMENTS</h3>
                     <p style='margin: 0; padding: 0; font-size: 0.75rem; color: {metric_label}; letter-spacing: 1px;'>ENTERPRISE PRODUCTION WORKSPACE NODE</p>
@@ -461,7 +472,6 @@ if st.session_state['authenticated']:
                     st.markdown("---")
                     
                     st.markdown("#### 📊 TASK DISTRIBUTION BY PROPERTY")
-                    # Safe merge for Director active tab
                     df_s_clean = df_s[['id', 'site_name']].rename(columns={'id': 'site_id'})
                     df_active = df_active.merge(df_s_clean, on='site_id', how='left')
                     
@@ -535,7 +545,6 @@ if st.session_state['authenticated']:
                 if not df_t.empty:
                     df_arch = df_t[df_t['is_archived'] == True]
                     if not df_arch.empty:
-                        # SAFE MERGE & CORRECT PANDAS SORTING
                         df_s_clean = df_s[['id', 'site_name']].rename(columns={'id': 'site_id'})
                         df_arch = df_arch.merge(df_s_clean, on='site_id', how='left').sort_values(by='created_at', ascending=False)
                         
@@ -1500,18 +1509,18 @@ else:
         col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
         with col_logo2:
             try:
-                st.image("PhaseV-Automotive-logo.png", use_container_width=True)
+                st.image("PHASEV.png", use_container_width=True)
             except Exception:
                 st.markdown("<h2 style='text-align: center; font-weight: 300; letter-spacing: 1px; margin-bottom: 0;'>PHASE V MOTOR INVESTMENTS</h2>", unsafe_allow_html=True)
         
         # 2. Manufacturer Brand Portfolio Ribbon
         st.markdown(f"""
             <div style='display: flex; justify-content: center; align-items: center; gap: 30px; margin-top: 15px; margin-bottom: 15px; flex-wrap: wrap;'>
-                <img src='{BMW_LOGO_URL}' width='45' style='height: auto;'>
-                <img src='{M_SPORT_LOGO_URL}' width='60' style='height: auto; margin-top: 4px;'>
-                <img src='{MINI_LOGO_URL}' width='65' style='height: auto;'>
-                <img src='{MOTORRAD_LOGO_URL}' width='50' style='height: auto;'>
-                <img src='{MG_LOGO_URL}' width='55' style='height: auto;'>
+                <img src='{BMW_LOGO}' width='45' style='height: auto;'>
+                <img src='{M_SPORT_LOGO}' width='60' style='height: auto; margin-top: 4px;'>
+                <img src='{MINI_LOGO}' width='65' style='height: auto;'>
+                <img src='{MOTORRAD_LOGO}' width='50' style='height: auto;'>
+                <img src='{MG_LOGO}' width='55' style='height: auto;'>
             </div>
         """, unsafe_allow_html=True)
             
