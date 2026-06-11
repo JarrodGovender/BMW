@@ -340,6 +340,7 @@ if st.session_state['authenticated']:
                                 if subset.empty:
                                     st.caption("No tasks.")
                                 else:
+                                    # Sort so high priority is at the top conceptually
                                     subset = subset.sort_values('created_at', ascending=False)
                                     for _, task_row in subset.iterrows():
                                         task_id = task_row['id']
@@ -541,8 +542,9 @@ if st.session_state['authenticated']:
                 if not df_t.empty:
                     df_arch = df_t[df_t['is_archived'] == True]
                     if not df_arch.empty:
+                        # Fix: Changed desc=True to ascending=False for Python logic
                         df_s_clean = df_s[['id', 'site_name']].rename(columns={'id': 'site_id'})
-                        df_arch = df_arch.merge(df_s_clean, on='site_id', how='left').sort_values(by='created_at', desc=True)
+                        df_arch = df_arch.merge(df_s_clean, on='site_id', how='left').sort_values(by='created_at', ascending=False)
                         
                         for _, a_row in df_arch.iterrows():
                             t_id = a_row['id']
