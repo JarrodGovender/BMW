@@ -379,7 +379,7 @@ if st.session_state['authenticated']:
                                                     
                                             st.markdown("---")
                                             try:
-                                                notes_data = supabase.table("task_notes").select("*").eq("task_id", task_id).order("created_at", desc=False).execute().data
+                                                notes_data = supabase.table("task_notes").select("*").eq("task_id", task_id).order("created_at", ascending=True).execute().data
                                             except: notes_data = []
                                                 
                                             if notes_data:
@@ -402,7 +402,7 @@ if st.session_state['authenticated']:
                     st.caption("Historical ledger of completed and securely archived operational tasks across all sites.")
                     
                     try:
-                        all_tasks_res = supabase.table("site_tasks").select("*").eq("is_archived", True).order("created_at", desc=True).execute()
+                        all_tasks_res = supabase.table("site_tasks").select("*").eq("is_archived", True).order("created_at", ascending=False).execute()
                         df_archived = pd.DataFrame(all_tasks_res.data) if all_tasks_res.data else pd.DataFrame()
                     except:
                         df_archived = pd.DataFrame()
@@ -427,7 +427,7 @@ if st.session_state['authenticated']:
                                     
                                 st.markdown("---")
                                 try:
-                                    notes_data = supabase.table("task_notes").select("*").eq("task_id", t_id).order("created_at", desc=False).execute().data
+                                    notes_data = supabase.table("task_notes").select("*").eq("task_id", t_id).order("created_at", ascending=True).execute().data
                                 except: notes_data = []
                                     
                                 if notes_data:
@@ -445,8 +445,8 @@ if st.session_state['authenticated']:
             dir_tab1, dir_tab2 = st.tabs(["📈 EXECUTIVE DASHBOARD", "🗄️ ARCHIVED TASKS"])
             
             try:
-                all_sites = supabase.table("property_sites").select("*").order("id", desc=False).execute().data
-                all_tasks = supabase.table("site_tasks").select("*").order("created_at", desc=True).execute().data
+                all_sites = supabase.table("property_sites").select("*").order("id", ascending=True).execute().data
+                all_tasks = supabase.table("site_tasks").select("*").order("created_at", ascending=False).execute().data
             except:
                 all_sites, all_tasks = [], []
                 
@@ -528,7 +528,7 @@ if st.session_state['authenticated']:
                                 st.markdown("##### 📋 AUDIT & DIRECTIVE TRAIL")
                                 
                                 try:
-                                    notes_data = supabase.table("task_notes").select("*").eq("task_id", task_id).order("created_at", desc=False).execute().data
+                                    notes_data = supabase.table("task_notes").select("*").eq("task_id", task_id).order("created_at", ascending=True).execute().data
                                 except: notes_data = []
                                     
                                 if notes_data:
@@ -569,7 +569,7 @@ if st.session_state['authenticated']:
                                     
                                 st.markdown("---")
                                 try:
-                                    notes_data = supabase.table("task_notes").select("*").eq("task_id", t_id).order("created_at", desc=False).execute().data
+                                    notes_data = supabase.table("task_notes").select("*").eq("task_id", t_id).order("created_at", ascending=True).execute().data
                                 except: notes_data = []
                                     
                                 if notes_data:
@@ -909,14 +909,17 @@ if st.session_state['authenticated']:
                         unique_franchises_options = sorted(list(df_live_stock["FRANCHISE DIVISION"].unique()))
                         unique_franchises_options = [f for f in unique_franchises_options if f.strip() != "LHP" and f.strip()]
                         
-                        col_filter1, col_filter2, col_filter3 = st.columns([2, 2, 1])
-                        with col_filter1: selected_franchises = st.multiselect("FILTER BY FRANCHISE DIVISION(S)", options=unique_franchises_options, key="franchise_multi_selector")
-                        with col_filter2: search_query = st.text_input("🔍 LIVE GLOBAL VEHICLE SEARCH", "").strip().lower()
-                        with col_filter3: st.markdown("<br>", unsafe_allow_html=True); show_hot_only = st.checkbox("🔥 SHOW HOT STOCKS ONLY", value=False, key="hot_stocks_toggle")
-                        
                         if IS_MANAGEMENT:
-                            selected_fp = st.selectbox("FILTER BY FLOORPLAN STATUS", ["ALL", "🏦 ON FLOORPLAN", "🟢 UNENCUMBERED", "⚪ PENDING RECON"])
+                            col_filter1, col_filter2, col_filter3, col_filter4 = st.columns([2, 2, 2, 1])
+                            with col_filter1: selected_franchises = st.multiselect("FILTER BY FRANCHISE DIVISION(S)", options=unique_franchises_options, key="franchise_multi_selector")
+                            with col_filter2: search_query = st.text_input("🔍 LIVE GLOBAL VEHICLE SEARCH", "").strip().lower()
+                            with col_filter3: fp_opts = ["ALL", "🏦 ON FLOORPLAN", "🟢 UNENCUMBERED", "⚪ PENDING RECON"]; selected_fp = st.selectbox("FILTER BY FLOORPLAN STATUS", fp_opts)
+                            with col_filter4: st.markdown("<br>", unsafe_allow_html=True); show_hot_only = st.checkbox("🔥 HOT STOCKS", value=False, key="hot_stocks_toggle")
                         else:
+                            col_filter1, col_filter2, col_filter3 = st.columns([2, 2, 1])
+                            with col_filter1: selected_franchises = st.multiselect("FILTER BY FRANCHISE DIVISION(S)", options=unique_franchises_options, key="franchise_multi_selector")
+                            with col_filter2: search_query = st.text_input("🔍 LIVE GLOBAL VEHICLE SEARCH", "").strip().lower()
+                            with col_filter3: st.markdown("<br>", unsafe_allow_html=True); show_hot_only = st.checkbox("🔥 SHOW HOT STOCKS ONLY", value=False, key="hot_stocks_toggle")
                             selected_fp = "ALL"
                         
                         filtered_df = df_live_stock.copy()
@@ -1213,6 +1216,7 @@ if st.session_state['authenticated']:
                                                         gold_cur = workbook.add_format({'bg_color': '#FFC000', 'border': 1, 'valign': 'vcenter', 'num_format': 'R #,##0.00'})
                                                         pct_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'num_format': '0.0%'})
                                                         
+                                                        # Sheet 1: Executive Summary
                                                         ws_exec = workbook.add_worksheet('EXECUTIVE OVERVIEW')
                                                         ws_exec.hide_gridlines(2); ws_exec.set_column('A:A', 40); ws_exec.set_column('B:D', 25)
                                                         
@@ -1276,19 +1280,6 @@ if st.session_state['authenticated']:
                                                             ws_exec.write(i, 0, sts, txt_fmt); ws_exec.write(i, 1, c, n_fmt); ws_exec.write(i, 2, p, pct_fmt)
                                                         ws_exec.write(rstart+5, 0, "TOTAL DEALERSHIP STOCK", h_fmt); ws_exec.write(rstart+5, 1, totu, h_fmt); ws_exec.write(rstart+5, 2, 1.0, workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'border': 1, 'num_format': '0.0%'}))
                                                         
-                                                        # Embedded Pie Chart
-                                                        chart = workbook.add_chart({'type': 'pie'})
-                                                        chart.add_series({
-                                                            'name': 'Stock Distribution',
-                                                            'categories': f'=EXECUTIVE OVERVIEW!$A${rstart+3}:$A${rstart+5}',
-                                                            'values': f'=EXECUTIVE OVERVIEW!$B${rstart+3}:$B${rstart+5}',
-                                                            'data_labels': {'percentage': True, 'leader_lines': True},
-                                                            'points': [{'fill': {'color': '#92D050'}}, {'fill': {'color': '#00B0F0'}}, {'fill': {'color': '#D9D9D9'}}]
-                                                        })
-                                                        chart.set_title({'name': 'Total Dealership Finance Allocation'})
-                                                        chart.set_size({'width': 450, 'height': 300})
-                                                        ws_exec.insert_chart('E2', chart)
-
                                                         # Sheet 2+: Franchise Data with Comments
                                                         for fran in sorted(list(unenc_df["FRANCHISE DIVISION"].unique())):
                                                             f_df = unenc_df[unenc_df["FRANCHISE DIVISION"] == fran]
