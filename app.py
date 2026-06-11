@@ -40,6 +40,7 @@ st.set_page_config(page_title="Phase V Enterprise Hub", layout="wide")
 SAST = pytz.timezone('Africa/Johannesburg')
 
 def get_local_img(file_name, cdn_fallback):
+    """Converts local PNGs to base64 for secure HTML rendering, falls back to CDN if missing."""
     if os.path.exists(file_name):
         try:
             with open(file_name, "rb") as f:
@@ -54,8 +55,10 @@ MINI_LOGO = get_local_img("MINI.png", "https://upload.wikimedia.org/wikipedia/co
 MG_LOGO = get_local_img("MG.png", "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/MG_logo.svg/512px-MG_logo.svg.png")
 
 def safe_rerun():
-    if hasattr(st, "rerun"): st.rerun()
-    else: st.experimental_rerun()
+    if hasattr(st, "rerun"):
+        st.rerun()
+    else:
+        st.experimental_rerun()
 
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
@@ -77,7 +80,8 @@ def get_ai_vehicle_specs(description, franchise, vin):
     try:
         if "gemini" in st.secrets and "api_key" in st.secrets["gemini"]:
             has_key = True
-    except Exception: pass
+    except Exception: 
+        pass
     
     if GEMINI_AVAILABLE and has_key:
         try:
@@ -85,9 +89,10 @@ def get_ai_vehicle_specs(description, franchise, vin):
             system_instruction = """
             You are a highly meticulous automotive data verifier for a premium dealership. Precision is non-negotiable.
             CRITICAL RULES:
-            1. Use the 10th character of the provided VIN to determine the exact model year.
-            2. Use the Google Search tool to find the exact factory specifications.
+            1. Use the 10th character of the provided VIN to determine the exact model year (J=2018, K=2019, L=2020, M=2021, N=2022, P=2023, R=2024, S=2025, T=2026).
+            2. Use the Google Search tool to find the exact factory specifications for this specific Year and Model.
             3. Never guess, round numbers, or hallucinate features.
+            4. If a specific metric cannot be verified online, return 'Verify manually'.
             """
             prompt = f"Vehicle Description: {description}\nVIN: {vin}\nFetch the exact technical specifications for this exact year model."
             
@@ -913,8 +918,8 @@ if st.session_state['authenticated']:
                                                 sum_data, prov_data, unenc_data = [], [], []
                                                 for cat_name, mask, is_demo in categories_def_export:
                                                     cat_df = df_live_stock[df_live_stock["FRANCHISE DIVISION"].str.lower().str.contains(mask, regex=True)]
-                                                    if is_demo: cat_df = cat_df[cat_df["FRANCHISE DIVISION"].str.contains("\(DEMO\)")]
-                                                    else: cat_df = cat_df[~cat_df["FRANCHISE DIVISION"].str.contains("\(DEMO\)")]
+                                                    if is_demo: cat_df = cat_df[cat_df["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True)]
+                                                    else: cat_df = cat_df[~cat_df["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True)]
                                                     
                                                     units, val_sum = len(cat_df), float(cat_df["CAPITAL VAL (ZAR)"].sum())
                                                     v_30_60, v_61_90 = float(cat_df[(cat_df["DAYS ON FLOOR"] >= 30) & (cat_df["DAYS ON FLOOR"] <= 60)]["CAPITAL VAL (ZAR)"].sum()), float(cat_df[(cat_df["DAYS ON FLOOR"] >= 61) & (cat_df["DAYS ON FLOOR"] <= 90)]["CAPITAL VAL (ZAR)"].sum())
@@ -986,7 +991,7 @@ if st.session_state['authenticated']:
                                         except Exception as e: st.error(f"❌ Transmission Failed: {e}")
                                     else: st.warning("Please enter an email address.")
                         
-                        used_filtered = filtered_df[~filtered_df["FRANCHISE DIVISION"].str.contains("\(DEMO\)", na=False)]
+                        used_filtered = filtered_df[~filtered_df["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True, na=False)]
                         loop_franchises = sorted(list(used_filtered["FRANCHISE DIVISION"].unique()))
                         
                         for franchise in loop_franchises:
@@ -1076,7 +1081,7 @@ if st.session_state['authenticated']:
                                         except Exception as parse_ex: st.error(f"Data processing failed: {str(parse_ex)}")
                                     else: st.warning("Please populate the data terminal before submitting.")
                         
-                        demo_filtered = filtered_df[filtered_df["FRANCHISE DIVISION"].str.contains("\(DEMO\)", na=False)]
+                        demo_filtered = filtered_df[filtered_df["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True, na=False)]
                         if demo_filtered.empty:
                             st.info("No Demo vehicles currently recorded in stock.")
                         else:
@@ -1190,9 +1195,9 @@ if st.session_state['authenticated']:
                                                         summary_data = []
                                                         for cat_name, mask, is_demo in categories_def_export:
                                                             cat_df = unenc_df[unenc_df["FRANCHISE DIVISION"].str.lower().str.contains(mask, regex=True)]
-                                                            if is_demo: cat_df = cat_df[cat_df["FRANCHISE DIVISION"].str.contains("\(DEMO\)")]
-                                                            else: cat_df = cat_df[~cat_df["FRANCHISE DIVISION"].str.contains("\(DEMO\)")]
-                                                            summary_data.append([name, len(cat_df), float(cat_df["CAPITAL VAL (ZAR)"].sum())])
+                                                            if is_demo: cat_df = cat_df[cat_df["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True)]
+                                                            else: cat_df = cat_df[~cat_df["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True)]
+                                                            summary_data.append([cat_name, len(cat_df), float(cat_df["CAPITAL VAL (ZAR)"].sum())])
                                                         
                                                         ws_exec.merge_range('A1:C1', "DEALERSHIP UNENCUMBERED STOCK MATRIX", t_fmt)
                                                         ws_exec.set_row(0, 30); ws_exec.set_row(1, 35)
@@ -1418,8 +1423,8 @@ if st.session_state['authenticated']:
                     for cat_name, mask, is_demo in categories_def:
                         if not df_summary.empty:
                             cat_df = df_summary[df_summary["FRANCHISE DIVISION"].str.lower().str.contains(mask, regex=True)]
-                            if is_demo: cat_df = cat_df[cat_df["FRANCHISE DIVISION"].str.contains("\(DEMO\)")]
-                            else: cat_df = cat_df[~cat_df["FRANCHISE DIVISION"].str.contains("\(DEMO\)")]
+                            if is_demo: cat_df = cat_df[cat_df["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True)]
+                            else: cat_df = cat_df[~cat_df["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True)]
                             
                             units, val_sum = len(cat_df), cat_df["total_value"].sum()
                             v_30_60, v_61_90 = cat_df[(cat_df["days_in_stock"] >= 30) & (cat_df["days_in_stock"] <= 60)]["total_value"].sum(), cat_df[(cat_df["days_in_stock"] >= 61) & (cat_df["days_in_stock"] <= 90)]["total_value"].sum()
