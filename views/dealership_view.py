@@ -19,13 +19,14 @@ def apply_matrix_filters(query_builder):
     dept = st.session_state.get('department_id')
     brand = st.session_state.get('brand_id')
     
-    # 1. Global Bypass: Directors and Super Users see the entire holding company
-    if role in ['DIRECTOR', 'SUPER_USER']:
+    # 1. Global Bypass: Directors see everything
+    if role == 'DIRECTOR':
         return query_builder
         
-    # 2. Location-Wide Bypass: DPs and Admins see everything inside their specific building
-    # This prevents BMW Sandton from seeing MF Fourways, but lets the Admin see all departments inside Sandton.
-    if role in ['DEALER_PRINCIPAL', 'FINANCE_ADMIN', 'PROPERTY_MANAGER']:
+    # 2. Super User "God Mode": The sidebar overwrites the session_state 'loc' and 'dept'
+    # By treating the Super User exactly like a localized Manager, the tabs will only
+    # render the data for the branch currently selected in the sidebar!
+    if role in ['SUPER_USER', 'DEALER_PRINCIPAL', 'FINANCE_ADMIN', 'PROPERTY_MANAGER']:
         return query_builder.eq("location_id", loc)
         
     # 3. Department Management: Locked to Building + Department, but sees all brands within it
@@ -40,7 +41,6 @@ def apply_matrix_filters(query_builder):
 
 
 def render(supabase, container_bg, text_color, metric_label, border_color, theme):
-    # Standardize Role Check
     role = str(st.session_state.get('role', '')).upper()
     IS_MANAGEMENT = role in ['DEALER_PRINCIPAL', 'FINANCE_ADMIN', 'SALES_MANAGER', 'DIRECTOR', 'SUPER_USER']
 
@@ -64,16 +64,16 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
     with t1:
         if role in ['SUPER_USER', 'DIRECTOR']:
             with st.expander("🤖 LEAD INJECTION ENGINE (SUPER USER ONLY)"):
-                st.caption("WARNING: Injecting leads here will bypass matrix locks and push to global unassigned.")
+                st.caption(f"Leads injected here will be routed directly to the active node: {st.session_state.get('location_id')}")
                 if st.button("🔥 INJECT 12 NEW LEADS", key="inject_leads_btn"):
                     today_str = datetime.now(SAST).strftime('%Y-%m-%d')
-                    b2b_list = [{"company": "Apex Logistics", "location": "Sandton", "target": "Fleet Manager", "score": random.randint(80, 99), "lead_date": today_str, "signal": "Expanding executive luxury fleet.", "status": "Unassigned", "location_id": "BMW_SANDTON", "department_id": "NEW_SALES", "brand_id": "BMW"}]
-                    b2c_list = [{"client_name": "Sarah Jenkins", "title": "Senior Partner", "company": "Bowmans Law", "location": "Sandton", "score": random.randint(75, 99), "lead_date": today_str, "signal": "Current X5 M Competition lease expiring.", "status": "Unassigned", "location_id": "BMW_SANDTON", "department_id": "NEW_SALES", "brand_id": "BMW"}]
+                    b2b_list = [{"company": "Apex Logistics", "location": "Sandton", "target": "Fleet Manager", "score": random.randint(80, 99), "lead_date": today_str, "signal": "Expanding executive luxury fleet.", "status": "Unassigned", "location_id": st.session_state.get('location_id'), "department_id": st.session_state.get('department_id', 'NEW_SALES'), "brand_id": "BMW"}]
+                    b2c_list = [{"client_name": "Sarah Jenkins", "title": "Senior Partner", "company": "Bowmans Law", "location": "Sandton", "score": random.randint(75, 99), "lead_date": today_str, "signal": "Current X5 M Competition lease expiring.", "status": "Unassigned", "location_id": st.session_state.get('location_id'), "department_id": st.session_state.get('department_id', 'NEW_SALES'), "brand_id": "BMW"}]
                     with st.spinner("Injecting fresh leads..."):
                         try:
                             supabase.table("leads").insert(b2b_list).execute()
                             supabase.table("individual_leads").insert(b2c_list).execute()
-                            st.success("✅ Global Leads Injected!"); safe_rerun()
+                            st.success("✅ Local Leads Injected!"); safe_rerun()
                         except Exception as e: st.error(f"Injection Failed: {e}")
         
         lead_section = st.radio("SELECT OPPORTUNITY CHANNEL", ["🏢 Corporate Fleet (B2B)", "🚗 Individual Leads (B2C)", "🏛️ Gov Tenders (B2B)"], horizontal=True)
@@ -84,7 +84,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
         active_tbl = tbl_map[lead_section]
         
         try: 
-            # APPLIED SECURITY MATRIX
+            # APPLIED SECURITY MATRIX - Now forcefully bound to the God Mode sidebar
             base_query = supabase.table(active_tbl).select("*").eq("status", "Unassigned").eq("lead_date", filter_date_str)
             secure_query = apply_matrix_filters(base_query)
             res = secure_query.order("score", desc=True).execute().data
@@ -92,7 +92,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
         
         df_leads = pd.DataFrame(res) if res else pd.DataFrame()
         
-        if df_leads.empty: st.info(f"No unassigned {lead_section.split(' ')[1].lower()} leads found in your jurisdiction for this date.")
+        if df_leads.empty: st.info(f"No unassigned {lead_section.split(' ')[1].lower()} leads found in {st.session_state.get('location_id')} for this date.")
         else:
             for idx, row in df_leads.iterrows():
                 col_score, col_content = st.columns([1, 5])
@@ -116,6 +116,8 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
 
     # ---- TAB 2: CLAIMED PANELS ----
     with t2:
+        # Note: Claimed leads remain bound to the *user* who claimed them, 
+        # so switching buildings won't magically make your personal claims disappear.
         try: my_corp = supabase.table("leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").order("id", desc=True).execute().data
         except: my_corp = []
         try: my_ind = supabase.table("individual_leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").order("id", desc=True).execute().data
@@ -148,10 +150,10 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
 
     # ---- 🚗 TAB 3: STOCKROOM NODE ----
     with t3:
-        st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
+        st.markdown(f"### 🚗 {st.session_state.get('location_id', '').replace('_', ' ')} USED CAR STOCKROOM")
         
         try:
-            # APPLIED SECURITY MATRIX - Fetches only stock for the logged-in user's Building/Department
+            # APPLIED SECURITY MATRIX - Now successfully isolates Bedfordview vs Sandton based on Sidebar
             base_stock = supabase.table("used_car_stock").select("*")
             secure_stock = apply_matrix_filters(base_stock)
             stock_res = secure_stock.order("days_in_stock", desc=True).execute().data
@@ -196,13 +198,13 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
         with sm_tabs[0]:
             # Admins upload data specific to their matrix location
             if role in ['FINANCE_ADMIN', 'SUPER_USER']:
-                with st.expander("🛠️ ADMIN CONSOLE: INVENTORY UPLOAD", expanded=False):
+                with st.expander(f"🛠️ ADMIN CONSOLE: {st.session_state.get('location_id')} UPLOAD", expanded=False):
                     st.markdown("#### Paste Daily Spreadsheet Data (USED STOCK)")
                     raw_paste_data = st.text_area("PASTE RAW DATA ROWS HERE", height=150, key="used_paste")
                     
                     if st.button("PROCESS OVERWRITE", key="process_stock_paste_btn") and raw_paste_data.strip():
                         try:
-                            # APPLIED SECURITY MATRIX - Only delete/update the user's specific location
+                            # APPLIED SECURITY MATRIX - Only delete/update the currently selected God Mode location
                             mem_query = apply_matrix_filters(supabase.table("used_car_stock").select("vsb_no, comments"))
                             try: mem_res = mem_query.execute().data
                             except: mem_res = []
@@ -238,14 +240,14 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                                 
                                     mem_comment = comment_memory.get(vsb, "")
                                     
-                                    # INJECT MATRIX - Force Used Stock into USED_SALES department
+                                    # Inject the active God Mode ID into the database table upon paste
                                     insert_payload = {
                                         "vsb_no": vsb, "description": desc, "into_stock": into_stk, 
                                         "days_in_stock": days, "total_value": val, "location": current_franchise.strip(), 
                                         "chassis_no": chassis, "floorplan_status": "⚪ PENDING RECON", 
                                         "comments": mem_comment, "stock_type": "Used",
                                         "location_id": st.session_state.get('location_id', 'BMW_SANDTON'),
-                                        "department_id": "USED_SALES", # Hardcoded to prevent dropping it into Finance
+                                        "department_id": "USED_SALES", 
                                         "brand_id": st.session_state.get('brand_id', 'ALL_BRANDS')
                                     }
                                     try: supabase.table("used_car_stock").upsert(insert_payload).execute()
@@ -255,7 +257,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         except Exception as parse_ex: st.error(f"Data processing failed: {str(parse_ex)}")
 
             if df_live_stock.empty:
-                st.info("No vehicles are currently recorded in your jurisdiction.")
+                st.info(f"No vehicles are currently recorded in {st.session_state.get('location_id')}.")
             else:
                 st.markdown("### 📄 AI DIGITAL BROCHURE STUDIO")
                 vehicle_series = df_live_stock['VSB NUMBER'].astype(str) + " - " + df_live_stock['VEHICLE DESCRIPTION']
@@ -321,7 +323,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
         with sm_tabs[1]:
             st.markdown("#### 🔵 DEMO VEHICLES PORTAL")
             if role in ['FINANCE_ADMIN', 'SUPER_USER']:
-                with st.expander("🛠️ ADMIN CONSOLE: DEMO INVENTORY UPLOAD", expanded=False):
+                with st.expander(f"🛠️ ADMIN CONSOLE: {st.session_state.get('location_id')} DEMO UPLOAD", expanded=False):
                     raw_demo = st.text_area("PASTE RAW DATA ROWS HERE (DEMO)", height=150, key="demo_paste")
                     if st.button("PROCESS OVERWRITE DEMO", key="process_demo_btn") and raw_demo.strip():
                         try:
@@ -355,14 +357,13 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                         except: days = 0
                                         chassis = parts[13].strip() if len(parts) > 13 else ''
                                         
-                                    # INJECT MATRIX - Force Demo Stock into NEW_SALES department
                                     insert_payload = {
                                         "vsb_no": vsb, "description": desc, "into_stock": into, 
                                         "days_in_stock": days, "total_value": val, "location": cf.strip(), 
                                         "chassis_no": chassis, "floorplan_status": "⚪ PENDING RECON", 
                                         "comments": mem.get(vsb, ""), "stock_type": "Demo",
                                         "location_id": st.session_state.get('location_id', 'BMW_SANDTON'),
-                                        "department_id": "NEW_SALES", # Hardcoded to prevent dropping it into Finance
+                                        "department_id": "NEW_SALES",
                                         "brand_id": st.session_state.get('brand_id', 'ALL_BRANDS')
                                     }
                                     supabase.table("used_car_stock").upsert(insert_payload).execute()
@@ -371,7 +372,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         except Exception as e: st.error(f"Error: {e}")
                         
             if df_live_stock.empty:
-                st.info("No Demo vehicles are currently recorded in your jurisdiction.")
+                st.info(f"No Demo vehicles are currently recorded in {st.session_state.get('location_id')}.")
             else:
                 demo_filtered = filtered_df[filtered_df["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True, na=False)]
                 if demo_filtered.empty: st.info("No Demo vehicles currently recorded.")
@@ -504,13 +505,13 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
 
     # ---- TAB 4: PIPELINE ----
     with t4:
-        st.markdown("### 💼 SALES PIPELINE: ACTIVE DEALS")
+        st.markdown(f"### 💼 {st.session_state.get('location_id', '').replace('_', ' ')} SALES PIPELINE: ACTIVE DEALS")
         PIPELINE_STAGES = ["Prospecting", "Test Drive", "Finance App", "Awaiting Delivery", "Delivered", "Cancelled"]
         with st.expander("➕ ADD NEW DEAL"):
             ca, cb = st.columns(2)
             cname = ca.text_input("CLIENT NAME")
             try: 
-                # APPLIED SECURITY MATRIX
+                # APPLIED SECURITY MATRIX - Bound to sidebar location
                 p_query = apply_matrix_filters(supabase.table("used_car_stock").select("vsb_no, description"))
                 p_stock = p_query.execute().data or []
             except: p_stock = []
@@ -536,14 +537,14 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                 else: st.warning("Enter client name and description.")
 
         try: 
-            # APPLIED SECURITY MATRIX
+            # APPLIED SECURITY MATRIX - Bound to sidebar location
             pipe_query = apply_matrix_filters(supabase.table("sales_pipeline").select("*").neq("stage", "Delivered"))
             res = pipe_query.order("id", desc=True).execute().data or []
         except: res = []
         
         if not IS_MANAGEMENT: res = [r for r in res if r['salesperson_username'] == st.session_state['user']]
         
-        if not res: st.info("No active pipeline deals in your jurisdiction.")
+        if not res: st.info(f"No active pipeline deals in {st.session_state.get('location_id')}.")
         else:
             df_p = pd.DataFrame(res)
             rp = pd.DataFrame()
@@ -573,16 +574,16 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
 
     # ---- TAB 5: ARCHIVE ----
     with t5:
-        st.markdown("### 📦 ARCHIVED DELIVERIES")
+        st.markdown(f"### 📦 {st.session_state.get('location_id', '').replace('_', ' ')} ARCHIVED DELIVERIES")
         try: 
-            # APPLIED SECURITY MATRIX
+            # APPLIED SECURITY MATRIX - Bound to sidebar location
             arc_query = apply_matrix_filters(supabase.table("sales_pipeline").select("*").eq("stage", "Delivered"))
             ares = arc_query.execute().data or []
         except: ares = []
         
         if not IS_MANAGEMENT: ares = [r for r in ares if r['salesperson_username'] == st.session_state['user']]
         
-        if not ares: st.info("No archives found in your jurisdiction.")
+        if not ares: st.info(f"No archives found in {st.session_state.get('location_id')}.")
         else:
             df_a = pd.DataFrame(ares)
             df_a['sort_date'] = pd.to_datetime(df_a.get('planned_delivery_date'), errors='coerce')
@@ -610,9 +611,9 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
     # ---- TAB 6: COMMAND ----
     if IS_MANAGEMENT:
         with t6:
-            st.markdown("### 👑 COMMAND OVERVIEW & AUDITS")
+            st.markdown(f"### 👑 LOCAL COMMAND OVERVIEW & AUDITS ({st.session_state.get('location_id')})")
             try: 
-                # APPLIED SECURITY MATRIX
+                # APPLIED SECURITY MATRIX - Bound to sidebar location
                 cmd_query = apply_matrix_filters(supabase.table("used_car_stock").select("total_value, days_in_stock, location, floorplan_status, stock_type"))
                 dfs = pd.DataFrame(cmd_query.execute().data or [])
             except: dfs = pd.DataFrame()
@@ -654,6 +655,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                 
             st.markdown("---")
             try:
+                # Also binding lead tracking to the selected sidebar building
                 cl = len(apply_matrix_filters(supabase.table("leads").select("id")).execute().data or [])
                 il = len(apply_matrix_filters(supabase.table("individual_leads").select("id")).execute().data or [])
                 tl = len(apply_matrix_filters(supabase.table("tender_leads").select("id")).execute().data or [])
@@ -661,12 +663,11 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                 i_cl = len(apply_matrix_filters(supabase.table("individual_leads").select("id").eq("status", "Closed")).execute().data or [])
                 t_cl = len(apply_matrix_filters(supabase.table("tender_leads").select("id").eq("status", "Closed")).execute().data or [])
                 
-                # Fetch notes related to this specific location
+                # Fetch notes related to this specific God Mode location
                 note_query = supabase.table("lead_notes").select("*").order("timestamp", desc=True)
-                # Since lead_notes doesn't have division tracking natively, we filter in memory for extreme security
                 raw_notes = note_query.execute().data or []
                 
-                if role in ['DIRECTOR', 'SUPER_USER']:
+                if role == 'DIRECTOR':
                     df_notes = pd.DataFrame(raw_notes)
                 else:
                     valid_users = [u['username'] for u in supabase.table("users").select("username").eq("location_id", st.session_state['location_id']).execute().data or []]
@@ -679,7 +680,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             m1.metric("TOTAL OPPORTUNITIES", cl + il + tl); m2.metric("CONVERSIONS (B2B)", c_cl + t_cl); m3.metric("DELIVERIES (B2C)", i_cl)
             st.markdown("---")
             st.markdown("### 💬 MASTER OUTREACH REGISTRY")
-            if df_notes.empty: st.info("No transaction log adjustments submitted today in your jurisdiction.")
+            if df_notes.empty: st.info(f"No transaction log adjustments submitted today in {st.session_state.get('location_id')}.")
             else:
                 for _, rn in df_notes.iterrows():
                     with st.chat_message("user"):
@@ -689,7 +690,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
     # ---- TAB 7: F&I DESK ----
     if IS_MANAGEMENT and role in ['FINANCE_ADMIN', 'SUPER_USER']:
         with t7:
-            st.markdown("### 💰 F&I PROFITABILITY DESK")
+            st.markdown(f"### 💰 {st.session_state.get('location_id', '').replace('_', ' ')} F&I PROFITABILITY DESK")
             ds = st.radio("ORIGINATION", ["📥 Pipeline: Pending Finance Apps", "🚗 Master Stockroom", "✏️ Custom Buy-In"], horizontal=True)
             st.markdown("---")
             
@@ -699,11 +700,12 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             if ds == "📥 Pipeline: Pending Finance Apps":
                 dbt = "Pipeline"
                 try: 
+                    # Bound to sidebar
                     p_query = apply_matrix_filters(supabase.table("sales_pipeline").select("*").eq("stage", "Finance App"))
                     pdata = p_query.execute().data or []
                 except: pdata = []
                 
-                if not pdata: st.info("No pending apps.")
+                if not pdata: st.info("No pending apps in this division.")
                 else:
                     opts = {f"#{d['id']} - {d['client_name']} ({d['deal_description']})": d for d in pdata}
                     sp = c1.selectbox("SELECT DEAL", ["Select Deal..."] + list(opts.keys()))
@@ -720,12 +722,15 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                     s_query = apply_matrix_filters(supabase.table("used_car_stock").select("vsb_no, description, total_value"))
                     sdata = s_query.execute().data or []
                 except: sdata = []
-                opts = {f"{s['vsb_no']} - {s['description']}": s for s in sdata}
-                ss = c1.selectbox("SELECT VEHICLE", ["Select Vehicle..."] + list(opts.keys()))
-                if ss != "Select Vehicle...":
-                    veh = opts[ss]
-                    ddesc, dcap = ss, float(veh.get('total_value',0))
-                    dsell = dcap * 1.12
+                
+                if not sdata: st.info("No stock available in this division.")
+                else:
+                    opts = {f"{s['vsb_no']} - {s['description']}": s for s in sdata}
+                    ss = c1.selectbox("SELECT VEHICLE", ["Select Vehicle..."] + list(opts.keys()))
+                    if ss != "Select Vehicle...":
+                        veh = opts[ss]
+                        ddesc, dcap = ss, float(veh.get('total_value',0))
+                        dsell = dcap * 1.12
             else:
                 dbt = "Custom"
                 ddesc = c1.text_input("CUSTOM DESCRIPTION")
@@ -796,6 +801,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
     if role == 'SUPER_USER' and t8:
         with t8:
             st.markdown("### 🔑 SYSTEM ADMINISTRATION & PROVISIONING")
+            st.info("💡 Notice: To ensure accurate system architecture testing, provisioned users will inherit the active God Mode matrix unless manually overridden below.")
             
             # Fetch active matrix IDs dynamically from Supabase
             try: db_roles = [r['id'] for r in supabase.table("roles").select("id").execute().data]
@@ -810,10 +816,13 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             try: db_brands = [b['id'] for b in supabase.table("brands").select("id").execute().data]
             except: db_brands = ["BMW", "MINI", "MOTORRAD", "MG", "HONDA", "JAC", "ALL_BRANDS"]
 
+            # Set dropdown indices based on the active sidebar selections
+            loc_idx = db_locs.index(st.session_state.get('location_id')) if st.session_state.get('location_id') in db_locs else 0
+            dept_idx = db_depts.index(st.session_state.get('department_id')) if st.session_state.get('department_id') in db_depts else 0
+
             # Form 1: Direct User Creation (For instant test accounts)
             with st.form("direct_user_creation_form", clear_on_submit=True):
                 st.markdown("#### 👤 INSTANTLY PROVISION TEST USER ACCOUNT")
-                st.caption("This form injects a user directly into the authentication matrix without requiring a token registration flow.")
                 
                 u_username = st.text_input("Username (e.g., test_rep)", help="Lowercase, no spaces").strip().lower()
                 u_name = st.text_input("Display Name (e.g., John Doe)").strip()
@@ -822,8 +831,8 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                 uc1, uc2 = st.columns(2)
                 
                 u_role = uc1.selectbox("Assigned Role Matrix", db_roles, key="u_role_sel")
-                u_loc = uc2.selectbox("Assigned Location", db_locs, key="u_loc_sel")
-                u_dept = uc1.selectbox("Assigned Department Silo", db_depts, key="u_dept_sel")
+                u_loc = uc2.selectbox("Assigned Location", db_locs, index=loc_idx, key="u_loc_sel")
+                u_dept = uc1.selectbox("Assigned Department Silo", db_depts, index=dept_idx, key="u_dept_sel")
                 u_brand = uc2.selectbox("Assigned Brand Scope", db_brands, key="u_brand_sel")
                 
                 if st.form_submit_button("🚀 CREATE USER ACCOUNT IMMEDIATELY", use_container_width=True):
@@ -836,7 +845,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                             "username": u_username,
                             "name": u_name,
                             "password": hashed_pass,
-                            "role": u_role,  # Legacy column support
+                            "role": u_role, 
                             "role_id": u_role,
                             "location_id": u_loc,
                             "department_id": u_dept,
@@ -844,7 +853,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         }
                         try:
                             supabase.table("users").insert(user_payload).execute()
-                            st.success(f"🎉 Test account `@{u_username}` successfully created! You can now log out and log in with these credentials.")
+                            st.success(f"🎉 Test account `@{u_username}` successfully created and mapped to `{u_loc}`.")
                         except Exception as e:
                             st.error(f"❌ Database rejected user insertion: {e}")
             
@@ -852,7 +861,6 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             
             # Form 2: Token Invitation Deck
             st.markdown("### 🔑 ENTERPRISE AUTH TOKEN DECK")
-            st.info("ℹ️ Generate corporate registration tokens mapped to multi-tenant matrix variables for standard invitation signups.")
             
             with st.form("generate_token_form", clear_on_submit=True):
                 st.markdown("#### PROVISION NEW REGISTRATION KEY")
@@ -861,8 +869,8 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                 
                 cc1, cc2 = st.columns(2)
                 c_role = cc1.selectbox("Matrix Role Override", db_roles, key="t_role_sel")
-                c_loc = cc2.selectbox("Location Identifier", db_locs, key="t_loc_sel")
-                c_dept = cc1.selectbox("Department Access Silo", db_depts, key="t_dept_sel")
+                c_loc = cc2.selectbox("Location Identifier", db_locs, index=loc_idx, key="t_loc_sel")
+                c_dept = cc1.selectbox("Department Access Silo", db_depts, index=dept_idx, key="t_dept_sel")
                 c_brand = cc2.selectbox("Brand Scope Guard", db_brands, key="t_brand_sel")
                 
                 if st.form_submit_button("GENERATE & ACTIVATE TOKEN", use_container_width=True):
