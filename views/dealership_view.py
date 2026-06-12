@@ -23,9 +23,9 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             with st.expander("🤖 LEAD INJECTION ENGINE (DEMO & TESTING)"):
                 if st.button("🔥 INJECT 12 NEW LEADS FOR TODAY", key="inject_leads_btn"):
                     today_str = datetime.now(SAST).strftime('%Y-%m-%d')
-                    b2b_list = [{"company": "Apex Logistics", "location": "Sandton", "target": "Fleet Manager", "score": random.randint(80, 99), "lead_date": today_str, "signal": "Expanding executive fleet by 5 vehicles this quarter.", "status": "Unassigned", "public_email": "fleet@apexlogistics.co.za", "public_phone": "011 555 1234", "company_website": "www.apexlogistics.co.za", "linkedin_url": "linkedin.com/company/apex-logistics"}]
-                    b2c_list = [{"client_name": "Sarah Jenkins", "title": "Senior Partner", "company": "Bowmans Law", "location": "Sandton", "score": random.randint(75, 99), "lead_date": today_str, "signal": "Current X5 lease expiring in 45 days. High retention probability.", "status": "Unassigned", "public_email": "s.jenkins@bowmans.com", "public_phone": "082 555 9876", "linkedin_url": "linkedin.com/in/sarahjenkins"}]
-                    tend_list = [{"company": "Makhanya Holdings", "awarding_body": "Gauteng Provincial Gov", "contract_value": "R 12,500,000", "tender_desc": "Awarded tender for VIP transport fleet. Requires 8 luxury sedans.", "score": random.randint(85, 99), "lead_date": today_str, "status": "Unassigned", "public_email": "tenders@makhanya.co.za", "public_phone": "012 345 6789", "company_website": "www.makhanya.co.za", "linkedin_url": "linkedin.com/company/makhanya-holdings"}]
+                    b2b_list = [{"company": "Apex Logistics", "location": "Sandton", "target": "Fleet Manager", "score": random.randint(80, 99), "lead_date": today_str, "signal": "Expanding executive luxury fleet by 5 high-end vehicles this quarter.", "status": "Unassigned", "public_email": "fleet@apexlogistics.co.za", "public_phone": "011 555 1234", "company_website": "www.apexlogistics.co.za", "linkedin_url": "linkedin.com/company/apex-logistics"}]
+                    b2c_list = [{"client_name": "Sarah Jenkins", "title": "Senior Partner", "company": "Bowmans Law", "location": "Sandton", "score": random.randint(75, 99), "lead_date": today_str, "signal": "Current X5 M Competition lease expiring in 45 days. High retention probability.", "status": "Unassigned", "public_email": "s.jenkins@bowmans.com", "public_phone": "082 555 9876", "linkedin_url": "linkedin.com/in/sarahjenkins"}]
+                    tend_list = [{"company": "Makhanya Holdings", "awarding_body": "Gauteng Provincial Gov", "contract_value": "R 12,500,000", "tender_desc": "Awarded tender for VIP transport luxury fleet. Requires 8 flagship sedans.", "score": random.randint(85, 99), "lead_date": today_str, "status": "Unassigned", "public_email": "tenders@makhanya.co.za", "public_phone": "012 345 6789", "company_website": "www.makhanya.co.za", "linkedin_url": "linkedin.com/company/makhanya-holdings"}]
                     with st.spinner("Injecting fresh leads..."):
                         try:
                             supabase.table("leads").insert(b2b_list).execute()
@@ -104,11 +104,13 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
         st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
         
         try:
-            stock_res = supabase.table("used_car_stock").select("*").order("days_in_stock", ascending=False).execute().data
+            # FIXED BUG: Changed ascending=False to desc=True to match native Supabase syntax!
+            stock_res = supabase.table("used_car_stock").select("*").order("days_in_stock", desc=True).execute().data
             df_live_stock = pd.DataFrame(stock_res) if stock_res else pd.DataFrame()
-        except: df_live_stock = pd.DataFrame()
+        except Exception as e:
+            df_live_stock = pd.DataFrame()
 
-        # Hardcode columns if empty so calculations never crash
+        # Hardcode columns if empty so visual metrics & tables never crash
         if df_live_stock.empty:
              df_live_stock = pd.DataFrame(columns=["vsb_no", "description", "into_stock", "days_in_stock", "total_value", "location", "floorplan_status", "chassis_no", "comments", "stock_type"])
 
@@ -232,7 +234,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                     target_email = st.text_input("RECIPIENT EMAIL ADDRESS(ES)", placeholder="dp@bmwsandton.co.za", help="Separate multiple emails with a comma")
                     
                     if st.button("🚀 DISPATCH MASTER STOCKBOOK NOW", key="email_dispatch_btn"):
-                        if target_email and not df_live_stock.empty:
+                        if target_email and len(df_live_stock) > 0:
                             try:
                                 smtp_server, smtp_port, sender_email, smtp_pass = st.secrets["smtp"]["server"], int(st.secrets["smtp"]["port"]), st.secrets["smtp"]["sender_email"], st.secrets["smtp"]["password"]
                                 with st.spinner("Rendering styled Excel templates and connecting to secure mail server..."):
@@ -287,6 +289,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                             return start_row + 2 + r_idx
                                         
                                         ws_e = workbook.add_worksheet('EXECUTIVE OVERVIEWS')
+                                        ws_e.set_landscape() # 16:9 Landscape Mode Request
                                         ws_e.hide_gridlines(2); ws_e.set_column('A:A', 30); ws_e.set_column('B:F', 25)
                                         
                                         row_cursor = 1
@@ -301,6 +304,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                             if not franchise_export_df.empty:
                                                 safe_sheet_name = str(franchise).replace('/', '-').replace('\\', '-').replace('?', '').replace('*', '').replace('[', '').replace(']', '')[:31]
                                                 ws_f = workbook.add_worksheet(safe_sheet_name)
+                                                ws_f.set_landscape() # 16:9 Landscape Mode Request
                                                 ws_f.hide_gridlines(2); ws_f.set_column('A:A', 15); ws_f.set_column('B:B', 45); ws_f.set_column('C:C', 18); ws_f.set_column('D:D', 18); ws_f.set_column('E:E', 25); ws_f.set_column('F:F', 25)
                                                 
                                                 export_cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "FP STATUS", "CAPITAL VAL (ZAR)"]
@@ -319,8 +323,8 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                     st.success("✅ Master Stockbook successfully formatted and transmitted!")
                             except KeyError: st.error("❌ Mail Settings Missing.")
                             except Exception as e: st.error(f"❌ Transmission Failed: {e}")
-                        elif df_live_stock.empty:
-                            st.warning("Database is empty. Please upload inventory before generating an email report.")
+                        elif len(df_live_stock) == 0:
+                            st.warning("Database empty. Please upload inventory before generating an email report.")
                         else: st.warning("Please enter an email address.")
             
             # --- Always Render Filters ---
@@ -348,7 +352,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             if show_hot_only: filtered_df = filtered_df[filtered_df["DAYS ON FLOOR"] <= 3]
             
             # Render Data or Empty Message
-            if df_live_stock.empty:
+            if len(df_live_stock) == 0:
                 st.info("No vehicles are currently recorded in stock. Use the Admin Console to initialize the inventory.")
             else:
                 st.markdown("### 📄 AI DIGITAL BROCHURE STUDIO")
@@ -447,7 +451,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                             st.success(f"🎉 Demo Stock refreshed. {recs} units."); safe_rerun()
                         except Exception as e: st.error(f"Error: {e}")
                         
-            if df_live_stock.empty:
+            if len(df_live_stock) == 0:
                 st.info("No Demo vehicles are currently recorded.")
             else:
                 demo_filtered = filtered_df[filtered_df["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True, na=False)]
@@ -474,12 +478,13 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                     with st.expander("📤 DISTRIBUTE UNENCUMBERED LIST VIA EMAIL"):
                         u_email = st.text_input("RECIPIENT EMAIL ADDRESS", key="u_email_in")
                         if st.button("🚀 DISPATCH UNENCUMBERED", key="u_disp"):
-                            if u_email and not df_live_stock.empty:
+                            if u_email and len(df_live_stock) > 0:
                                 with st.spinner("Formatting Executive Unencumbered Matrix..."):
                                     try:
                                         ebuf = io.BytesIO()
                                         with pd.ExcelWriter(ebuf, engine='xlsxwriter') as wr:
                                             wb = wr.book; ws_e = wb.add_worksheet('EXECUTIVE OVERVIEW')
+                                            ws_e.set_landscape() # 16:9 Landscape Mode Request
                                             ws_e.hide_gridlines(2); ws_e.set_column('A:A', 40); ws_e.set_column('B:D', 25)
                                             
                                             tf = wb.add_format({'bold': True, 'font_size': 14, 'bg_color': '#003366', 'font_color': '#FFFFFF', 'align': 'center', 'valign': 'vcenter', 'border': 1})
@@ -544,6 +549,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                                 fdf = unenc_df[unenc_df["FRANCHISE DIVISION"] == f]
                                                 if fdf.empty or f.strip() == "LHP": continue
                                                 ws = wb.add_worksheet(str(f).replace('/', '-')[:31])
+                                                ws.set_landscape() # 16:9 Landscape Mode Request
                                                 ws.hide_gridlines(2); ws.set_column('A:A', 15); ws.set_column('B:B', 40); ws.set_column('C:E', 15); ws.set_column('F:F', 45)
                                                 ws.merge_range(0, 0, 0, 5, f"UNENCUMBERED ASSETS: {f.upper()}", tf); ws.set_row(0, 30); ws.set_row(1, 35)
                                                 cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "ADMIN COMMENTS"]
@@ -556,12 +562,12 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                         with smtplib.SMTP(st.secrets["smtp"]["server"], int(st.secrets["smtp"]["port"])) as srv: srv.starttls(); srv.login(st.secrets["smtp"]["sender_email"], st.secrets["smtp"]["password"]); srv.send_message(msg)
                                         st.success("✅ Dispatched!")
                                     except Exception as e: st.error(f"❌ Failed: {e}")
-                            elif df_live_stock.empty:
+                            elif len(df_live_stock) == 0:
                                 st.warning("Database empty. Please upload inventory first.")
                             else:
                                 st.warning("Please enter an email address.")
 
-                if df_live_stock.empty:
+                if len(df_live_stock) == 0:
                     st.info("No vehicles available.")
                 else:
                     unenc_df = df_live_stock[df_live_stock["FP STATUS"] == "🟢 UNENCUMBERED"].copy().reset_index(drop=True)
@@ -569,14 +575,13 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                     else:
                         edit_cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "ADMIN COMMENTS"]
                         e_unenc = st.data_editor(unenc_df[edit_cols], disabled=["VSB NUMBER", "VEHICLE DESCRIPTION", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"], hide_index=True, use_container_width=True, key="u_edit")
-                        if st.button("💾 SAVE COMMENTS", key="save_u"):
-                            updc = 0
+                        if st.button("💾 SAVE COMMENTS", key="save_u_comments"):
+                            uc = 0
                             for i in range(len(e_unenc)):
-                                o, n = str(unenc_df.iloc[i]["ADMIN COMMENTS"]).strip(), str(e_unenc.iloc[i]["ADMIN COMMENTS"]).strip()
-                                if o != n:
-                                    try: supabase.table("used_car_stock").update({"comments": n}).eq("vsb_no", e_unenc.iloc[i]["VSB NUMBER"]).execute(); updc += 1
+                                if str(unenc_df.iloc[i]["ADMIN COMMENTS"]).strip() != str(e_unenc.iloc[i]["ADMIN COMMENTS"]).strip():
+                                    try: supabase.table("used_car_stock").update({"comments": str(e_unenc.iloc[i]["ADMIN COMMENTS"]).strip()}).eq("vsb_no", e_unenc.iloc[i]["VSB NUMBER"]).execute(); uc += 1
                                     except: pass
-                            if updc > 0: st.success(f"✅ {updc} saved."); safe_rerun()
+                            if uc > 0: st.success(f"✅ {uc} saved."); safe_rerun()
 
     # ---- TAB 4: PIPELINE ----
     with t4:
@@ -708,11 +713,14 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                 cl = len(supabase.table("leads").select("id").execute().data or [])
                 il = len(supabase.table("individual_leads").select("id").execute().data or [])
                 tl = len(supabase.table("tender_leads").select("id").execute().data or [])
+                c_cl = len(supabase.table("leads").select("id").eq("status", "Closed").execute().data or [])
+                i_cl = len(supabase.table("individual_leads").select("id").eq("status", "Closed").execute().data or [])
+                t_cl = len(supabase.table("tender_leads").select("id").eq("status", "Closed").execute().data or [])
                 df_notes = pd.DataFrame(supabase.table("lead_notes").select("*").order("timestamp", desc=True).execute().data or [])
-            except: cl=il=tl=0; df_notes = pd.DataFrame()
+            except: cl=il=tl=c_cl=i_cl=t_cl=0; df_notes = pd.DataFrame()
                 
             m1, m2, m3 = st.columns(3)
-            m1.metric("TOTAL OPPORTUNITIES", cl + il + tl); m2.metric("CONVERSIONS (B2B)", cl + tl); m3.metric("DELIVERIES (B2C)", il)
+            m1.metric("TOTAL OPPORTUNITIES", cl + il + tl); m2.metric("CONVERSIONS (B2B)", c_cl + t_cl); m3.metric("DELIVERIES (B2C)", i_cl)
             st.markdown("---")
             st.markdown("### 💬 MASTER OUTREACH REGISTRY")
             if df_notes.empty: st.info("No transaction log adjustments submitted today.")
