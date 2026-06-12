@@ -120,9 +120,9 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
     IS_MANAGEMENT = role in ['DEALER_PRINCIPAL', 'FINANCE_ADMIN', 'SALES_MANAGER', 'WORKSHOP_MANAGER', 'DIRECTOR', 'SUPER_USER']
 
     # ----------------------------------------------------------------
-    # ROUTE A: SERVICE / WORKSHOP DEPARTMENT
+    # ROUTE A: SERVICE / WORKSHOP / PARTS DEPARTMENTS
     # ----------------------------------------------------------------
-    if active_dept == 'SERVICE' or role == 'WORKSHOP_MANAGER':
+    if active_dept in ['SERVICE', 'PARTS'] or role == 'WORKSHOP_MANAGER':
         if role == 'SUPER_USER':
             t1, t2, t3, t4 = st.tabs(["🔧 DAILY WIP", "📦 ARCHIVE", "📊 WIP REPORTS", "🔑 TOKEN MANAGER"])
         else:
@@ -130,7 +130,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             t4 = None
             
         with t1:
-            st.markdown(f"### 🔧 {st.session_state.get('location_id', '').replace('_', ' ')} SERVICE DESK")
+            st.markdown(f"### 🔧 {st.session_state.get('location_id', '').replace('_', ' ')} {active_dept} DESK")
             WIP_STAGES = ["Scheduled", "Checked In", "In Bay / Diag", "Waiting on Parts", "QC / Wash", "Ready for Delivery", "Invoiced / Closed"]
             
             with st.expander("➕ OPEN NEW REPAIR ORDER (RO)"):
@@ -340,7 +340,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             with t4: _render_token_manager(supabase)
 
     # ----------------------------------------------------------------
-    # ROUTE B: SALES / ADMIN / PARTS DEPARTMENTS
+    # ROUTE B: SALES / ADMIN DEPARTMENTS
     # ----------------------------------------------------------------
     else:
         if role == 'SUPER_USER':
