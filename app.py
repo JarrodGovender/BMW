@@ -49,8 +49,8 @@ if datetime.now(SAST).hour >= 22 or datetime.now(SAST).hour < 6:
     st.error("🛑 **Access Denied: System Offline.**")
     st.stop()
 
-# Initialize Session State
-for key in ['authenticated', 'user', 'name', 'role']:
+# Initialize Session State with Matrix Tenancy Variables
+for key in ['authenticated', 'user', 'name', 'role', 'location_id', 'department_id', 'brand_id']:
     if key not in st.session_state:
         st.session_state[key] = False if key == 'authenticated' else None
 
@@ -75,11 +75,14 @@ else:
     with h3:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🚪 LOGOUT"):
-            st.session_state.update({'authenticated': False, 'user': None, 'name': None, 'role': None, 'page_view': 'dashboard'})
+            st.session_state.update({
+                'authenticated': False, 'user': None, 'name': None, 'role': None, 
+                'location_id': None, 'department_id': None, 'brand_id': None, 'page_view': 'dashboard'
+            })
             safe_rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown(f"LOGGED IN AS: **{st.session_state['name'].upper()}** ({st.session_state['role'].replace('_', ' ').upper()})\n---")
+    st.markdown(f"LOGGED IN AS: **{st.session_state['name'].upper()}** ({str(st.session_state['role']).replace('_', ' ').upper()})\n---")
 
     # ---------------------------------------------------------
     # SETTINGS VIEW
@@ -125,16 +128,17 @@ else:
     # MODULAR DASHBOARD ROUTING
     # ---------------------------------------------------------
     elif st.session_state['page_view'] == 'dashboard':
-        role = st.session_state['role']
+        # Normalize role text to handle case-insensitive database records
+        role = str(st.session_state['role']).upper()
         
         # Route to Property Manager Kanban Board
-        if role == 'property_manager':
+        if role == 'PROPERTY_MANAGER':
             property_view.render(supabase, container_bg, text_color, theme)
             
-        # Route to Executive Level Dashboard
-        elif role == 'director':
+        # Route to Executive Level Portfolio Dashboard
+        elif role in ['DIRECTOR', 'SUPER_USER']:
             director_view.render(supabase, container_bg, text_color, metric_label, theme)
             
-        # Route everyone else to the Dealership Operations Workspace
+        # Route all operational roles (Sales, Parts, Workshop, Finance) to the Dealership Operations Workspace
         else:
             dealership_view.render(supabase, container_bg, text_color, metric_label, border_color, theme)
