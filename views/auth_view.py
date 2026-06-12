@@ -33,10 +33,11 @@ def render(supabase):
                     st.session_state['authenticated'] = True
                     st.session_state['user'] = user_data['username']
                     st.session_state['name'] = user_data['name']
-                    st.session_state['role'] = user_data['role_id']
-                    st.session_state['location_id'] = user_data['location_id']
-                    st.session_state['department_id'] = user_data['department_id']
-                    st.session_state['brand_id'] = user_data['brand_id']
+                    # Fallback to legacy 'role' if 'role_id' is missing for any reason
+                    st.session_state['role'] = user_data.get('role_id', user_data.get('role'))
+                    st.session_state['location_id'] = user_data.get('location_id')
+                    st.session_state['department_id'] = user_data.get('department_id')
+                    st.session_state['brand_id'] = user_data.get('brand_id')
                     
                     st.success(f"✅ Access Granted. Welcome back, {user_data['name']}.")
                     st.rerun()
@@ -86,17 +87,16 @@ def render(supabase):
                             "username": reg_user,
                             "name": reg_name,
                             "password": hashed_password,
-                            "role_id": token_data['role_id'],
+                            "role": token_data['role_id'],     # <-- FIXED: Satisfies legacy database constraint
+                            "role_id": token_data['role_id'],  # <-- Satisfies new Matrix architecture
                             "location_id": token_data['location_id'],
                             "department_id": token_data['department_id'],
                             "brand_id": token_data['brand_id']
                         }
                         
                         # Save the new verified profile
-                        supabase.table("users").insert(new_user).execute()
-                        
-                        # Optionally mark token as spent if you want single-use keys.
-                        # For testing/multi-hire parameters, we keep it active or delete it based on strategy:
-                        # supabase.table("auth_tokens").update({"is_active": False}).eq("token", reg_token).execute()
-                        
-                        st.success("🎉 Registration successful! Proceed to the Login tab to authenticate.")
+                        try:
+                            supabase.table("users").insert(new_user).execute()
+                            st.success("🎉 Registration successful! Proceed to the Login tab to authenticate.")
+                        except Exception as e:
+                            st.error(f"Database Error: {e}")
