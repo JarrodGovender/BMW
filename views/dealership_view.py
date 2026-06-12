@@ -159,7 +159,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         except Exception as e: st.error(f"Error: {e}")
                     else: st.warning("Please enter RO Number, Client, and Vehicle.")
 
-            # Load Active WIP (Excluding Invoiced)
+            # Load Active WIP
             try:
                 loc_id = st.session_state.get('location_id', 'BMW_SANDTON')
                 wip_query = supabase.table("service_wip").select("*").eq("location_id", loc_id).neq("status", "Invoiced / Closed")
@@ -227,7 +227,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
 
         with t3:
             st.markdown(f"### 📊 {st.session_state.get('location_id', '').replace('_', ' ')} WORKSHOP REPORTING & EXTRACTION")
-            st.info("💡 Paste your raw, messy DMS Daily WIP Report here. The ingestion engine will parse the legacy formatting and group Repair Orders by Service Advisor automatically.")
+            st.info("💡 Paste your raw DMS Daily WIP Report here. The ingestion engine enforces strict filtering to only capture genuine RO lines.")
             
             raw_wip_paste = st.text_area("PASTE RAW DMS DATA HERE (From Excel or Kerridge/Drive)", height=200)
             
@@ -236,21 +236,19 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                     try:
                         lines = [line.strip() for line in raw_wip_paste.split('\n') if line.strip()]
                         
-                        # 1. State Machine Parsing
                         current_advisor = "Unassigned"
                         raw_headers = None
                         extracted_rows = []
                         
                         for line in lines:
-                            # Catch the headers
+                            # 1. Catch the headers
                             if "WIP No" in line or "Customer name" in line:
                                 separator = '\t' if '\t' in line else None
                                 raw_headers = line.split(separator) if separator else re.split(r'\s{2,}', line)
                                 continue
                             
-                            # Catch the Advisor changes
-                            if line.lower().startswith("opnum:"):
-                                # Example line: "opnum: 2473.0000 - Sagrie Pillay"
+                            # 2. Catch the Advisor changes
+                            if "opnum:" in line.lower():
                                 parts = line.split('-', 1)
                                 if len(parts) > 1:
                                     current_advisor = parts[1].strip()
@@ -258,22 +256,22 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                     current_advisor = line.replace("opnum:", "").strip()
                                 continue
                                 
-                            # Skip totals and junk
-                            if line.lower().startswith("total:") or line.lower().startswith("department:") or "grand totals" in line.lower():
-                                continue
-                                
-                            # It's a data row! Parse it and inject the current_advisor
+                            # 3. Data Row Strict Filtering
                             separator = '\t' if '\t' in line else None
                             row_data = line.split(separator) if separator else re.split(r'\s{2,}', line)
                             
-                            # Ensure row has data (first item should be an RO number)
-                            if len(row_data) > 0 and row_data[0].strip().isdigit():
-                                row_data.append(current_advisor)
-                                extracted_rows.append(row_data)
+                            # CRITICAL FIX: The first column MUST begin with a number
+                            # This completely strips out "Total:", "Grand totals", "Department:", etc.
+                            first_col = str(row_data[0]).strip()
+                            if not first_col or not first_col[0].isdigit():
+                                continue
+                                
+                            # If it passes the numeric check, append the advisor and add to extracted rows
+                            row_data.append(current_advisor)
+                            extracted_rows.append(row_data)
                         
-                        # 2. Header Formatting
+                        # Handle Header Deduplication
                         if not raw_headers:
-                            # Fallback if no header row was detected
                             raw_headers = ["WIP No", "Date in", "Customer name", "Reg no", "Make", "Labour", "Other/Sub", "Parts", "CES", "Total", "Acc No", "Track", "Notes1", "Notes2", "Notes3", "Ownop", "Bookin"]
                         
                         clean_headers = []
@@ -288,15 +286,12 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                 seen_headers[h_clean] = 0
                                 clean_headers.append(h_clean)
                         
-                        # Add our injected column to headers
                         clean_headers.append("Service_Advisor")
                         
-                        # Normalize row lengths
                         max_cols = len(clean_headers)
                         normalized_rows = []
                         for row in extracted_rows:
                             if len(row) < max_cols:
-                                # Pad the middle, preserving the Service_Advisor at the end
                                 advisor = row.pop()
                                 row.extend([''] * (max_cols - len(row) - 1))
                                 row.append(advisor)
@@ -306,7 +301,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                 
                         df_report = pd.DataFrame(normalized_rows, columns=clean_headers)
                         
-                        # 3. Clean up the Total Value column
+                        # Financial Cleanup
                         val_col = None
                         for col in df_report.columns:
                             if "total" in col.lower() and "wip" not in col.lower():
@@ -317,35 +312,29 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                             df_report[val_col] = df_report[val_col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
                             df_report[val_col] = pd.to_numeric(df_report[val_col], errors='coerce').fillna(0)
                             
-                        # Move Service Advisor to the front for easier reading
                         cols = list(df_report.columns)
                         cols = [cols[-1]] + cols[:-1]
                         df_report = df_report[cols]
                         
-                        # Render the Success UI
-                        st.success("✅ Complex DMS Data Parsed & Segmented Successfully.")
+                        st.success("✅ Cleaned: Duplicate totals ignored, headers deduped, and ROs strictly filtered.")
                         
                         if val_col:
                             st.markdown("### 📈 LIVE WORKSHOP METRICS")
                             c1, c2 = st.columns(2)
-                            c1.metric("Total Live Extracted Value", f"R {df_report[val_col].sum():,.2f}")
-                            c2.metric("Total Open Repair Orders", len(df_report))
+                            c1.metric("Total Extracted RO Value", f"R {df_report[val_col].sum():,.2f}")
+                            c2.metric("Total Extracted Repair Orders", len(df_report))
                         
                         st.markdown("### 📋 ADVISOR WORK-IN-PROGRESS")
-                        # Create visual grouping by Advisor
                         unique_advisors = sorted(df_report['Service_Advisor'].unique().tolist())
                         for advisor in unique_advisors:
-                            if "Kerridge Vendor" in advisor: continue # Skip system rows
+                            if "Kerridge Vendor" in advisor: continue 
                             
                             adv_df = df_report[df_report['Service_Advisor'] == advisor].copy()
                             adv_total = adv_df[val_col].sum() if val_col else 0.0
                             
                             st.markdown(f"<div style='background-color:{container_bg}; padding:10px; border-left:4px solid {text_color}; margin-top:20px; font-weight:bold;'>👤 {advisor.upper()} | {len(adv_df)} ROs | R {adv_total:,.2f}</div>", unsafe_allow_html=True)
                             
-                            # Hide the advisor column since it's in the header now
                             display_df = adv_df.drop(columns=['Service_Advisor'])
-                            
-                            # Apply currency formatting to the total column for display
                             if val_col:
                                 display_df[val_col] = display_df[val_col].apply(lambda x: f"R {x:,.2f}")
                             
