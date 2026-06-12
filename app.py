@@ -135,10 +135,10 @@ else:
         if role == 'PROPERTY_MANAGER':
             property_view.render(supabase, container_bg, text_color, theme)
             
-        # Route to Executive Level Portfolio Dashboard
-        elif role in ['DIRECTOR', 'SUPER_USER']:
+        # Route to Executive Level Portfolio Dashboard (DIRECTOR ONLY)
+        elif role == 'DIRECTOR':
             director_view.render(supabase, container_bg, text_color, metric_label, theme)
             
-        # Route all operational roles (Sales, Parts, Workshop, Finance) to the Dealership Operations Workspace
+        # Route all operational roles AND the SUPER_USER to the Dealership Operations Workspace
         else:
             dealership_view.render(supabase, container_bg, text_color, metric_label, border_color, theme)
