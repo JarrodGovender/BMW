@@ -120,14 +120,14 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
     IS_MANAGEMENT = role in ['DEALER_PRINCIPAL', 'FINANCE_ADMIN', 'SALES_MANAGER', 'WORKSHOP_MANAGER', 'DIRECTOR', 'SUPER_USER']
 
     # ----------------------------------------------------------------
-    # ROUTE A: SERVICE / WORKSHOP DEPARTMENT (FIXED ROUTING CONDITION)
+    # ROUTE A: SERVICE / WORKSHOP DEPARTMENT
     # ----------------------------------------------------------------
     if active_dept == 'SERVICE' or role == 'WORKSHOP_MANAGER':
         if role == 'SUPER_USER':
-            t1, t2 = st.tabs(["🔧 DAILY WIP", "🔑 TOKEN MANAGER"])
+            t1, t2, t3, t4 = st.tabs(["🔧 DAILY WIP", "📦 ARCHIVE", "📊 WIP REPORTS", "🔑 TOKEN MANAGER"])
         else:
-            t1, = st.tabs(["🔧 DAILY WIP"])
-            t2 = None
+            t1, t2, t3 = st.tabs(["🔧 DAILY WIP", "📦 ARCHIVE", "📊 WIP REPORTS"])
+            t4 = None
             
         with t1:
             st.markdown(f"### 🔧 {st.session_state.get('location_id', '').replace('_', ' ')} SERVICE DESK")
@@ -159,9 +159,8 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         except Exception as e: st.error(f"Error: {e}")
                     else: st.warning("Please enter RO Number, Client, and Vehicle.")
 
-            # Load Active WIP
+            # Load Active WIP (Excluding Invoiced)
             try:
-                # Force local matrix constraints on the query
                 loc_id = st.session_state.get('location_id', 'BMW_SANDTON')
                 wip_query = supabase.table("service_wip").select("*").eq("location_id", loc_id).neq("status", "Invoiced / Closed")
                 res = wip_query.order("id", desc=True).execute().data or []
@@ -170,15 +169,12 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             if not res: st.info("No active Repair Orders in the workshop right now.")
             else:
                 df_wip = pd.DataFrame(res)
-                
-                # Top Metrics
                 m1, m2, m3 = st.columns(3)
                 m1.metric("ACTIVE ROs", len(df_wip))
                 m2.metric("WAITING ON PARTS", len(df_wip[df_wip['status'] == 'Waiting on Parts']))
                 m3.metric("TOTAL WIP VALUE", f"R {df_wip['estimated_value'].astype(float).sum():,.2f}")
                 st.markdown("---")
                 
-                # Render Kanban-style expanders for active ROs
                 for _, r in df_wip.iterrows():
                     icon = "⏳" if r['status'] == "Waiting on Parts" else ("✅" if r['status'] == "Ready for Delivery" else "🔧")
                     with st.expander(f"{icon} RO: {r['ro_number']} | {r['client_name']} ({r['vehicle_details']}) — {r['status'].upper()}"):
@@ -190,13 +186,101 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                             nt = st.text_input("TECHNICIAN", value=str(r.get('technician', '')), key=f"wt_{r['id']}")
                         with c2: 
                             nn = st.text_area("WORKSHOP NOTES", value=str(r.get('notes', '')), height=130, key=f"wn_{r['id']}")
-                        if st.button("💾 SAVE RO", key=f"wu_{r['id']}"):
+                        if st.button("💾 SAVE & UPDATE", key=f"wu_{r['id']}"):
                             try:
                                 supabase.table("service_wip").update({"status": ns, "technician": nt, "notes": nn}).eq("id", r['id']).execute(); safe_rerun()
                             except Exception as e: st.error(e)
 
-        if t2:
-            with t2: _render_token_manager(supabase)
+        with t2:
+            st.markdown(f"### 📦 {st.session_state.get('location_id', '').replace('_', ' ')} INVOICED / CLOSED RO ARCHIVE")
+            try: 
+                loc_id = st.session_state.get('location_id', 'BMW_SANDTON')
+                arc_query = supabase.table("service_wip").select("*").eq("location_id", loc_id).eq("status", "Invoiced / Closed")
+                ares = arc_query.order("id", desc=True).execute().data or []
+            except: ares = []
+            
+            if not ares: st.info(f"No closed Repair Orders in the archive for this branch.")
+            else:
+                df_a = pd.DataFrame(ares)
+                df_a['DATE'] = pd.to_datetime(df_a.get('created_at', pd.Series(dtype=str))).dt.strftime('%d %b %Y').fillna("Unknown")
+                
+                ra = pd.DataFrame()
+                ra["RO NUMBER"] = df_a["ro_number"]
+                ra["CLIENT"] = df_a["client_name"]
+                ra["ADVISOR"] = df_a["service_advisor"]
+                ra["INVOICED VALUE"] = df_a.get("estimated_value", pd.Series([0]*len(df_a))).astype(float).map(lambda x: f"R {x:,.2f}")
+                ra["DATE LOGGED"] = df_a["DATE"]
+                
+                st.dataframe(ra, hide_index=True, use_container_width=True)
+                
+                for _, r in df_a.iterrows():
+                    with st.expander(f"📦 ARCHIVED RO: {r['ro_number']} | {r['client_name']} ({r['vehicle_details']})"):
+                        c1, c2 = st.columns([1, 2])
+                        with c1:
+                            ns = st.selectbox("REVISE STATUS", WIP_STAGES, index=WIP_STAGES.index(r['status']) if r['status'] in WIP_STAGES else 6, key=f"aws_{r['id']}")
+                        with c2: 
+                            nn = st.text_area("ARCHIVE NOTES", value=str(r.get('notes', '')), height=130, key=f"awn_{r['id']}")
+                        if st.button("REOPEN RO", key=f"awu_{r['id']}"):
+                            try: 
+                                supabase.table("service_wip").update({"status": ns, "notes": nn}).eq("id", r['id']).execute(); safe_rerun()
+                            except Exception as e: st.error(e)
+
+        with t3:
+            st.markdown(f"### 📊 {st.session_state.get('location_id', '').replace('_', ' ')} WORKSHOP REPORTING & EXTRACTION")
+            st.info("💡 Paste your raw, messy DMS Daily WIP Report here. The ingestion engine will clean, format, and visualize the data into a readable 16:9 layout.")
+            
+            raw_wip_paste = st.text_area("PASTE RAW DMS DATA HERE (From Excel or Kerridge/Drive)", height=200)
+            
+            if st.button("📊 INGEST & GENERATE REPORT", use_container_width=True):
+                if raw_wip_paste.strip():
+                    try:
+                        # Parsing logic to handle varying tab/comma/space separations from DMS systems
+                        lines = [line.strip() for line in raw_wip_paste.split('\n') if line.strip()]
+                        separator = '\t' if '\t' in lines[0] else (',' if ',' in lines[0] else None)
+                        
+                        if separator:
+                            parsed_data = [line.split(separator) for line in lines]
+                        else:
+                            parsed_data = [re.split(r'\s{2,}', line) for line in lines]
+                            
+                        headers = parsed_data[0]
+                        data_rows = parsed_data[1:]
+                        
+                        # Normalize row lengths to prevent pandas crashes
+                        max_cols = len(headers)
+                        clean_rows = [row + [''] * (max_cols - len(row)) if len(row) < max_cols else row[:max_cols] for row in data_rows]
+                        
+                        df_report = pd.DataFrame(clean_rows, columns=headers)
+                        
+                        st.success("✅ Raw Data Parsed & Cleaned Successfully.")
+                        st.dataframe(df_report, use_container_width=True)
+                        
+                        # AI / Generic Data Extraction: Search for Financial Columns
+                        val_col = None
+                        for col in df_report.columns:
+                            if any(x in str(col).lower() for x in ['value', 'amount', 'zar', 'cost', 'total', 'price', 'wip']):
+                                val_col = col
+                                break
+                        
+                        if val_col:
+                            try:
+                                # Strip currency symbols and letters, cast to float
+                                df_report[val_col] = df_report[val_col].astype(str).str.replace(r'[^\d.]', '', regex=True)
+                                df_report[val_col] = pd.to_numeric(df_report[val_col], errors='coerce').fillna(0)
+                                
+                                st.markdown("#### 📈 INSTANT FINANCIAL EXTRACTION")
+                                c1, c2 = st.columns(2)
+                                c1.metric("Total Extracted Report Value", f"R {df_report[val_col].sum():,.2f}")
+                                c2.metric("Total Extracted Repair Orders", len(df_report))
+                            except: pass
+                            
+                    except Exception as e:
+                        st.error(f"Failed to process raw data. Ensure you copied the headers: {e}")
+                else:
+                    st.warning("Please paste data into the field before generating.")
+
+        if t4:
+            with t4: _render_token_manager(supabase)
 
     # ----------------------------------------------------------------
     # ROUTE B: SALES / ADMIN / PARTS DEPARTMENTS
@@ -449,7 +533,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                 rd["CAPITAL VAL (ZAR)"] = f"R {float(row.get('CAPITAL VAL (ZAR)', 0)):,.2f}"
                                 render_rows.append(rd)
                             cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR"] + (["FP STATUS"] if IS_MANAGEMENT else []) + ["CAPITAL VAL (ZAR)"]
-                            st.dataframe(pd.DataFrame(render_rows)[cols], hide_index=True, use_container_width=True)
+                            st.dataframe(pd.DataFrame(r_rows)[cols], hide_index=True, use_container_width=True)
 
             with sm_tabs[1]:
                 st.markdown("#### 🔵 DEMO VEHICLES PORTAL")
