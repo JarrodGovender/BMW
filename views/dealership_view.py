@@ -35,10 +35,21 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
     role = str(st.session_state.get('role', '')).upper()
     IS_MANAGEMENT = role in ['DEALER_PRINCIPAL', 'FINANCE_ADMIN', 'SALES_MANAGER', 'DIRECTOR', 'SUPER_USER']
 
-    if IS_MANAGEMENT:
-        t1, t2, t3, t4, t5, t6, t7 = st.tabs(["🔥 FEED", "💼 CLAIMED", "🚗 STOCKROOM", "💼 PIPELINE", "📦 ARCHIVE", "📊 OVERVIEW", "💰 F&I DESK"])
+    # Dynamic Tab Allocation based on Enterprise Matrix Role
+    if role == 'SUPER_USER':
+        t1, t2, t3, t4, t5, t6, t7, t8 = st.tabs([
+            "🔥 FEED", "💼 CLAIMED", "🚗 STOCKROOM", "💼 PIPELINE", "📦 ARCHIVE", "📊 OVERVIEW", "💰 F&I DESK", "🔑 TOKEN MANAGER"
+        ])
+    elif IS_MANAGEMENT:
+        t1, t2, t3, t4, t5, t6, t7 = st.tabs([
+            "🔥 FEED", "💼 CLAIMED", "🚗 STOCKROOM", "💼 PIPELINE", "📦 ARCHIVE", "📊 OVERVIEW", "💰 F&I DESK"
+        ])
+        t8 = None
     else:
-        t1, t2, t3, t4, t5 = st.tabs(["🔥 FEED", "💼 CLAIMED", "🚗 STOCKROOM", "💼 PIPELINE", "📦 ARCHIVE"])
+        t1, t2, t3, t4, t5 = st.tabs([
+            "🔥 FEED", "💼 CLAIMED", "🚗 STOCKROOM", "💼 PIPELINE", "📦 ARCHIVE"
+        ])
+        t6 = t7 = t8 = None
 
     # ---- TAB 1: DAILY FEED ----
     with t1:
@@ -770,3 +781,102 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                             with smtplib.SMTP(st.secrets["smtp"]["server"], int(st.secrets["smtp"]["port"])) as srv: srv.starttls(); srv.login(st.secrets["smtp"]["sender_email"], st.secrets["smtp"]["password"]); srv.send_message(msg)
                             st.success("✅ Routed.")
                         except Exception as e: st.error(f"Error: {e}")
+
+    # ---- 🔑 TAB 8: TOKEN MANAGER (SUPER USER DECK) ----
+    if role == 'SUPER_USER' and t8:
+        with t8:
+            st.markdown("### 🔑 ENTERPRISE AUTH POLICY & TOKEN DECK")
+            st.info("ℹ️ System Super Users can provision restricted corporate tokens mapped to specific multi-tenant matrix variables.")
+            
+            # Interactive Token Provision Form
+            with st.form("generate_token_form", clear_on_submit=True):
+                st.markdown("#### PROVISION NEW AUTHORIZATION KEY")
+                
+                c_tok = st.text_input("Custom Token Name", help="Leave blank to auto-generate a secure random sequence").strip()
+                
+                cc1, cc2 = st.columns(2)
+                
+                # Fetch active matrix IDs dynamically from Supabase
+                try: db_roles = [r['id'] for r in supabase.table("roles").select("id").execute().data]
+                except: db_roles = ["SALES_REP", "SALES_MANAGER", "FINANCE_ADMIN", "DEALER_PRINCIPAL", "DIRECTOR", "SUPER_USER"]
+                
+                try: db_locs = [l['id'] for l in supabase.table("locations").select("id").execute().data]
+                except: db_locs = ["BMW_SANDTON", "BMW_BEDFORDVIEW", "BMW_EASTRAND", "BMW_DALPARK", "MF_SANDTON", "MF_FOURWAYS", "GLOBAL_HQ"]
+                
+                try: db_depts = [d['id'] for d in supabase.table("departments").select("id").execute().data]
+                except: db_depts = ["NEW_SALES", "USED_SALES", "SERVICE", "PARTS", "FINANCE", "ALL_DEPTS"]
+                
+                try: db_brands = [b['id'] for b in supabase.table("brands").select("id").execute().data]
+                except: db_brands = ["BMW", "MINI", "MOTORRAD", "MG", "HONDA", "JAC", "ALL_BRANDS"]
+
+                c_role = cc1.selectbox("Matrix Role Override", db_roles)
+                c_loc = cc2.selectbox("Location Identifier", db_locs)
+                c_dept = cc1.selectbox("Department Access Silo", db_depts)
+                c_brand = cc2.selectbox("Brand Scope Guard", db_brands)
+                
+                if st.form_submit_button("GENERATE & ACTIVATE TOKEN", use_container_width=True):
+                    if not c_tok:
+                        import secrets
+                        c_tok = f"TK-{secrets.token_hex(4).upper()}"
+                    
+                    token_payload = {
+                        "token": c_tok,
+                        "role_id": c_role,
+                        "location_id": c_loc,
+                        "department_id": c_dept,
+                        "brand_id": c_brand,
+                        "is_active": True
+                    }
+                    
+                    try:
+                        supabase.table("auth_tokens").insert(token_payload).execute()
+                        st.success(f"🎉 Token established successfully: `{c_tok}`")
+                        safe_rerun()
+                    except Exception as e:
+                        st.error(f"Database rejection: {e}")
+            
+            st.markdown("---")
+            st.markdown("#### LIVE AUTHORIZATION MATRIX ENTRIES")
+            
+            # Display current active tokens and allow immediate interactive revocation
+            try:
+                tokens_res = supabase.table("auth_tokens").select("*").order("is_active", desc=True).execute().data
+                if not tokens_res:
+                    st.caption("Zero structural tokens located in database metadata.")
+                else:
+                    df_tokens = pd.DataFrame(tokens_res)
+                    
+                    # Ensure created_at is handled correctly if it exists
+                    if 'created_at' in df_tokens.columns:
+                        df_tokens = df_tokens.drop(columns=['created_at'])
+                        
+                    # Sanitize layout presentation headings
+                    df_display = df_tokens.rename(columns={
+                        "token": "TOKEN KEY", "role_id": "ASSIGNED ROLE", "location_id": "LOCATION SCOPE",
+                        "department_id": "DEPT SCOPE", "brand_id": "BRAND SILO", "is_active": "ACTIVE STATUS"
+                    })
+                    
+                    edited_tokens = st.data_editor(
+                        df_display,
+                        disabled=["TOKEN KEY", "ASSIGNED ROLE", "LOCATION SCOPE", "DEPT SCOPE", "BRAND SILO"],
+                        hide_index=True,
+                        use_container_width=True,
+                        key="token_management_data_editor"
+                    )
+                    
+                    if st.button("COMMIT METADATA CHANGES", use_container_width=True):
+                        changes_tracked = 0
+                        for i in range(len(edited_tokens)):
+                            old_state = bool(df_display.iloc[i]["ACTIVE STATUS"])
+                            new_state = bool(edited_tokens.iloc[i]["ACTIVE STATUS"])
+                            
+                            if old_state != new_state:
+                                t_key = edited_tokens.iloc[i]["TOKEN KEY"]
+                                supabase.table("auth_tokens").update({"is_active": new_state}).eq("token", t_key).execute()
+                                changes_tracked += 1
+                                
+                        if changes_tracked > 0:
+                            st.success(f"✅ Successfully synchronized state for {changes_tracked} enterprise security token(s).")
+                            safe_rerun()
+            except Exception as e:
+                st.error(f"System failed to pool authentication keys: {e}")
