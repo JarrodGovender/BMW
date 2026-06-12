@@ -5,6 +5,7 @@ import io
 import re
 import random
 import smtplib
+import hashlib
 from email.message import EmailMessage
 from config import safe_rerun, get_ai_vehicle_specs, create_brochure_excel, SAST
 
@@ -311,7 +312,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
 
         with sm_tabs[1]:
             st.markdown("#### 🔵 DEMO VEHICLES PORTAL")
-            if IS_MANAGEMENT and role == 'FINANCE_ADMIN':
+            if role in ['FINANCE_ADMIN', 'SUPER_USER']:
                 with st.expander("🛠️ ADMIN CONSOLE: DEMO INVENTORY UPLOAD", expanded=False):
                     raw_demo = st.text_area("PASTE RAW DATA ROWS HERE (DEMO)", height=150, key="demo_paste")
                     if st.button("PROCESS OVERWRITE DEMO", key="process_demo_btn") and raw_demo.strip():
@@ -677,7 +678,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         st.write(f"📝 *\"{rn.get('note_text','')}\"*")
 
     # ---- TAB 7: F&I DESK ----
-    if IS_MANAGEMENT and role == 'FINANCE_ADMIN':
+    if IS_MANAGEMENT and role in ['FINANCE_ADMIN', 'SUPER_USER']:
         with t7:
             st.markdown("### 💰 F&I PROFITABILITY DESK")
             ds = st.radio("ORIGINATION", ["📥 Pipeline: Pending Finance Apps", "🚗 Master Stockroom", "✏️ Custom Buy-In"], horizontal=True)
@@ -782,37 +783,78 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                             st.success("✅ Routed.")
                         except Exception as e: st.error(f"Error: {e}")
 
-    # ---- 🔑 TAB 8: TOKEN MANAGER (SUPER USER DECK) ----
+    # ---- 🔑 TAB 8: SUPER USER ADMINISTRATIVE DECK ----
     if role == 'SUPER_USER' and t8:
         with t8:
-            st.markdown("### 🔑 ENTERPRISE AUTH POLICY & TOKEN DECK")
-            st.info("ℹ️ System Super Users can provision restricted corporate tokens mapped to specific multi-tenant matrix variables.")
+            st.markdown("### 🔑 SYSTEM ADMINISTRATION & PROVISIONING")
             
-            # Interactive Token Provision Form
+            # Fetch active matrix IDs dynamically from Supabase
+            try: db_roles = [r['id'] for r in supabase.table("roles").select("id").execute().data]
+            except: db_roles = ["SALES_REP", "SALES_MANAGER", "FINANCE_ADMIN", "DEALER_PRINCIPAL", "DIRECTOR", "SUPER_USER"]
+            
+            try: db_locs = [l['id'] for l in supabase.table("locations").select("id").execute().data]
+            except: db_locs = ["BMW_SANDTON", "BMW_BEDFORDVIEW", "BMW_EASTRAND", "BMW_DALPARK", "MF_SANDTON", "MF_FOURWAYS", "GLOBAL_HQ"]
+            
+            try: db_depts = [d['id'] for d in supabase.table("departments").select("id").execute().data]
+            except: db_depts = ["NEW_SALES", "USED_SALES", "SERVICE", "PARTS", "FINANCE", "ALL_DEPTS"]
+            
+            try: db_brands = [b['id'] for b in supabase.table("brands").select("id").execute().data]
+            except: db_brands = ["BMW", "MINI", "MOTORRAD", "MG", "HONDA", "JAC", "ALL_BRANDS"]
+
+            # Form 1: Direct User Creation (For instant test accounts)
+            with st.form("direct_user_creation_form", clear_on_submit=True):
+                st.markdown("#### 👤 INSTANTLY PROVISION TEST USER ACCOUNT")
+                st.caption("This form injects a user directly into the authentication matrix without requiring a token registration flow.")
+                
+                u_username = st.text_input("Username (e.g., test_rep)", help="Lowercase, no spaces").strip().lower()
+                u_name = st.text_input("Display Name (e.g., John Doe)").strip()
+                u_pass = st.text_input("Account Password", type="password").strip()
+                
+                uc1, uc2 = st.columns(2)
+                
+                u_role = uc1.selectbox("Assigned Role Matrix", db_roles, key="u_role_sel")
+                u_loc = uc2.selectbox("Assigned Location", db_locs, key="u_loc_sel")
+                u_dept = uc1.selectbox("Assigned Department Silo", db_depts, key="u_dept_sel")
+                u_brand = uc2.selectbox("Assigned Brand Scope", db_brands, key="u_brand_sel")
+                
+                if st.form_submit_button("🚀 CREATE USER ACCOUNT IMMEDIATELY", use_container_width=True):
+                    if not u_username or not u_name or not u_pass:
+                        st.error("❌ All fields (Username, Name, Password) are required to provision an account.")
+                    else:
+                        hashed_pass = hashlib.sha256(u_pass.encode()).hexdigest()
+                        
+                        user_payload = {
+                            "username": u_username,
+                            "name": u_name,
+                            "password": hashed_pass,
+                            "role": u_role,  # Legacy column support
+                            "role_id": u_role,
+                            "location_id": u_loc,
+                            "department_id": u_dept,
+                            "brand_id": u_brand
+                        }
+                        try:
+                            supabase.table("users").insert(user_payload).execute()
+                            st.success(f"🎉 Test account `@{u_username}` successfully created! You can now log out and log in with these credentials.")
+                        except Exception as e:
+                            st.error(f"❌ Database rejected user insertion: {e}")
+            
+            st.markdown("---")
+            
+            # Form 2: Token Invitation Deck
+            st.markdown("### 🔑 ENTERPRISE AUTH TOKEN DECK")
+            st.info("ℹ️ Generate corporate registration tokens mapped to multi-tenant matrix variables for standard invitation signups.")
+            
             with st.form("generate_token_form", clear_on_submit=True):
-                st.markdown("#### PROVISION NEW AUTHORIZATION KEY")
+                st.markdown("#### PROVISION NEW REGISTRATION KEY")
                 
                 c_tok = st.text_input("Custom Token Name", help="Leave blank to auto-generate a secure random sequence").strip()
                 
                 cc1, cc2 = st.columns(2)
-                
-                # Fetch active matrix IDs dynamically from Supabase
-                try: db_roles = [r['id'] for r in supabase.table("roles").select("id").execute().data]
-                except: db_roles = ["SALES_REP", "SALES_MANAGER", "FINANCE_ADMIN", "DEALER_PRINCIPAL", "DIRECTOR", "SUPER_USER"]
-                
-                try: db_locs = [l['id'] for l in supabase.table("locations").select("id").execute().data]
-                except: db_locs = ["BMW_SANDTON", "BMW_BEDFORDVIEW", "BMW_EASTRAND", "BMW_DALPARK", "MF_SANDTON", "MF_FOURWAYS", "GLOBAL_HQ"]
-                
-                try: db_depts = [d['id'] for d in supabase.table("departments").select("id").execute().data]
-                except: db_depts = ["NEW_SALES", "USED_SALES", "SERVICE", "PARTS", "FINANCE", "ALL_DEPTS"]
-                
-                try: db_brands = [b['id'] for b in supabase.table("brands").select("id").execute().data]
-                except: db_brands = ["BMW", "MINI", "MOTORRAD", "MG", "HONDA", "JAC", "ALL_BRANDS"]
-
-                c_role = cc1.selectbox("Matrix Role Override", db_roles)
-                c_loc = cc2.selectbox("Location Identifier", db_locs)
-                c_dept = cc1.selectbox("Department Access Silo", db_depts)
-                c_brand = cc2.selectbox("Brand Scope Guard", db_brands)
+                c_role = cc1.selectbox("Matrix Role Override", db_roles, key="t_role_sel")
+                c_loc = cc2.selectbox("Location Identifier", db_locs, key="t_loc_sel")
+                c_dept = cc1.selectbox("Department Access Silo", db_depts, key="t_dept_sel")
+                c_brand = cc2.selectbox("Brand Scope Guard", db_brands, key="t_brand_sel")
                 
                 if st.form_submit_button("GENERATE & ACTIVATE TOKEN", use_container_width=True):
                     if not c_tok:
@@ -838,19 +880,15 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             st.markdown("---")
             st.markdown("#### LIVE AUTHORIZATION MATRIX ENTRIES")
             
-            # Display current active tokens and allow immediate interactive revocation
             try:
                 tokens_res = supabase.table("auth_tokens").select("*").order("is_active", desc=True).execute().data
                 if not tokens_res:
                     st.caption("Zero structural tokens located in database metadata.")
                 else:
                     df_tokens = pd.DataFrame(tokens_res)
-                    
-                    # Ensure created_at is handled correctly if it exists
                     if 'created_at' in df_tokens.columns:
                         df_tokens = df_tokens.drop(columns=['created_at'])
                         
-                    # Sanitize layout presentation headings
                     df_display = df_tokens.rename(columns={
                         "token": "TOKEN KEY", "role_id": "ASSIGNED ROLE", "location_id": "LOCATION SCOPE",
                         "department_id": "DEPT SCOPE", "brand_id": "BRAND SILO", "is_active": "ACTIVE STATUS"
