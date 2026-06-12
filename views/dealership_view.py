@@ -40,7 +40,7 @@ def _render_token_manager(supabase):
     st.info("💡 Notice: To ensure accurate system architecture testing, provisioned users will inherit the active God Mode matrix unless manually overridden below.")
     
     try: db_roles = [r['id'] for r in supabase.table("roles").select("id").execute().data]
-    except: db_roles = ["SALES_REP", "SALES_MANAGER", "FINANCE_ADMIN", "DEALER_PRINCIPAL", "DIRECTOR", "SUPER_USER"]
+    except: db_roles = ["SALES_REP", "SALES_MANAGER", "FINANCE_ADMIN", "DEALER_PRINCIPAL", "DIRECTOR", "SUPER_USER", "WORKSHOP_MANAGER"]
     try: db_locs = [l['id'] for l in supabase.table("locations").select("id").execute().data]
     except: db_locs = ["BMW_SANDTON", "BMW_BEDFORDVIEW", "BMW_EASTRAND", "BMW_DALPARK", "MF_SANDTON", "MF_FOURWAYS", "GLOBAL_HQ"]
     try: db_depts = [d['id'] for d in supabase.table("departments").select("id").execute().data]
@@ -120,9 +120,9 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
     IS_MANAGEMENT = role in ['DEALER_PRINCIPAL', 'FINANCE_ADMIN', 'SALES_MANAGER', 'WORKSHOP_MANAGER', 'DIRECTOR', 'SUPER_USER']
 
     # ----------------------------------------------------------------
-    # ROUTE A: SERVICE / WORKSHOP DEPARTMENT
+    # ROUTE A: SERVICE / WORKSHOP DEPARTMENT (FIXED ROUTING CONDITION)
     # ----------------------------------------------------------------
-    if active_dept == 'SERVICE':
+    if active_dept == 'SERVICE' or role == 'WORKSHOP_MANAGER':
         if role == 'SUPER_USER':
             t1, t2 = st.tabs(["🔧 DAILY WIP", "🔑 TOKEN MANAGER"])
         else:
@@ -139,7 +139,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                 cname = cb.text_input("CLIENT NAME")
                 veh_desc = ca.text_input("VEHICLE (Model/Reg/VIN)")
                 status = cb.selectbox("INITIAL STATUS", WIP_STAGES, index=1)
-                adv = ca.text_input("SERVICE ADVISOR", value=st.session_state['name'])
+                adv = ca.text_input("SERVICE ADVISOR", value=st.session_state.get('name', 'Advisor'))
                 tech = cb.text_input("ASSIGNED TECHNICIAN")
                 val = ca.number_input("EST. RO VALUE (ZAR)", min_value=0.0, step=500.0)
                 
@@ -149,7 +149,9 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                             "ro_number": ro_num, "client_name": cname, "vehicle_details": veh_desc,
                             "status": status, "service_advisor": adv, "technician": tech,
                             "estimated_value": val, "notes": "",
-                            "location_id": st.session_state['location_id'], "department_id": st.session_state['department_id'], "brand_id": st.session_state['brand_id']
+                            "location_id": st.session_state.get('location_id', 'BMW_SANDTON'), 
+                            "department_id": "SERVICE", 
+                            "brand_id": st.session_state.get('brand_id', 'BMW')
                         }
                         try:
                             supabase.table("service_wip").insert(payload).execute()
@@ -159,7 +161,9 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
 
             # Load Active WIP
             try:
-                wip_query = apply_matrix_filters(supabase.table("service_wip").select("*").neq("status", "Invoiced / Closed"))
+                # Force local matrix constraints on the query
+                loc_id = st.session_state.get('location_id', 'BMW_SANDTON')
+                wip_query = supabase.table("service_wip").select("*").eq("location_id", loc_id).neq("status", "Invoiced / Closed")
                 res = wip_query.order("id", desc=True).execute().data or []
             except: res = []
             
@@ -207,7 +211,6 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             t1, t2, t3, t4, t5 = st.tabs(["🔥 FEED", "💼 CLAIMED", "🚗 STOCKROOM", "💼 PIPELINE", "📦 ARCHIVE"])
             t6 = t7 = t8 = None
 
-        # (THE REST OF THE TABS 1-7 REMAIN EXACTLY THE SAME AS YOUR PREVIOUS VERSION)
         with t1:
             if role in ['SUPER_USER', 'DIRECTOR']:
                 with st.expander("🤖 LEAD INJECTION ENGINE (SUPER USER ONLY)"):
@@ -444,9 +447,9 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                 rd = {"VSB NUMBER": row.get("VSB NUMBER", ""), "VEHICLE DESCRIPTION": row.get("VEHICLE DESCRIPTION", ""), "INTO STOCK DATE": row.get("INTO STOCK DATE", ""), "DAYS ON FLOOR": dbadge}
                                 if IS_MANAGEMENT: rd["FP STATUS"] = row.get("FP STATUS", "")
                                 rd["CAPITAL VAL (ZAR)"] = f"R {float(row.get('CAPITAL VAL (ZAR)', 0)):,.2f}"
-                                r_rows.append(rd)
+                                render_rows.append(rd)
                             cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR"] + (["FP STATUS"] if IS_MANAGEMENT else []) + ["CAPITAL VAL (ZAR)"]
-                            st.dataframe(pd.DataFrame(r_rows)[cols], hide_index=True, use_container_width=True)
+                            st.dataframe(pd.DataFrame(render_rows)[cols], hide_index=True, use_container_width=True)
 
             with sm_tabs[1]:
                 st.markdown("#### 🔵 DEMO VEHICLES PORTAL")
