@@ -19,16 +19,24 @@ def apply_matrix_filters(query_builder):
     dept = st.session_state.get('department_id')
     brand = st.session_state.get('brand_id')
     
-    # 1. Executive Bypass: See the entire holding company
+    # 1. Global Bypass: Directors and Super Users see the entire holding company
     if role in ['DIRECTOR', 'SUPER_USER']:
         return query_builder
         
-    # 2. Management Level: Locked to Building & Department, sees all local brands
-    if role in ['DEALER_PRINCIPAL', 'SALES_MANAGER', 'WORKSHOP_MANAGER', 'PARTS_MANAGER', 'FINANCE_ADMIN']:
+    # 2. Location-Wide Bypass: DPs and Admins see everything inside their specific building
+    # This prevents BMW Sandton from seeing MF Fourways, but lets the Admin see all departments inside Sandton.
+    if role in ['DEALER_PRINCIPAL', 'FINANCE_ADMIN', 'PROPERTY_MANAGER']:
+        return query_builder.eq("location_id", loc)
+        
+    # 3. Department Management: Locked to Building + Department, but sees all brands within it
+    if role in ['SALES_MANAGER', 'WORKSHOP_MANAGER', 'PARTS_MANAGER']:
         return query_builder.eq("location_id", loc).eq("department_id", dept)
         
-    # 3. Staff Level: Locked to Building, Department, and specific Brand silo
-    return query_builder.eq("location_id", loc).eq("department_id", dept).eq("brand_id", brand)
+    # 4. Standard Staff: Locked to Building + Department + Specific Brand Silo
+    if brand == 'ALL_BRANDS':
+        return query_builder.eq("location_id", loc).eq("department_id", dept)
+    else:
+        return query_builder.eq("location_id", loc).eq("department_id", dept).eq("brand_id", brand)
 
 
 def render(supabase, container_bg, text_color, metric_label, border_color, theme):
@@ -143,7 +151,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
         st.markdown("### 🚗 LIVE USED CAR STOCKROOM")
         
         try:
-            # APPLIED SECURITY MATRIX
+            # APPLIED SECURITY MATRIX - Fetches only stock for the logged-in user's Building/Department
             base_stock = supabase.table("used_car_stock").select("*")
             secure_stock = apply_matrix_filters(base_stock)
             stock_res = secure_stock.order("days_in_stock", desc=True).execute().data
@@ -230,20 +238,20 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                                 
                                     mem_comment = comment_memory.get(vsb, "")
                                     
-                                    # Inject the Matrix Identifiers when saving
+                                    # INJECT MATRIX - Force Used Stock into USED_SALES department
                                     insert_payload = {
                                         "vsb_no": vsb, "description": desc, "into_stock": into_stk, 
                                         "days_in_stock": days, "total_value": val, "location": current_franchise.strip(), 
                                         "chassis_no": chassis, "floorplan_status": "⚪ PENDING RECON", 
                                         "comments": mem_comment, "stock_type": "Used",
-                                        "location_id": st.session_state['location_id'],
-                                        "department_id": st.session_state['department_id'],
-                                        "brand_id": st.session_state['brand_id']
+                                        "location_id": st.session_state.get('location_id', 'BMW_SANDTON'),
+                                        "department_id": "USED_SALES", # Hardcoded to prevent dropping it into Finance
+                                        "brand_id": st.session_state.get('brand_id', 'ALL_BRANDS')
                                     }
                                     try: supabase.table("used_car_stock").upsert(insert_payload).execute()
                                     except: pass
                                     records_processed += 1
-                            st.success(f"🎉 Stock refreshed successfully. {records_processed} units inserted."); safe_rerun()
+                            st.success(f"🎉 Stock refreshed successfully. {records_processed} units isolated to {st.session_state.get('location_id')}."); safe_rerun()
                         except Exception as parse_ex: st.error(f"Data processing failed: {str(parse_ex)}")
 
             if df_live_stock.empty:
@@ -347,18 +355,19 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                         except: days = 0
                                         chassis = parts[13].strip() if len(parts) > 13 else ''
                                         
+                                    # INJECT MATRIX - Force Demo Stock into NEW_SALES department
                                     insert_payload = {
                                         "vsb_no": vsb, "description": desc, "into_stock": into, 
                                         "days_in_stock": days, "total_value": val, "location": cf.strip(), 
                                         "chassis_no": chassis, "floorplan_status": "⚪ PENDING RECON", 
                                         "comments": mem.get(vsb, ""), "stock_type": "Demo",
-                                        "location_id": st.session_state['location_id'],
-                                        "department_id": st.session_state['department_id'],
-                                        "brand_id": st.session_state['brand_id']
+                                        "location_id": st.session_state.get('location_id', 'BMW_SANDTON'),
+                                        "department_id": "NEW_SALES", # Hardcoded to prevent dropping it into Finance
+                                        "brand_id": st.session_state.get('brand_id', 'ALL_BRANDS')
                                     }
                                     supabase.table("used_car_stock").upsert(insert_payload).execute()
                                     recs += 1
-                            st.success(f"🎉 Demo Stock refreshed. {recs} units."); safe_rerun()
+                            st.success(f"🎉 Demo Stock refreshed. {recs} units isolated to {st.session_state.get('location_id')}."); safe_rerun()
                         except Exception as e: st.error(f"Error: {e}")
                         
             if df_live_stock.empty:
