@@ -9,6 +9,36 @@ st.set_page_config(page_title="Phase V Enterprise Hub", layout="wide")
 # Initialize Environment & Database
 text_color, container_bg, metric_label, border_color, theme = apply_theme()
 
+# ==========================================
+# AGGRESSIVE GLOBAL BUTTON CSS FIX
+# Forces dark buttons with white text globally
+# ==========================================
+st.markdown(f"""
+    <style>
+        /* Force background and border for the outer button container */
+        .stButton > button, div.stButton > button:first-child {{
+            background-color: #111111 !important;
+            border: 1px solid #444444 !important;
+            border-radius: 4px !important;
+            transition: all 0.2s ease-in-out !important;
+        }}
+        
+        /* Force ALL text inside the button to be white */
+        .stButton > button * {{
+            color: #FFFFFF !important;
+            font-weight: 500 !important;
+            letter-spacing: 1px !important;
+        }}
+        
+        /* Hover state for better UX */
+        .stButton > button:hover {{
+            background-color: #222222 !important;
+            border-color: #FFFFFF !important;
+        }}
+    </style>
+""", unsafe_allow_html=True)
+# ==========================================
+
 try:
     supabase = get_supabase_client()
 except Exception as e:
