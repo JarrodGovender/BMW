@@ -50,5 +50,12 @@ else:
         elif role == 'director':
             director_view.render(supabase, container_bg, text_color, metric_label, theme)
         else:
-            # We will insert dealership_view.py here next!
-            st.warning("⚠️ The Dealership Operations View is currently being mounted into the new modular architecture.")
+elif st.session_state['page_view'] == 'dashboard':
+        role = st.session_state['role']
+        if role == 'property_manager':
+            property_view.render(supabase, container_bg, text_color, theme)
+        elif role == 'director':
+            director_view.render(supabase, container_bg, text_color, metric_label, theme)
+        else:
+            from views import dealership_view
+            dealership_view.render(supabase, container_bg, text_color, metric_label, border_color, theme)
