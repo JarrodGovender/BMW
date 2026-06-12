@@ -1,61 +1,110 @@
 import streamlit as st
+import hashlib
 from datetime import datetime
 from config import apply_theme, get_supabase_client, safe_rerun, BMW_LOGO, SAST
-from views import auth_view, property_view, director_view
+from views import auth_view, property_view, director_view, dealership_view
 
 st.set_page_config(page_title="Phase V Enterprise Hub", layout="wide")
 
 # Initialize Environment & Database
 text_color, container_bg, metric_label, border_color, theme = apply_theme()
-try: supabase = get_supabase_client()
-except Exception as e: st.error(f"🔒 API Error: {str(e)}"); st.stop()
+try:
+    supabase = get_supabase_client()
+except Exception as e:
+    st.error(f"🔒 API Error: {str(e)}")
+    st.stop()
 
 if datetime.now(SAST).hour >= 22 or datetime.now(SAST).hour < 6:
-    st.error("🛑 **Access Denied: System Offline.**"); st.stop()
+    st.error("🛑 **Access Denied: System Offline.**")
+    st.stop()
 
 # Initialize Session State
 for key in ['authenticated', 'user', 'name', 'role']:
-    if key not in st.session_state: st.session_state[key] = False if key == 'authenticated' else None
-if 'page_view' not in st.session_state: st.session_state['page_view'] = 'dashboard'
+    if key not in st.session_state:
+        st.session_state[key] = False if key == 'authenticated' else None
 
-# --- THE ROUTER ---
+if 'page_view' not in st.session_state:
+    st.session_state['page_view'] = 'dashboard'
+
+
+# ====================================================================
+# MAIN APPLICATION ROUTER
+# ====================================================================
 if not st.session_state['authenticated']:
     auth_view.render(supabase)
 else:
-    # Build the Header
+    # Build the Universal Enterprise Header
     h1, h2, h3 = st.columns([6, 1.2, 1.2])
     with h1:
         st.markdown(f"<div style='display:flex; align-items:center; gap:18px;'><img src='{BMW_LOGO}' width='50'><div><h3 style='margin:0; font-size:1.4rem; font-weight:400;'>PHASE V MOTOR INVESTMENTS</h3><p style='margin:0; font-size:0.75rem; color:{metric_label};'>ENTERPRISE PRODUCTION WORKSPACE</p></div></div>", unsafe_allow_html=True)
     with h2:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("⚙️ SETTINGS"): st.session_state['page_view'] = 'settings'; safe_rerun()
+        if st.button("⚙️ SETTINGS"):
+            st.session_state['page_view'] = 'settings'
+            safe_rerun()
     with h3:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🚪 LOGOUT"): st.session_state.update({'authenticated': False, 'user': None, 'name': None, 'role': None, 'page_view': 'dashboard'}); safe_rerun()
+        if st.button("🚪 LOGOUT"):
+            st.session_state.update({'authenticated': False, 'user': None, 'name': None, 'role': None, 'page_view': 'dashboard'})
+            safe_rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(f"LOGGED IN AS: **{st.session_state['name'].upper()}** ({st.session_state['role'].replace('_', ' ').upper()})\n---")
 
+    # ---------------------------------------------------------
+    # SETTINGS VIEW
+    # ---------------------------------------------------------
     if st.session_state['page_view'] == 'settings':
         st.markdown("## ⚙️ ACCOUNT SETTINGS")
-        if st.button("⬅️ BACK TO DASHBOARD"): st.session_state['page_view'] = 'dashboard'; safe_rerun()
+        col_back, _ = st.columns([1, 4])
+        with col_back:
+            if st.button("⬅️ BACK TO DASHBOARD"):
+                st.session_state['page_view'] = 'dashboard'
+                safe_rerun()
+                
         st.markdown("---")
-        # Placeholder for password reset logic...
-        st.info("Settings module active.")
-        
+        st.markdown("#### 🌗 THEME PREFERENCE")
+        new_theme = st.radio("Select Interface Display Mode:", ["Light", "Dark"], index=0 if st.session_state['theme'] == 'Light' else 1, horizontal=True)
+        if new_theme != st.session_state['theme']:
+            st.session_state['theme'] = new_theme
+            safe_rerun()
+            
+        st.markdown("---")
+        st.markdown("#### 🔑 CHANGE SECURE PASSWORD")
+        pw_c1, pw_c2 = st.columns(2)
+        with pw_c1:
+            curr_pw = st.text_input("Current Password", type="password")
+            new_pw = st.text_input("New Password", type="password")
+            conf_pw = st.text_input("Confirm New Password", type="password")
+            if st.button("UPDATE PASSWORD", key="update_pw_btn"):
+                if not curr_pw or not new_pw or not conf_pw:
+                    st.warning("⚠️ Please fill all password fields.")
+                elif new_pw != conf_pw:
+                    st.error("⚠️ New passwords do not match.")
+                elif len(new_pw) < 6:
+                    st.error("⚠️ New password must be at least 6 characters.")
+                else:
+                    res = supabase.table("users").select("password").eq("username", st.session_state['user']).execute()
+                    if res.data and res.data[0]['password'] == hashlib.sha256(curr_pw.encode()).hexdigest():
+                        supabase.table("users").update({"password": hashlib.sha256(new_pw.encode()).hexdigest()}).eq("username", st.session_state['user']).execute()
+                        st.success("✅ Password successfully updated!")
+                    else:
+                        st.error("⚠️ The current password you entered is incorrect.")
+
+    # ---------------------------------------------------------
+    # MODULAR DASHBOARD ROUTING
+    # ---------------------------------------------------------
     elif st.session_state['page_view'] == 'dashboard':
         role = st.session_state['role']
+        
+        # Route to Property Manager Kanban Board
         if role == 'property_manager':
             property_view.render(supabase, container_bg, text_color, theme)
+            
+        # Route to Executive Level Dashboard
         elif role == 'director':
             director_view.render(supabase, container_bg, text_color, metric_label, theme)
+            
+        # Route everyone else to the Dealership Operations Workspace
         else:
-elif st.session_state['page_view'] == 'dashboard':
-        role = st.session_state['role']
-        if role == 'property_manager':
-            property_view.render(supabase, container_bg, text_color, theme)
-        elif role == 'director':
-            director_view.render(supabase, container_bg, text_color, metric_label, theme)
-        else:
-            from views import dealership_view
             dealership_view.render(supabase, container_bg, text_color, metric_label, border_color, theme)
