@@ -227,7 +227,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
 
         with t3:
             st.markdown(f"### 📊 {st.session_state.get('location_id', '').replace('_', ' ')} WORKSHOP REPORTING & EXTRACTION")
-            st.info("💡 Paste your raw, messy DMS Daily WIP Report here. The ingestion engine will clean, format, and visualize the data into a readable 16:9 layout.")
+            st.info("💡 Paste your raw, messy DMS Daily WIP Report here. The ingestion engine will clean, deduplicate headers, format, and visualize the data into a readable 16:9 layout.")
             
             raw_wip_paste = st.text_area("PASTE RAW DMS DATA HERE (From Excel or Kerridge/Drive)", height=200)
             
@@ -243,14 +243,29 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         else:
                             parsed_data = [re.split(r'\s{2,}', line) for line in lines]
                             
-                        headers = parsed_data[0]
+                        # --- HEADER DEDUPLICATION LOGIC ---
+                        raw_headers = parsed_data[0]
                         data_rows = parsed_data[1:]
                         
+                        seen_headers = {}
+                        clean_headers = []
+                        for h in raw_headers:
+                            h_clean = str(h).strip()
+                            if not h_clean: 
+                                h_clean = "Unnamed"
+                            if h_clean in seen_headers:
+                                seen_headers[h_clean] += 1
+                                clean_headers.append(f"{h_clean}_{seen_headers[h_clean]}")
+                            else:
+                                seen_headers[h_clean] = 0
+                                clean_headers.append(h_clean)
+                        # ----------------------------------
+                        
                         # Normalize row lengths to prevent pandas crashes
-                        max_cols = len(headers)
+                        max_cols = len(clean_headers)
                         clean_rows = [row + [''] * (max_cols - len(row)) if len(row) < max_cols else row[:max_cols] for row in data_rows]
                         
-                        df_report = pd.DataFrame(clean_rows, columns=headers)
+                        df_report = pd.DataFrame(clean_rows, columns=clean_headers)
                         
                         st.success("✅ Raw Data Parsed & Cleaned Successfully.")
                         st.dataframe(df_report, use_container_width=True)
@@ -258,6 +273,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         # AI / Generic Data Extraction: Search for Financial Columns
                         val_col = None
                         for col in df_report.columns:
+                            # Look for common monetary columns
                             if any(x in str(col).lower() for x in ['value', 'amount', 'zar', 'cost', 'total', 'price', 'wip']):
                                 val_col = col
                                 break
@@ -265,7 +281,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         if val_col:
                             try:
                                 # Strip currency symbols and letters, cast to float
-                                df_report[val_col] = df_report[val_col].astype(str).str.replace(r'[^\d.]', '', regex=True)
+                                df_report[val_col] = df_report[val_col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
                                 df_report[val_col] = pd.to_numeric(df_report[val_col], errors='coerce').fillna(0)
                                 
                                 st.markdown("#### 📈 INSTANT FINANCIAL EXTRACTION")
