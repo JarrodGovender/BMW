@@ -8,6 +8,7 @@ st.set_page_config(page_title="Phase V Enterprise Hub", layout="wide")
 
 # Initialize Environment & Database
 text_color, container_bg, metric_label, border_color, theme = apply_theme()
+
 try:
     supabase = get_supabase_client()
 except Exception as e:
@@ -25,7 +26,6 @@ for key in ['authenticated', 'user', 'name', 'role']:
 
 if 'page_view' not in st.session_state:
     st.session_state['page_view'] = 'dashboard'
-
 
 # ====================================================================
 # MAIN APPLICATION ROUTER
