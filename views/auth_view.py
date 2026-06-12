@@ -1,55 +1,102 @@
 import streamlit as st
 import hashlib
-from config import get_local_img, BMW_LOGO, MINI_LOGO, MG_LOGO, safe_rerun
 
 def render(supabase):
-    gc1, gc2, gc3 = st.columns([1.5, 3, 1.5])
-    with gc2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        
-        cl1, cl2, cl3 = st.columns([1, 2, 1])
-        with cl2:
-            try: st.image(get_local_img("PHASEV.png", ""), use_container_width=True)
-            except: st.markdown("<h2 style='text-align: center;'>PHASE V MOTOR INVESTMENTS</h2>", unsafe_allow_html=True)
-        
-        st.markdown(f"""
-            <div style='display: flex; justify-content: center; align-items: center; gap: 40px; margin-top: 10px; margin-bottom: 25px; flex-wrap: wrap;'>
-                <img src='{BMW_LOGO}' width='50' style='height: auto;'>
-                <img src='{MINI_LOGO}' width='70' style='height: auto;'>
-                <img src='{MG_LOGO}' width='60' style='height: auto;'>
-            </div>
-            <p style='text-align: center; font-size:0.85rem; color:#666666; letter-spacing:1px; margin-top: 5px;'>ENTERPRISE SECURE GATEWAY</p><br>
-        """, unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>PHASE V ENTERPRISE SYSTEM</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: grey;'>MULTI-TENANT CONTROL GATEWAY</p>", unsafe_allow_html=True)
     
-        auth_tab, signup_tab = st.tabs(["🔒 SECURE SIGN IN", "📝 CREATE ACCESS ACCOUNT"])
+    # Toggle between Login and Secure Registration
+    auth_mode = st.tabs(["🔒 SECURE LOGIN", "📝 AUTHORIZED REGISTRATION"])
+    
+    # ====================================================================
+    # 1. LOGIN INTERFACE
+    # ====================================================================
+    with auth_mode[0]:
+        st.markdown("### ENTER YOUR CREDENTIALS")
+        login_user = st.text_input("Username", key="login_uid", autocomplete="username").strip().lower()
+        login_pass = st.text_input("Password", type="password", key="login_pwd", autocomplete="current-password")
         
-        with auth_tab:
-            lu = st.text_input("USERNAME", key="login_user").strip().lower()
-            lp = st.text_input("PASSWORD", type="password", key="login_pass")
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("AUTHENTICATE ACCESS", key="login_btn"):
-                if lu and lp:
-                    try:
-                        res = supabase.table("users").select("name", "role", "password").eq("username", lu).execute()
-                        if res.data and res.data[0]['password'] == hashlib.sha256(lp.encode()).hexdigest():
-                            st.session_state.update({'authenticated': True, 'user': lu, 'name': res.data[0]['name'], 'role': res.data[0]['role'], 'page_view': 'dashboard'}); safe_rerun()
-                        else: st.error("Authentication rejected.")
-                    except Exception as e: st.error(f"Error: {str(e)}")
-                        
-        with signup_tab:
-            nn, nu, np = st.text_input("FULL NAME", key="rn").strip(), st.text_input("USERNAME", key="ru").strip().lower(), st.text_input("PASSWORD", type="password", key="rp")
-            cr = st.selectbox("POSITION", ["Sales Representative", "Dealer Principal", "Finance/Admin", "Sales Manager", "Property Manager", "Group Director"], key="rr")
-            sc = st.text_input("SECURITY CODE", type="password", key="rc")
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("INITIALIZE PROFILE", key="sb"):
-                if not nn or not nu or not np: st.warning("Fill all fields.")
-                elif " " in nu: st.error("No spaces in username.")
-                elif sc != "SandtonBMW2026": st.error("Incorrect Code.")
+        if st.button("AUTHENTICATE SYSTEM ACCESS", use_container_width=True):
+            if not login_user or not login_pass:
+                st.warning("⚠️ Please provide both your username and password.")
+            else:
+                # Hash input password to match database security standards
+                hashed_input = hashlib.sha256(login_pass.encode()).hexdigest()
+                
+                # Query user profile along with all linked matrix parameters
+                res = supabase.table("users").select("*").eq("username", login_user).execute()
+                
+                if res.data and res.data[0]['password'] == hashed_input:
+                    user_data = res.data[0]
+                    
+                    # Store entire 4-Dimensional matrix profile in session state
+                    st.session_state['authenticated'] = True
+                    st.session_state['user'] = user_data['username']
+                    st.session_state['name'] = user_data['name']
+                    st.session_state['role'] = user_data['role_id']
+                    st.session_state['location_id'] = user_data['location_id']
+                    st.session_state['department_id'] = user_data['department_id']
+                    st.session_state['brand_id'] = user_data['brand_id']
+                    
+                    st.success(f"✅ Access Granted. Welcome back, {user_data['name']}.")
+                    st.rerun()
                 else:
-                    try:
-                        rv = 'dealer_principal' if cr == "Dealer Principal" else 'finance_admin' if cr == "Finance/Admin" else 'sales_manager' if cr == "Sales Manager" else 'property_manager' if cr == "Property Manager" else 'director' if cr == "Group Director" else 'sales_rep'
-                        if supabase.table("users").select("username").eq("username", nu).execute().data: st.error("Username claimed.")
-                        else:
-                            supabase.table("users").insert({"username": nu, "password": hashlib.sha256(np.encode()).hexdigest(), "name": nn, "role": rv}).execute()
-                            st.success("🎉 Initialized! Proceed to Sign In.")
-                    except Exception as e: st.error(f"Error: {str(e)}")
+                    st.error("❌ Authentication Failed: Invalid username or password.")
+
+    # ====================================================================
+    # 2. REGISTRATION INTERFACE (TOKEN-DRIVEN)
+    # ====================================================================
+    with auth_mode[1]:
+        st.markdown("### REGISTER NEW ORGANIZATION ACCOUNT")
+        st.info("ℹ️ Registration requires a unique corporate authorization token provided by a System Super User.")
+        
+        reg_name = st.text_input("Full Name (e.g., John Doe)", key="reg_fullname")
+        reg_user = st.text_input("Choose Username", key="reg_uid").strip().lower()
+        reg_pass = st.text_input("Secure Password", type="password", key="reg_pwd")
+        reg_conf = st.text_input("Confirm Password", type="password", key="reg_cpwd")
+        
+        # The single security gateway field replacing manual dropdown selectors
+        reg_token = st.text_input("Enterprise Authorization Token", key="reg_auth_token").strip()
+        
+        if st.button("VALIDATE & REGISTER ACCOUNT", use_container_width=True):
+            if not reg_name or not reg_user or not reg_pass or not reg_token:
+                st.warning("⚠️ All registration fields, including the Authorization Token, are mandatory.")
+            elif reg_pass != reg_conf:
+                st.error("⚠️ Password fields do not match.")
+            elif len(reg_pass) < 6:
+                st.error("⚠️ For system protection, passwords must be at least 6 characters long.")
+            else:
+                # Step A: Validate the Authorization Token against the matrix registry
+                token_res = supabase.table("auth_tokens").select("*").eq("token", reg_token).eq("is_active", True).execute()
+                
+                if not token_res.data:
+                    st.error("❌ Invalid or deactivated Authorization Token. Cross-contamination blocked.")
+                else:
+                    token_data = token_res.data[0]
+                    
+                    # Step B: Double check username availability
+                    check_user = supabase.table("users").select("username").eq("username", reg_user).execute()
+                    if check_user.data:
+                        st.error("⚠️ This username is already registered within Phase V.")
+                    else:
+                        # Step C: Construct and inject the user account mapped directly to the token details
+                        hashed_password = hashlib.sha256(reg_pass.encode()).hexdigest()
+                        
+                        new_user = {
+                            "username": reg_user,
+                            "name": reg_name,
+                            "password": hashed_password,
+                            "role_id": token_data['role_id'],
+                            "location_id": token_data['location_id'],
+                            "department_id": token_data['department_id'],
+                            "brand_id": token_data['brand_id']
+                        }
+                        
+                        # Save the new verified profile
+                        supabase.table("users").insert(new_user).execute()
+                        
+                        # Optionally mark token as spent if you want single-use keys.
+                        # For testing/multi-hire parameters, we keep it active or delete it based on strategy:
+                        # supabase.table("auth_tokens").update({"is_active": False}).eq("token", reg_token).execute()
+                        
+                        st.success("🎉 Registration successful! Proceed to the Login tab to authenticate.")
