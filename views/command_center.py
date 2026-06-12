@@ -4,7 +4,7 @@ import pandas as pd
 def render(supabase):
     st.markdown("## 👑 PHASE V EXECUTIVE COMMAND CENTER")
     
-    # 1. Define the exact layout rows from your Excel sheet
+    # 1. Define the exact layout rows from your Excel sheets
     target_dealers = [
         "BMW Bedfordview",
         "BMW Sandton",
@@ -24,13 +24,15 @@ def render(supabase):
         'MF_FOURWAYS': 'MF Fourways'
     }
 
-    # 2. Fetch ALL stock data globally
+    # ==========================================
+    # MODULE 1: VEHICLE STOCK ROLLUP
+    # ==========================================
     try:
         data = supabase.table("used_car_stock").select("location_id, total_value, days_in_stock, floorplan_status").execute().data
         df = pd.DataFrame(data)
     except Exception as e:
         st.error(f"Failed to load portfolio data: {e}")
-        return
+        df = pd.DataFrame()
 
     summary_data = []
 
@@ -59,7 +61,7 @@ def render(supabase):
         # Map the raw DB location_id to the exact Excel names
         df['Dealership'] = df['location_id'].map(dealer_map)
 
-    # 3. Build the Grid (Ensuring every dealer shows up, even if stock is 0)
+    # Build the Grid
     for dealer in target_dealers:
         if not df.empty and 'Dealership' in df.columns:
             d_df = df[df['Dealership'] == dealer]
@@ -70,7 +72,7 @@ def render(supabase):
             t_stock = t_unenc = t_prov = 0.0
 
         summary_data.append({
-            '': dealer,  # Blank column header to match Excel exactly
+            '': dealer,
             'Total Stock Values': t_stock,
             'Total Unencumbered': t_unenc,
             'Total Aging Provision': t_prov
@@ -78,7 +80,7 @@ def render(supabase):
 
     summary_df = pd.DataFrame(summary_data)
 
-    # 4. Add the Grand Total Row
+    # Add the Grand Total Row
     grand_total = {
         '': 'GRAND TOTAL',
         'Total Stock Values': summary_df['Total Stock Values'].sum(),
@@ -87,34 +89,85 @@ def render(supabase):
     }
     summary_df = pd.concat([summary_df, pd.DataFrame([grand_total])], ignore_index=True)
 
-    # 5. Format as proper ZAR Currency
+    # Format as proper ZAR Currency
     for col in ['Total Stock Values', 'Total Unencumbered', 'Total Aging Provision']:
         summary_df[col] = summary_df[col].apply(lambda x: f"R {x:,.2f}")
 
-    # 6. Render the exact Excel structure
     st.markdown("### 🏢 EXECUTIVE DEALERSHIP ROLLUP")
     st.dataframe(summary_df, hide_index=True, use_container_width=True)
-
     st.markdown("---")
 
-    # 7. Drill-Down Tool
+    # ==========================================
+    # MODULE 2: WORKSHOP WIP ROLLUP
+    # ==========================================
+    try:
+        # Fetch only Active/Open WIPs across all dealerships
+        wip_data = supabase.table("service_wip").select("location_id, estimated_value, status").neq("status", "Invoiced / Closed").execute().data
+        wip_df = pd.DataFrame(wip_data)
+    except Exception as e:
+        st.error(f"Failed to load WIP data: {e}")
+        wip_df = pd.DataFrame()
+
+    wip_summary_data = []
+
+    if not wip_df.empty:
+        wip_df['estimated_value'] = pd.to_numeric(wip_df['estimated_value'], errors='coerce').fillna(0.0)
+        wip_df['Dealership'] = wip_df['location_id'].map(dealer_map)
+
+    # Build the WIP Grid
+    for dealer in target_dealers:
+        if not wip_df.empty and 'Dealership' in wip_df.columns:
+            d_wip = wip_df[wip_df['Dealership'] == dealer]
+            t_wips = len(d_wip)
+            t_wip_val = d_wip['estimated_value'].sum()
+        else:
+            t_wips = 0
+            t_wip_val = 0.0
+
+        wip_summary_data.append({
+            '': dealer,
+            'Open WIPs': t_wips,
+            'Open WIPs Value': t_wip_val
+        })
+
+    wip_summary_df = pd.DataFrame(wip_summary_data)
+
+    # Add the Grand Total Row for WIPs
+    grand_total_wip = {
+        '': 'GRAND TOTAL',
+        'Open WIPs': wip_summary_df['Open WIPs'].sum(),
+        'Open WIPs Value': wip_summary_df['Open WIPs Value'].sum()
+    }
+    wip_summary_df = pd.concat([wip_summary_df, pd.DataFrame([grand_total_wip])], ignore_index=True)
+
+    # Formatting
+    wip_summary_df['Open WIPs'] = wip_summary_df['Open WIPs'].apply(lambda x: f"{x:,.0f}" if isinstance(x, (int, float)) else str(x))
+    wip_summary_df['Open WIPs Value'] = wip_summary_df['Open WIPs Value'].apply(lambda x: f"R {x:,.2f}" if isinstance(x, (int, float)) else str(x))
+
+    st.markdown("### 🔧 EXECUTIVE WORKSHOP ROLLUP")
+    st.dataframe(wip_summary_df, hide_index=True, use_container_width=True)
+    st.markdown("---")
+
+    # ==========================================
+    # MODULE 3: DRILL-DOWN TOOL
+    # ==========================================
     st.markdown("### 🔍 DEALERSHIP DEEP-DIVE")
     selected = st.selectbox("Drill down into specific dealership:", ["None"] + target_dealers)
     
     if selected != "None":
-        if df.empty:
+        # --- STOCK METRICS ---
+        st.markdown(f"#### 🚗 STOCK EXPOSURE: {selected}")
+        if df.empty or len(df[df['Dealership'] == selected]) == 0:
             st.info(f"No active inventory logged for {selected} yet.")
         else:
             s_df = df[df['Dealership'] == selected].copy()
             
-            # Show top-level stats for the selected branch
             c1, c2, c3 = st.columns(3)
             c1.metric("Total Units", len(s_df))
             c2.metric("Unencumbered Units", len(s_df[s_df['is_unencumbered']]))
             c3.metric("Avg Days on Floor", f"{int(s_df['days_in_stock'].mean()) if not s_df.empty else 0} Days")
             
-            # Show high exposure risk
-            st.markdown("#### ⚠️ High Exposure Vehicles (90+ Days)")
+            st.markdown("##### ⚠️ High Exposure Vehicles (90+ Days)")
             exposure_df = s_df[s_df['days_in_stock'] >= 90].sort_values('days_in_stock', ascending=False)
             
             if exposure_df.empty:
@@ -130,3 +183,15 @@ def render(supabase):
                 }, inplace=True)
                 
                 st.dataframe(exp_display, hide_index=True, use_container_width=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- WIP METRICS ---
+        st.markdown(f"#### 🔧 WORKSHOP WIP: {selected}")
+        if wip_df.empty or len(wip_df[wip_df['Dealership'] == selected]) == 0:
+            st.info(f"No active WIPs logged for {selected} yet.")
+        else:
+            d_wip = wip_df[wip_df['Dealership'] == selected].copy()
+            wc1, wc2 = st.columns(2)
+            wc1.metric("Total Open WIPs", len(d_wip))
+            wc2.metric("Total Open WIPs Value", f"R {d_wip['estimated_value'].sum():,.2f}")
