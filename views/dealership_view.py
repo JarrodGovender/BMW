@@ -159,7 +159,6 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         except Exception as e: st.error(f"Error: {e}")
                     else: st.warning("Please enter RO Number, Client, and Vehicle.")
 
-            # Load Active WIP
             try:
                 loc_id = st.session_state.get('location_id', 'BMW_SANDTON')
                 wip_query = supabase.table("service_wip").select("*").eq("location_id", loc_id).neq("status", "Invoiced / Closed")
@@ -241,13 +240,11 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         extracted_rows = []
                         
                         for line in lines:
-                            # 1. Catch the headers
                             if "WIP No" in line or "Customer name" in line:
                                 separator = '\t' if '\t' in line else None
                                 raw_headers = line.split(separator) if separator else re.split(r'\s{2,}', line)
                                 continue
                             
-                            # 2. Catch the Advisor changes
                             if "opnum:" in line.lower():
                                 parts = line.split('-', 1)
                                 if len(parts) > 1:
@@ -256,21 +253,16 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                     current_advisor = line.replace("opnum:", "").strip()
                                 continue
                                 
-                            # 3. Data Row Strict Filtering
                             separator = '\t' if '\t' in line else None
                             row_data = line.split(separator) if separator else re.split(r'\s{2,}', line)
                             
-                            # CRITICAL FIX: The first column MUST begin with a number
-                            # This completely strips out "Total:", "Grand totals", "Department:", etc.
                             first_col = str(row_data[0]).strip()
                             if not first_col or not first_col[0].isdigit():
                                 continue
                                 
-                            # If it passes the numeric check, append the advisor and add to extracted rows
                             row_data.append(current_advisor)
                             extracted_rows.append(row_data)
                         
-                        # Handle Header Deduplication
                         if not raw_headers:
                             raw_headers = ["WIP No", "Date in", "Customer name", "Reg no", "Make", "Labour", "Other/Sub", "Parts", "CES", "Total", "Acc No", "Track", "Notes1", "Notes2", "Notes3", "Ownop", "Bookin"]
                         
@@ -301,7 +293,6 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                 
                         df_report = pd.DataFrame(normalized_rows, columns=clean_headers)
                         
-                        # Financial Cleanup
                         val_col = None
                         for col in df_report.columns:
                             if "total" in col.lower() and "wip" not in col.lower():
@@ -597,7 +588,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                 rd = {"VSB NUMBER": row.get("VSB NUMBER", ""), "VEHICLE DESCRIPTION": row.get("VEHICLE DESCRIPTION", ""), "INTO STOCK DATE": row.get("INTO STOCK DATE", ""), "DAYS ON FLOOR": dbadge}
                                 if IS_MANAGEMENT: rd["FP STATUS"] = row.get("FP STATUS", "")
                                 rd["CAPITAL VAL (ZAR)"] = f"R {float(row.get('CAPITAL VAL (ZAR)', 0)):,.2f}"
-                                render_rows.append(rd)
+                                r_rows.append(rd)
                             cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR"] + (["FP STATUS"] if IS_MANAGEMENT else []) + ["CAPITAL VAL (ZAR)"]
                             st.dataframe(pd.DataFrame(r_rows)[cols], hide_index=True, use_container_width=True)
 
