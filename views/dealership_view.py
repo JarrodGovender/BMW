@@ -32,9 +32,9 @@ def apply_matrix_filters(query_builder):
 
 
 def render(supabase, container_bg, text_color, metric_label, border_color, theme):
-    # 🚨 TEMPORARY DEBUGGER — Remove after checking
-    st.warning(f"DEBUG: Your current session state role is: '{st.session_state.get('role')}'")
-    st.write(st.session_state)
+    # Standardize Role Check
+    role = str(st.session_state.get('role', '')).upper()
+    IS_MANAGEMENT = role in ['DEALER_PRINCIPAL', 'FINANCE_ADMIN', 'SALES_MANAGER', 'DIRECTOR', 'SUPER_USER']
 
     # Dynamic Tab Allocation based on Enterprise Matrix Role
     if role == 'SUPER_USER':
