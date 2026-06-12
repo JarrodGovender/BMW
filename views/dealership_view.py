@@ -107,100 +107,110 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             df_live_stock = pd.DataFrame(stock_res) if stock_res else pd.DataFrame()
         except: df_live_stock = pd.DataFrame()
 
-        if not df_live_stock.empty:
-            df_live_stock['floorplan_status'] = df_live_stock.get('floorplan_status', "⚪ PENDING RECON")
-            df_live_stock['chassis_no'] = df_live_stock.get('chassis_no', "N/A")
-            df_live_stock['comments'] = df_live_stock.get('comments', "").fillna("")
-            df_live_stock['stock_type'] = df_live_stock.get('stock_type', "Used").fillna("Used")
-            
-            def map_fp_status(status):
-                if str(status) == "ON FLOORPLAN": return "🏦 ON FLOORPLAN"
-                elif str(status) == "UNENCUMBERED": return "🟢 UNENCUMBERED"
-                return "⚪ PENDING RECON"
+        # We always render the Admin upload blocks, even if df_live_stock is empty,
+        # so the user has a way to populate the database.
+        
+        # Ensure critical columns exist even if dataframe is empty
+        if df_live_stock.empty:
+             df_live_stock = pd.DataFrame(columns=["vsb_no", "description", "into_stock", "days_in_stock", "total_value", "location", "floorplan_status", "chassis_no", "comments", "stock_type"])
 
-            df_live_stock["floorplan_status"] = df_live_stock["floorplan_status"].apply(map_fp_status)
-            df_live_stock["location"] = df_live_stock.get("location", "").astype(str).str.strip()
-            df_live_stock["FRANCHISE DIVISION"] = df_live_stock.apply(lambda x: f"{x['location']} (DEMO)" if str(x.get('stock_type')) == 'Demo' else x['location'], axis=1)
-                
-            df_live_stock = df_live_stock.rename(columns={
-                "vsb_no": "VSB NUMBER", "description": "VEHICLE DESCRIPTION", "into_stock": "INTO STOCK DATE",
-                "days_in_stock": "DAYS ON FLOOR", "total_value": "CAPITAL VAL (ZAR)",
-                "floorplan_status": "FP STATUS", "chassis_no": "CHASSIS / VIN", "comments": "ADMIN COMMENTS"
-            })
+        df_live_stock['floorplan_status'] = df_live_stock.get('floorplan_status', "⚪ PENDING RECON")
+        df_live_stock['chassis_no'] = df_live_stock.get('chassis_no', "N/A")
+        df_live_stock['comments'] = df_live_stock.get('comments', "").fillna("")
+        df_live_stock['stock_type'] = df_live_stock.get('stock_type', "Used").fillna("Used")
+        
+        def map_fp_status(status):
+            if str(status) == "ON FLOORPLAN": return "🏦 ON FLOORPLAN"
+            elif str(status) == "UNENCUMBERED": return "🟢 UNENCUMBERED"
+            return "⚪ PENDING RECON"
+
+        df_live_stock["floorplan_status"] = df_live_stock["floorplan_status"].apply(map_fp_status)
+        df_live_stock["location"] = df_live_stock.get("location", "").astype(str).str.strip()
+        df_live_stock["FRANCHISE DIVISION"] = df_live_stock.apply(lambda x: f"{x['location']} (DEMO)" if str(x.get('stock_type')) == 'Demo' else x['location'], axis=1)
             
-            s_col1, s_col2, s_col3 = st.columns(3)
-            s_col1.metric("TOTAL VEHICLES", f"{len(df_live_stock):,} UNITS")
-            s_col2.metric("TOTAL CAPITAL", f"R {df_live_stock['CAPITAL VAL (ZAR)'].sum():,.2f}")
-            s_col3.metric("AVG FLOOR AGE", f"{int(df_live_stock['DAYS ON FLOOR'].mean())} DAYS")
-            st.markdown("---")
-            
-            SHOW_UNENCUMBERED = st.session_state['role'] in ['finance_admin', 'dealer_principal']
-            if SHOW_UNENCUMBERED: sm_tabs = st.tabs(["🌍 USED", "🔵 DEMO", "🟢 UNENCUMBERED"])
-            else: sm_tabs = st.tabs(["🌍 USED", "🔵 DEMO"])
-            
-            with sm_tabs[0]:
-                if IS_MANAGEMENT and st.session_state['role'] == 'finance_admin':
-                    with st.expander("🛠️ ADMIN CONSOLE: MASTER INVENTORY UPLOAD", expanded=False):
-                        st.markdown("#### 1. Paste Daily Spreadsheet Data (USED STOCK)")
-                        raw_paste_data = st.text_area("PASTE RAW DATA ROWS HERE", height=150, key="used_paste")
-                        
-                        if st.button("PROCESS OVERWRITE", key="process_stock_paste_btn") and raw_paste_data.strip():
-                            try:
-                                try: mem_res = supabase.table("used_car_stock").select("vsb_no, comments").execute().data
-                                except: mem_res = []
-                                comment_memory = {str(row['vsb_no']).strip(): row.get('comments', '') for row in mem_res} if mem_res else {}
-                                    
-                                supabase.table("used_car_stock").delete().eq("stock_type", "Used").gt("days_in_stock", -1).execute()
-                                records_processed = 0; current_franchise = "General Used Stock"
+        df_live_stock = df_live_stock.rename(columns={
+            "vsb_no": "VSB NUMBER", "description": "VEHICLE DESCRIPTION", "into_stock": "INTO STOCK DATE",
+            "days_in_stock": "DAYS ON FLOOR", "total_value": "CAPITAL VAL (ZAR)",
+            "floorplan_status": "FP STATUS", "chassis_no": "CHASSIS / VIN", "comments": "ADMIN COMMENTS"
+        })
+        
+        s_col1, s_col2, s_col3 = st.columns(3)
+        s_col1.metric("TOTAL VEHICLES", f"{len(df_live_stock):,} UNITS")
+        s_col2.metric("TOTAL CAPITAL", f"R {df_live_stock.get('CAPITAL VAL (ZAR)', pd.Series([0])).sum():,.2f}")
+        s_col3.metric("AVG FLOOR AGE", f"{int(df_live_stock.get('DAYS ON FLOOR', pd.Series([0])).mean()) if not df_live_stock.empty else 0} DAYS")
+        st.markdown("---")
+        
+        SHOW_UNENCUMBERED = st.session_state['role'] in ['finance_admin', 'dealer_principal']
+        if SHOW_UNENCUMBERED: sm_tabs = st.tabs(["🌍 USED", "🔵 DEMO", "🟢 UNENCUMBERED"])
+        else: sm_tabs = st.tabs(["🌍 USED", "🔵 DEMO"])
+        
+        with sm_tabs[0]:
+            if IS_MANAGEMENT and st.session_state['role'] == 'finance_admin':
+                with st.expander("🛠️ ADMIN CONSOLE: MASTER INVENTORY UPLOAD", expanded=False):
+                    st.markdown("#### 1. Paste Daily Spreadsheet Data (USED STOCK)")
+                    raw_paste_data = st.text_area("PASTE RAW DATA ROWS HERE", height=150, key="used_paste")
+                    
+                    if st.button("PROCESS OVERWRITE", key="process_stock_paste_btn") and raw_paste_data.strip():
+                        try:
+                            try: mem_res = supabase.table("used_car_stock").select("vsb_no, comments").execute().data
+                            except: mem_res = []
+                            comment_memory = {str(row['vsb_no']).strip(): row.get('comments', '') for row in mem_res} if mem_res else {}
                                 
-                                for line in raw_paste_data.split('\n'):
-                                    cleaned_line = line.strip()
-                                    if not cleaned_line: continue
-                                    if "franchise:" in cleaned_line.lower():
-                                        current_franchise = cleaned_line.split(':', 1)[1].strip()
-                                        continue
-                                    parts = cleaned_line.split('\t') if '\t' in cleaned_line else cleaned_line.split(',')
-                                    if len(parts) >= 2 and parts[0].strip().isdigit():
-                                        vsb = parts[0].strip(); desc = parts[1].strip()
-                                        into_stk = parts[2].strip() if len(parts) > 2 else ''
-                                        try: val = float(parts[10].strip().replace(' ', '').replace(',', '')) if len(parts) > 10 else 0.00
-                                        except: val = 0.00
-                                        try: days = int(float(parts[11].strip().replace(' ', ''))) if len(parts) > 11 else 0
-                                        except: days = 0
-                                        chassis = parts[13].strip() if len(parts) > 13 else ''
-                                        mem_comment = comment_memory.get(vsb, "")
-                                        
-                                        supabase.table("used_car_stock").upsert({"vsb_no": vsb, "description": desc, "into_stock": into_stk, "days_in_stock": days, "total_value": val, "location": current_franchise.strip(), "chassis_no": chassis, "floorplan_status": "⚪ PENDING RECON", "comments": mem_comment, "stock_type": "Used"}).execute()
-                                        records_processed += 1
-                                st.success(f"🎉 Used Stock refreshed successfully. {records_processed} units inserted."); safe_rerun()
-                            except Exception as parse_ex: st.error(f"Data processing failed: {str(parse_ex)}")
-                        
-                        st.markdown("---")
-                        st.markdown("#### 2. Run Global Floorplan Recon")
-                        fp_files = st.file_uploader("Upload Floorplan & Bridge CSV Files", type=['csv'], accept_multiple_files=True)
-                        if st.button("RUN FLOORPLAN RECONCILIATION", key="run_recon_btn") and fp_files:
-                            with st.spinner("Analyzing CSV reports..."):
-                                fp_vsbs, fp_chassis = set(), set()
-                                for f in fp_files:
-                                    try:
-                                        content = f.read().decode("utf-8", errors="ignore").splitlines()
-                                        header_idx = next((i for i, line in enumerate(content) if "Stock No" in line or "Chassis" in line), 0)
-                                        f.seek(0)
-                                        df_fp = pd.read_csv(f, skiprows=header_idx)
-                                        if stock_col := next((c for c in df_fp.columns if 'stock no' in c.lower()), None): fp_vsbs.update(df_fp[stock_col].astype(str).str.replace(r'\D', '', regex=True).tolist())
-                                        if chassis_col := next((c for c in df_fp.columns if 'chassis' in c.lower() or 'vin' in c.lower()), None): fp_chassis.update(df_fp[chassis_col].astype(str).str.strip().str.upper().tolist())
+                            supabase.table("used_car_stock").delete().eq("stock_type", "Used").gt("days_in_stock", -1).execute()
+                            records_processed = 0; current_franchise = "General Used Stock"
+                            
+                            for line in raw_paste_data.split('\n'):
+                                cleaned_line = line.strip()
+                                if not cleaned_line: continue
+                                if "franchise:" in cleaned_line.lower():
+                                    current_franchise = cleaned_line.split(':', 1)[1].strip()
+                                    continue
+                                parts = cleaned_line.split('\t') if '\t' in cleaned_line else cleaned_line.split(',')
+                                if len(parts) >= 2 and parts[0].strip().isdigit():
+                                    vsb = parts[0].strip(); desc = parts[1].strip()
+                                    into_stk = parts[2].strip() if len(parts) > 2 else ''
+                                    try: val = float(parts[10].strip().replace(' ', '').replace(',', '')) if len(parts) > 10 else 0.00
+                                    except: val = 0.00
+                                    try: days = int(float(parts[11].strip().replace(' ', ''))) if len(parts) > 11 else 0
+                                    except: days = 0
+                                    chassis = parts[13].strip() if len(parts) > 13 else ''
+                                    mem_comment = comment_memory.get(vsb, "")
+                                    
+                                    try: supabase.table("used_car_stock").upsert({"vsb_no": vsb, "description": desc, "into_stock": into_stk, "days_in_stock": days, "total_value": val, "location": current_franchise.strip(), "chassis_no": chassis, "floorplan_status": "⚪ PENDING RECON", "comments": mem_comment, "stock_type": "Used"}).execute()
+                                    except Exception: supabase.table("used_car_stock").upsert({"vsb_no": vsb, "description": desc, "into_stock": into_stk, "days_in_stock": days, "total_value": val, "location": current_franchise.strip(), "chassis_no": chassis}).execute()
+                                    records_processed += 1
+                            st.success(f"🎉 Used Stock refreshed successfully. {records_processed} units inserted. Previous comments retained."); safe_rerun()
+                        except Exception as parse_ex: st.error(f"Data processing failed: {str(parse_ex)}")
+                    
+                    st.markdown("---")
+                    st.markdown("#### 2. Run Global Floorplan Recon")
+                    fp_files = st.file_uploader("Upload Floorplan & Bridge CSV Files", type=['csv'], accept_multiple_files=True)
+                    if st.button("RUN FLOORPLAN RECONCILIATION", key="run_recon_btn") and fp_files:
+                        with st.spinner("Analyzing CSV reports..."):
+                            fp_vsbs, fp_chassis = set(), set()
+                            for f in fp_files:
+                                try:
+                                    content = f.read().decode("utf-8", errors="ignore").splitlines()
+                                    header_idx = next((i for i, line in enumerate(content) if "Stock No" in line or "Chassis" in line), 0)
+                                    f.seek(0)
+                                    df_fp = pd.read_csv(f, skiprows=header_idx)
+                                    if stock_col := next((c for c in df_fp.columns if 'stock no' in c.lower()), None): fp_vsbs.update(df_fp[stock_col].astype(str).str.replace(r'\D', '', regex=True).tolist())
+                                    if chassis_col := next((c for c in df_fp.columns if 'chassis' in c.lower() or 'vin' in c.lower()), None): fp_chassis.update(df_fp[chassis_col].astype(str).str.strip().str.upper().tolist())
+                                except: pass
+                            try: db_stock = supabase.table("used_car_stock").select("vsb_no, chassis_no").execute().data or []
+                            except: db_stock = []
+                            if db_stock:
+                                update_count = 0
+                                for row in db_stock:
+                                    is_on_fp = str(row.get('chassis_no', '')).strip().upper() in fp_chassis or ''.join(filter(str.isdigit, str(row.get('vsb_no', '')).strip())) in fp_vsbs
+                                    status = "ON FLOORPLAN" if is_on_fp else "UNENCUMBERED"
+                                    try: supabase.table("used_car_stock").update({"floorplan_status": status}).eq("vsb_no", row['vsb_no']).execute(); update_count += 1
                                     except: pass
-                                try: db_stock = supabase.table("used_car_stock").select("vsb_no, chassis_no").execute().data or []
-                                except: db_stock = []
-                                if db_stock:
-                                    update_count = 0
-                                    for row in db_stock:
-                                        is_on_fp = str(row.get('chassis_no', '')).strip().upper() in fp_chassis or ''.join(filter(str.isdigit, str(row.get('vsb_no', '')).strip())) in fp_vsbs
-                                        status = "ON FLOORPLAN" if is_on_fp else "UNENCUMBERED"
-                                        try: supabase.table("used_car_stock").update({"floorplan_status": status}).eq("vsb_no", row['vsb_no']).execute(); update_count += 1
-                                        except: pass
-                                    st.success(f"✅ Recon complete! {update_count} units cross-referenced."); safe_rerun()
+                                st.success(f"✅ Recon complete! {update_count} units cross-referenced."); safe_rerun()
 
+            if df_live_stock.empty:
+                st.info("No vehicles are currently recorded in stock. Use the Admin Console to initialize the inventory.")
+            else:
                 st.markdown("### 📄 AI DIGITAL BROCHURE STUDIO")
                 vehicle_series = df_live_stock['VSB NUMBER'].astype(str) + " - " + df_live_stock['VEHICLE DESCRIPTION']
                 selected_brochure = st.selectbox("SEARCH INVENTORY FOR BROCHURE GENERATION", ["Select a Vehicle..."] + vehicle_series.tolist())
@@ -208,6 +218,8 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                 if selected_brochure != "Select a Vehicle...":
                     sel_vsb = selected_brochure.split(" - ")[0]
                     car_row = df_live_stock[df_live_stock['VSB NUMBER'] == sel_vsb].iloc[0]
+                    
+                    st.markdown(f"**Vehicle Selected:** `{car_row['VEHICLE DESCRIPTION']}`")
                     
                     with st.spinner("🤖 Gemini AI is decoding the VIN and actively searching the web..."):
                         ai_specs = get_ai_vehicle_specs(description=car_row['VEHICLE DESCRIPTION'], franchise=car_row['FRANCHISE DIVISION'], vin=car_row.get('CHASSIS / VIN', 'N/A'))
@@ -225,7 +237,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         st.write("**AI Verified Specs:**")
                         for k, v in specs_to_render.items(): st.write(f"- **{k}:** {v}")
                     with col_b2:
-                        car_details = {"desc": car_row['VEHICLE DESCRIPTION'], "vsb": car_row['VSB NUMBER'], "vin": car_row.get('CHASSIS / VIN', 'N/A'), "price": f"R {float(car_row['CAPITAL VAL (ZAR)']):,.2f}", "raw_price": float(car_row['CAPITAL VAL (ZAR)'])}
+                        car_details = {"desc": car_row['VEHICLE DESCRIPTION'], "vsb": car_row['VSB NUMBER'], "vin": car_row.get('CHASSIS / VIN', 'N/A'), "price": f"R {float(car_row.get('CAPITAL VAL (ZAR)', 0)):,.2f}", "raw_price": float(car_row.get('CAPITAL VAL (ZAR)', 0))}
                         try:
                             excel_bytes = create_brochure_excel(car_details, specs_to_render)
                             st.download_button(label="📥 DOWNLOAD EXCEL SPEC SHEET", data=excel_bytes, file_name=f"BMW_Spec_Sheet_{sel_vsb}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -344,12 +356,13 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR"] + (["FP STATUS"] if IS_MANAGEMENT else []) + ["CAPITAL VAL (ZAR)"]
                         st.dataframe(pd.DataFrame(r_rows)[cols], hide_index=True, use_container_width=True)
 
-            with sm_tabs[1]:
-                st.markdown("#### 🔵 DEMO VEHICLES PORTAL")
-                if IS_MANAGEMENT and st.session_state['role'] == 'finance_admin':
-                    with st.expander("🛠️ ADMIN CONSOLE: DEMO INVENTORY UPLOAD", expanded=False):
-                        raw_demo = st.text_area("PASTE RAW DATA ROWS HERE (DEMO)", height=150, key="demo_paste")
-                        if st.button("PROCESS OVERWRITE DEMO", key="process_demo_btn") and raw_demo.strip():
+        with sm_tabs[1]:
+            st.markdown("#### 🔵 DEMO VEHICLES PORTAL")
+            if IS_MANAGEMENT and st.session_state['role'] == 'finance_admin':
+                with st.expander("🛠️ ADMIN CONSOLE: DEMO INVENTORY UPLOAD", expanded=False):
+                    raw_demo = st.text_area("PASTE RAW DATA (DEMO)", height=150, key="demo_paste")
+                    if st.button("PROCESS OVERWRITE DEMO", key="p_demo"):
+                        if raw_demo.strip():
                             try:
                                 try: mem_res = supabase.table("used_car_stock").select("vsb_no, comments").execute().data
                                 except: mem_res = []
@@ -372,46 +385,52 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                         supabase.table("used_car_stock").upsert({"vsb_no": vsb, "description": desc, "into_stock": into, "days_in_stock": days, "total_value": val, "location": cf.strip(), "chassis_no": chassis, "floorplan_status": "⚪ PENDING RECON", "comments": mem.get(vsb, ""), "stock_type": "Demo"}).execute()
                                         recs += 1
                                 st.success(f"🎉 Demo Stock refreshed. {recs} units."); safe_rerun()
-                            except Exception as e: st.error(f"Error: {e}")
-                
+                            except Exception as parse_ex: st.error(f"Failed: {parse_ex}")
+                            
+            if df_live_stock.empty:
+                st.info("No Demo vehicles are currently recorded.")
+            else:
                 demo_filtered = filtered_df[filtered_df["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True, na=False)]
-                if demo_filtered.empty: st.info("No Demo vehicles currently recorded.")
+                if demo_filtered.empty: st.info("No Demo vehicles.")
                 else:
                     for franchise in sorted(list(demo_filtered["FRANCHISE DIVISION"].unique())):
-                        f_df = demo_filtered[demo_filtered["FRANCHISE DIVISION"] == franchise]
-                        if not f_df.empty:
-                            st.markdown(f"<div class='franchise-header-banner'>🔵 {franchise.upper()} &nbsp;|&nbsp; <span style='font-weight: 300;'>({len(f_df)} Units — Subtotal: R {f_df['CAPITAL VAL (ZAR)'].sum():,.2f})</span></div>", unsafe_allow_html=True)
-                            r_rows = []
-                            for _, row in f_df.iterrows():
-                                rd = {"VSB NUMBER": row.get("VSB NUMBER", ""), "VEHICLE DESCRIPTION": row.get("VEHICLE DESCRIPTION", ""), "INTO STOCK DATE": row.get("INTO STOCK DATE", ""), "DAYS ON FLOOR": f"{int(row.get('DAYS ON FLOOR', 0))} Days"}
-                                if IS_MANAGEMENT: rd["FP STATUS"] = row.get("FP STATUS", "")
-                                rd["CAPITAL VAL (ZAR)"] = f"R {float(row.get('CAPITAL VAL (ZAR)', 0)):,.2f}"
-                                r_rows.append(rd)
+                        fdf = demo_filtered[demo_filtered["FRANCHISE DIVISION"] == franchise]
+                        if not fdf.empty:
+                            st.markdown(f"<div class='franchise-header-banner'>🔵 {franchise.upper()} &nbsp;|&nbsp; <span style='font-weight: 300;'>({len(fdf)} Units — Subtotal: R {fdf['CAPITAL VAL (ZAR)'].sum():,.2f})</span></div>", unsafe_allow_html=True)
+                            render_rows = []
+                            for _, r in fdf.iterrows():
+                                rd = {"VSB NUMBER": r.get("VSB NUMBER", ""), "VEHICLE DESCRIPTION": r.get("VEHICLE DESCRIPTION", ""), "INTO STOCK DATE": r.get("INTO STOCK DATE", ""), "DAYS ON FLOOR": f"{int(r.get('DAYS ON FLOOR', 0))} Days", "CAPITAL VAL (ZAR)": f"R {float(r.get('CAPITAL VAL (ZAR)', 0)):,.2f}"}
+                                if IS_MANAGEMENT: rd["FP STATUS"] = r.get("FP STATUS", "")
+                                render_rows.append(rd)
                             cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR"] + (["FP STATUS"] if IS_MANAGEMENT else []) + ["CAPITAL VAL (ZAR)"]
-                            st.dataframe(pd.DataFrame(r_rows)[cols], hide_index=True, use_container_width=True)
+                            st.dataframe(pd.DataFrame(render_rows)[cols], hide_index=True, use_container_width=True)
 
-            if SHOW_UNENCUMBERED:
-                with sm_tabs[2]:
-                    st.markdown("#### 🟢 UNENCUMBERED VEHICLES REGISTER")
+        if SHOW_UNENCUMBERED:
+            with sm_tabs[2]:
+                st.markdown("#### 🟢 UNENCUMBERED VEHICLES REGISTER")
+                if df_live_stock.empty:
+                    st.info("No vehicles available.")
+                else:
                     unenc_df = df_live_stock[df_live_stock["FP STATUS"] == "🟢 UNENCUMBERED"].copy().reset_index(drop=True)
-                    if unenc_df.empty: st.info("No unencumbered vehicles currently logged.")
+                    if unenc_df.empty: st.info("No unencumbered vehicles.")
                     else:
                         edit_cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "ADMIN COMMENTS"]
-                        e_unenc = st.data_editor(unenc_df[edit_cols], disabled=["VSB NUMBER", "VEHICLE DESCRIPTION", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"], hide_index=True, use_container_width=True)
-                        if st.button("💾 SAVE COMMENTS", key="save_u_comments"):
-                            uc = 0
-                            for i in range(len(e_unenc)):
-                                if str(unenc_df.iloc[i]["ADMIN COMMENTS"]).strip() != str(e_unenc.iloc[i]["ADMIN COMMENTS"]).strip():
-                                    try: supabase.table("used_car_stock").update({"comments": str(e_unenc.iloc[i]["ADMIN COMMENTS"]).strip()}).eq("vsb_no", e_unenc.iloc[i]["VSB NUMBER"]).execute(); uc += 1
+                        edited_u = st.data_editor(unenc_df[edit_cols], disabled=["VSB NUMBER", "VEHICLE DESCRIPTION", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"], hide_index=True, use_container_width=True, key="u_edit")
+                        if st.button("💾 SAVE COMMENTS", key="save_u"):
+                            updc = 0
+                            for i in range(len(edited_u)):
+                                o, n = str(unenc_df.iloc[i]["ADMIN COMMENTS"]).strip(), str(edited_u.iloc[i]["ADMIN COMMENTS"]).strip()
+                                if o != n:
+                                    try: supabase.table("used_car_stock").update({"comments": n}).eq("vsb_no", edited_u.iloc[i]["VSB NUMBER"]).execute(); updc += 1
                                     except: pass
-                            if uc > 0: st.success(f"✅ {uc} saved."); safe_rerun()
-                        
+                            if updc > 0: st.success(f"✅ {updc} saved."); safe_rerun()
+                            
                         st.markdown("---")
                         if IS_MANAGEMENT:
-                            with st.expander("📤 DISTRIBUTE UNENCUMBERED MATRIX"):
-                                u_em = st.text_input("RECIPIENT EMAIL", key="u_em_input")
-                                if st.button("🚀 DISPATCH UNENCUMBERED", key="u_disp") and u_em:
-                                    with st.spinner("Formatting..."):
+                            with st.expander("📤 DISTRIBUTE UNENCUMBERED LIST VIA EMAIL"):
+                                u_email = st.text_input("RECIPIENT EMAIL", key="u_email_in")
+                                if st.button("🚀 DISPATCH UNENCUMBERED", key="u_disp") and u_email:
+                                    with st.spinner("Formatting Executive Unencumbered Matrix..."):
                                         try:
                                             ebuf = io.BytesIO()
                                             with pd.ExcelWriter(ebuf, engine='xlsxwriter') as wr:
@@ -423,60 +442,67 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                                 nf = wb.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'num_format': '#,##0'})
                                                 cf = wb.add_format({'border': 1, 'valign': 'vcenter', 'num_format': 'R #,##0.00'})
                                                 xf = wb.add_format({'border': 1, 'valign': 'vcenter'})
-                                                gf = wb.add_format({'bg_color': '#FFC000', 'border': 1, 'valign': 'vcenter'})
-                                                gfc = wb.add_format({'bg_color': '#FFC000', 'border': 1, 'valign': 'vcenter', 'num_format': 'R #,##0.00'})
-                                                pf = wb.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'num_format': '0.0%'})
+                                                gold_fmt = wb.add_format({'bg_color': '#FFC000', 'border': 1, 'valign': 'vcenter'})
+                                                gold_cur = wb.add_format({'bg_color': '#FFC000', 'border': 1, 'valign': 'vcenter', 'num_format': 'R #,##0.00'})
+                                                pct_fmt = wb.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'num_format': '0.0%'})
                                                 
-                                                ce = [("MINI Used", df_live_stock[(df_live_stock["FRANCHISE DIVISION"].str.lower().str.contains("m -", regex=True)) & (~df_live_stock["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True))]),
-                                                      ("Demo stock", df_live_stock[df_live_stock["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True)]),
-                                                      ("BMW Used", df_live_stock[(df_live_stock["FRANCHISE DIVISION"].str.lower().str.contains("b -|i -", regex=True)) & (~df_live_stock["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True))]),
-                                                      ("Tier", df_live_stock[(df_live_stock["FRANCHISE DIVISION"].str.lower().str.contains("z -", regex=True)) & (~df_live_stock["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True))]),
-                                                      ("MC Used", df_live_stock[(df_live_stock["FRANCHISE DIVISION"].str.lower().str.contains("a -|c -", regex=True)) & (~df_live_stock["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True))])]
+                                                ce = [
+                                                    ("MINI Used", df_live_stock[(df_live_stock["FRANCHISE DIVISION"].str.lower().str.contains("m -", regex=True)) & (~df_live_stock["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True))]),
+                                                    ("Demo stock", df_live_stock[df_live_stock["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True)]),
+                                                    ("BMW Used", df_live_stock[(df_live_stock["FRANCHISE DIVISION"].str.lower().str.contains("b -|i -", regex=True)) & (~df_live_stock["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True))]),
+                                                    ("Tier", df_live_stock[(df_live_stock["FRANCHISE DIVISION"].str.lower().str.contains("z -", regex=True)) & (~df_live_stock["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True))]),
+                                                    ("MC Used", df_live_stock[(df_live_stock["FRANCHISE DIVISION"].str.lower().str.contains("a -|c -", regex=True)) & (~df_live_stock["FRANCHISE DIVISION"].str.contains(r"\(DEMO\)", regex=True))])
+                                                ]
                                                 
-                                                ed, gs, gu = [], 0.0, 0.0
+                                                exp_data, gs, gu = [], 0.0, 0.0
                                                 for cn, cdf in ce:
-                                                    tv = float(cdf["CAPITAL VAL (ZAR)"].sum())
-                                                    uv = float(cdf[cdf["FP STATUS"] == "🟢 UNENCUMBERED"]["CAPITAL VAL (ZAR)"].sum())
-                                                    if tv > 0:
-                                                        ed.extend([[f"Total {cn}", tv], [f"Total {cn} unencumbered", uv]])
-                                                        gs += tv; gu += uv
-                                                ed.extend([["", ""], ["Total Stock + Demo", gs], ["Total unencumbered", gu]])
+                                                    totv = float(cdf["CAPITAL VAL (ZAR)"].sum())
+                                                    unencv = float(cdf[cdf["FP STATUS"] == "🟢 UNENCUMBERED"]["CAPITAL VAL (ZAR)"].sum())
+                                                    if totv > 0:
+                                                        exp_data.extend([[f"Total {cn}", totv], [f"Total {cn} unencumbered", unencv]])
+                                                        gs += totv; gu += unencv
+                                                        
+                                                exp_data.extend([["", ""], ["Total Stock + Demo", gs], ["Total unencumbered", gu]])
                                                 
                                                 ri = 1
-                                                ws_e.merge_range(ri, 0, ri, 1, "DEALERSHIP CAPITAL EXPOSURE", tf); ws_e.set_row(ri, 30); ri += 2
-                                                for item in ed:
-                                                    if item[0] == "": ri += 1; continue
-                                                    isu = "unencumbered" in item[0].lower()
-                                                    lbf, vaf = (gf, gfc) if isu else (xf, cf)
-                                                    if item[0] == "Total unencumbered":
-                                                        lbf, vaf = wb.add_format({'bold': True, 'bg_color': '#FFC000', 'border': 1}), wb.add_format({'bold': True, 'bg_color': '#FFC000', 'border': 1, 'num_format': 'R #,##0.00'})
+                                                ws_e.merge_range(ri, 0, ri, 1, "DEALERSHIP CAPITAL EXPOSURE", tf)
+                                                ws_e.set_row(ri, 30); ri += 2
+                                                for item in exp_data:
+                                                    lbl, val = item[0], item[1]
+                                                    if lbl == "": ri += 1; continue
+                                                    is_u = "unencumbered" in lbl.lower()
+                                                    fl, fv = (gold_fmt, gold_cur) if is_u else (xf, cf)
+                                                    if lbl == "Total unencumbered":
+                                                        fl = wb.add_format({'bold': True, 'bg_color': '#FFC000', 'border': 1})
+                                                        fv = wb.add_format({'bold': True, 'bg_color': '#FFC000', 'border': 1, 'num_format': 'R #,##0.00'})
                                                         ws_e.write(ri, 2, gu/gs if gs else 0, wb.add_format({'bold': True, 'font_size': 14, 'font_color': 'red', 'bg_color': '#FFFF00', 'align': 'center', 'valign': 'vcenter', 'num_format': '0%'}))
-                                                    ws_e.write(ri, 0, item[0], lbf)
-                                                    ws_e.write_number(ri, 1, item[1], vaf)
+                                                    ws_e.write(ri, 0, lbl, fl)
+                                                    if val != "": ws_e.write_number(ri, 1, val, fv)
                                                     ri += 1
-                                                
-                                                rs = ri + 2
-                                                ws_e.merge_range(rs, 0, rs, 2, "FLOORPLAN RATIO", tf); ws_e.set_row(rs, 30); ws_e.set_row(rs+1, 35)
-                                                ws_e.write(rs+1, 0, "FINANCE STATUS", hf); ws_e.write(rs+1, 1, "TOTAL UNITS", hf); ws_e.write(rs+1, 2, "% OF TOTAL", hf)
+                                                    
+                                                rstart = ri + 2
+                                                ws_e.merge_range(rstart, 0, rstart, 2, "FLOORPLAN RATIO", tf)
+                                                ws_e.set_row(rstart, 30); ws_e.set_row(rstart+1, 35)
+                                                ws_e.write(rstart+1, 0, "FINANCE STATUS", hf); ws_e.write(rstart+1, 1, "TOTAL UNITS", hf); ws_e.write(rstart+1, 2, "% OF TOTAL", hf)
                                                 
                                                 totu, uu = len(df_live_stock), len(unenc_df)
                                                 fpu = len(df_live_stock[df_live_stock["FP STATUS"] == "🏦 ON FLOORPLAN"])
                                                 pu = len(df_live_stock[df_live_stock["FP STATUS"] == "⚪ PENDING RECON"])
                                                 
-                                                for i, (stt, c) in enumerate([("🟢 UNENCUMBERED", uu), ("🏦 ON FLOORPLAN", fpu), ("⚪ PENDING RECON", pu)], rs+2):
-                                                    ws_e.write(i, 0, stt, xf); ws_e.write(i, 1, c, nf); ws_e.write(i, 2, c/totu if totu else 0, pf)
-                                                ws_e.write(rs+5, 0, "TOTAL DEALERSHIP STOCK", hf); ws_e.write(rs+5, 1, totu, hf); ws_e.write(rs+5, 2, 1.0, wb.add_format({'bold': True, 'bg_color': '#E0E0E0', 'border': 1, 'num_format': '0.0%'}))
+                                                dm = [("🟢 UNENCUMBERED", uu, uu/totu if totu else 0), ("🏦 ON FLOORPLAN", fpu, fpu/totu if totu else 0), ("⚪ PENDING RECON", pu, pu/totu if totu else 0)]
+                                                for i, (sts, c, p) in enumerate(dm, rstart+2):
+                                                    ws_e.write(i, 0, sts, xf); ws_e.write(i, 1, c, nf); ws_e.write(i, 2, p, pct_fmt)
+                                                ws_e.write(rstart+5, 0, "TOTAL DEALERSHIP STOCK", hf); ws_e.write(rstart+5, 1, totu, hf); ws_e.write(rstart+5, 2, 1.0, wb.add_format({'bold': True, 'bg_color': '#E0E0E0', 'border': 1, 'num_format': '0.0%'}))
                                                 
-                                                # Draw standard unencumbered sheets
                                                 for f in sorted(list(unenc_df["FRANCHISE DIVISION"].unique())):
                                                     fdf = unenc_df[unenc_df["FRANCHISE DIVISION"] == f]
                                                     if fdf.empty or f.strip() == "LHP": continue
                                                     ws = wb.add_worksheet(str(f).replace('/', '-')[:31])
                                                     ws.hide_gridlines(2); ws.set_column('A:A', 15); ws.set_column('B:B', 40); ws.set_column('C:E', 15); ws.set_column('F:F', 45)
                                                     ws.merge_range(0, 0, 0, 5, f"UNENCUMBERED ASSETS: {f.upper()}", tf); ws.set_row(0, 30); ws.set_row(1, 35)
-                                                    c_names = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "ADMIN COMMENTS"]
-                                                    for ci, cn in enumerate(c_names): ws.write(1, ci, cn, hf)
-                                                    for rxi, rv in enumerate(fdf[c_names].values, 2):
+                                                    cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "INTO STOCK DATE", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "ADMIN COMMENTS"]
+                                                    for ci, cn in enumerate(cols): ws.write(1, ci, cn, hf)
+                                                    for rxi, rv in enumerate(fdf[cols].values, 2):
                                                         ws.write(rxi, 0, rv[0], xf); ws.write(rxi, 1, rv[1], xf); ws.write(rxi, 2, rv[2], xf); ws.write(rxi, 3, rv[3], nf); ws.write_number(rxi, 4, float(rv[4]), cf); ws.write(rxi, 5, str(rv[5]), xf)
 
                                             msg = EmailMessage(); msg['Subject'] = f"🟢 UNENCUMBERED MATRICES - {datetime.now(SAST).strftime('%d %b %Y')}"; msg['From'] = st.secrets["smtp"]["sender_email"]; msg['To'] = u_em
@@ -494,16 +520,17 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             cname = ca.text_input("CLIENT NAME")
             try: p_stock = supabase.table("used_car_stock").select("vsb_no, description").execute().data or []
             except: p_stock = []
-            sel_s = cb.selectbox("LINK TO INVENTORY", ["✏️ CUSTOM ENTRY"] + [f"{s['vsb_no']} - {s['description']}" for s in p_stock])
-            ddesc = cb.text_input("CUSTOM DESC") if sel_s == "✏️ CUSTOM ENTRY" else sel_s
-            stg = ca.selectbox("STAGE", PIPELINE_STAGES)
-            ddate = ca.date_input("DELIVERY DATE", datetime.now(SAST))
-            val = cb.number_input("EST. VALUE", min_value=0.0)
+            opts = ["✏️ CUSTOM ENTRY (Not in Stock)"] + [f"{s['vsb_no']} - {s['description']}" for s in p_stock]
+            sel_s = cb.selectbox("LINK TO INVENTORY", opts)
+            ddesc = cb.text_input("ENTER CUSTOM DEAL DESC") if sel_s == "✏️ CUSTOM ENTRY (Not in Stock)" else sel_s
+            stage = ca.selectbox("STAGE", PIPELINE_STAGES)
+            ddate = ca.date_input("PLANNED DELIVERY", datetime.now(SAST))
+            val = cb.number_input("EST. VALUE (ZAR)", min_value=0.0)
             if st.button("COMMIT DEAL"):
                 if cname and ddesc:
-                    try: supabase.table("sales_pipeline").insert({"salesperson_username": st.session_state['user'], "client_name": cname, "deal_description": ddesc, "stage": stg, "estimated_value": val, "planned_delivery_date": ddate.strftime('%Y-%m-%d')}).execute(); safe_rerun()
-                    except Exception as e: st.error(e)
-                else: st.warning("Enter required fields.")
+                    try: supabase.table("sales_pipeline").insert({"salesperson_username": st.session_state['user'], "client_name": cname, "deal_description": ddesc, "stage": stage, "estimated_value": val, "planned_delivery_date": ddate.strftime('%Y-%m-%d'), "notes": ""}).execute(); st.success("Logged."); safe_rerun()
+                    except Exception as e: st.error(f"Error: {e}")
+                else: st.warning("Enter client name and description.")
 
         try: res = supabase.table("sales_pipeline").select("*").neq("stage", "Delivered").order("id", desc=True).execute().data or []
         except: res = []
@@ -517,8 +544,8 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             rp["CLIENT"] = df_p["client_name"]
             rp["DEAL"] = df_p["deal_description"]
             rp["STAGE"] = df_p["stage"]
-            rp["EST VALUE"] = df_p["estimated_value"].map(lambda x: f"R {float(x):,.2f}")
-            rp["DATE"] = pd.to_datetime(df_p["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
+            rp["EST VALUE"] = df_p.get("estimated_value", pd.Series([0]*len(df_p))).map(lambda x: f"R {float(x):,.2f}")
+            rp["DELIVERY"] = pd.to_datetime(df_p.get("planned_delivery_date", pd.Series()), errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
             st.dataframe(rp, hide_index=True, use_container_width=True)
             
             for _, r in df_p.iterrows():
@@ -526,6 +553,8 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                 with st.expander(f"{icon} {r['client_name'].upper()} | {r['deal_description']} — {r['stage'].upper()}"):
                     c1, c2 = st.columns([1, 2])
                     with c1:
+                        st.markdown(f"**REP:** `@{r['salesperson_username']}`")
+                        st.markdown(f"**EST. VALUE:** R {float(r.get('estimated_value', 0)):,.2f}")
                         try: d = datetime.strptime(str(r.get('planned_delivery_date')).split("T")[0], '%Y-%m-%d').date()
                         except: d = datetime.now(SAST).date()
                         ns = st.selectbox("STATUS", PIPELINE_STAGES, index=PIPELINE_STAGES.index(r['stage']) if r['stage'] in PIPELINE_STAGES else 0, key=f"s_{r['id']}")
@@ -551,7 +580,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             ra["CLIENT"] = df_a["client_name"]
             ra["DEAL"] = df_a["deal_description"]
             ra["DATE"] = pd.to_datetime(df_a["planned_delivery_date"], errors='coerce').dt.strftime('%d %b %Y').fillna("Unknown")
-            ra["VALUE"] = df_a.get("estimated_value", 0.0).map(lambda x: f"R {float(x):,.2f}")
+            ra["VALUE"] = df_a.get("estimated_value", pd.Series([0]*len(df_a))).map(lambda x: f"R {float(x):,.2f}")
             st.dataframe(ra, hide_index=True, use_container_width=True)
             for _, r in df_a.iterrows():
                 with st.expander(f"✅ {r['client_name'].upper()} | {r['deal_description']}"):
@@ -575,7 +604,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             if not dfs.empty:
                 dfs['floorplan_status'] = dfs.get('floorplan_status', "⚪ PENDING RECON")
                 dfs['stock_type'] = dfs.get('stock_type', "Used")
-                dfs["location"] = dfs["location"].astype(str).str.strip()
+                dfs["location"] = dfs.get("location", "").astype(str).str.strip()
                 dfs["FRANCHISE DIVISION"] = dfs.apply(lambda x: f"{x['location']} (DEMO)" if str(x['stock_type']) == 'Demo' else x['location'], axis=1)
                 
             cats = [("BMW Used", "b -|i -", False), ("BMW Demo", "b -|i -", True), ("MINI Used", "m -", False), ("MINI Demo", "m -", True), ("MC Used", "a -|c -", False), ("MC Demo", "a -|c -", True), ("Tier Sandton", "z -", False), ("Tier Demo", "z -", True)]
@@ -616,10 +645,10 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             except: cl=il=tl=0; df_notes = pd.DataFrame()
                 
             m1, m2, m3 = st.columns(3)
-            m1.metric("TOTAL OPPORTUNITIES", cl + il + tl)
+            m1.metric("TOTAL OPPORTUNITIES", cl + il + tl); m2.metric("CONVERSIONS (B2B)", cl + tl); m3.metric("DELIVERIES (B2C)", il)
             st.markdown("---")
             st.markdown("### 💬 MASTER OUTREACH REGISTRY")
-            if df_notes.empty: st.info("No logs today.")
+            if df_notes.empty: st.info("No transaction log adjustments submitted today.")
             else:
                 for _, rn in df_notes.iterrows():
                     with st.chat_message("user"):
@@ -663,7 +692,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                     dsell = dcap * 1.12
             else:
                 dbt = "Custom"
-                ddesc = c1.text_input("CUSTOM DESC")
+                ddesc = c1.text_input("CUSTOM DESCRIPTION")
                 dcli = c1.text_input("CLIENT")
                 dcap = c1.number_input("EST COST (ZAR)", value=0.0, step=10000.0)
             
@@ -712,7 +741,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                     if tem:
                         try:
                             msg = EmailMessage(); msg['Subject'] = f"APPROVAL REQUIRED: {fc}"; msg['From'] = st.secrets["smtp"]["sender_email"]; msg['To'] = tem
-                            ebody = f"VEHICLE: {fd}\nCost: R {capc:,.2f}\nPrice: R {sellp:,.2f}\n\nTRADE: {tdesc if ht else 'No'}\nACV: R {tacv:,.2f}\nOffer: R {toff:,.2f}\nImpact: R {oua:,.2f}\n\nF&I: R {tbe:,.2f}\n\nNET RETAINED PROFIT: R {nrp:,.2f}\n\nSubmitted by: {st.session_state['name']}"
+                            ebody = f"VEHICLE: {fd}\nCost: R {capc:,.2f}\nPrice: R {sellp:,.2f}\n\nTRADE: {tdesc if ht else 'No'}\nACV: R {tacv:,.2f}\nOffer: R {toff:,.2f}\nImpact: R {oua:,.2f}\n\nF&I: R {tbe:,.2f}\n\nNET RETAINED: R {nrp:,.2f}\n\nSubmitted by: {st.session_state['name']}"
                             msg.set_content(ebody)
                             with smtplib.SMTP(st.secrets["smtp"]["server"], int(st.secrets["smtp"]["port"])) as srv: srv.starttls(); srv.login(st.secrets["smtp"]["sender_email"], st.secrets["smtp"]["password"]); srv.send_message(msg)
                             st.success("✅ Routed.")
