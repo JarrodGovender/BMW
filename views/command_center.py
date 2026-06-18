@@ -94,6 +94,11 @@ def render(supabase):
             color='Aging Bucket', color_discrete_map=risk_colors
         )
         fig.update_traces(textinfo='percent+label', hovertemplate="%{label}<br>R %{value:,.2f}<extra></extra>")
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            font_color='#F8F9FA', font_family='Roboto Mono, monospace',
+            legend=dict(bgcolor='rgba(0,0,0,0)')
+        )
         st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
@@ -306,7 +311,13 @@ def render(supabase):
                 title="True Net Profit Leaderboard", text='True Net Profit'
             )
             fig_leaderboard.update_traces(texttemplate='R %{text:,.0f}', textposition='outside')
-            fig_leaderboard.update_layout(showlegend=False, yaxis_title="True Net Profit (ZAR)", xaxis_title="")
+            fig_leaderboard.update_layout(
+                showlegend=False, yaxis_title="True Net Profit (ZAR)", xaxis_title="",
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                font_color='#F8F9FA', font_family='Roboto Mono, monospace'
+            )
+            fig_leaderboard.update_xaxes(gridcolor='rgba(255,255,255,0.05)', zerolinecolor='rgba(255,255,255,0.05)')
+            fig_leaderboard.update_yaxes(gridcolor='rgba(255,255,255,0.05)', zerolinecolor='rgba(255,255,255,0.05)')
             st.plotly_chart(fig_leaderboard, use_container_width=True)
 
         with lb2:
@@ -322,7 +333,14 @@ def render(supabase):
                 category_orders={'Dealership': chart_df['Dealership'].tolist()},
                 title="Gross Yield vs. Overhead"
             )
-            fig_yield_doc.update_layout(yaxis_title="Value (ZAR)", xaxis_title="", legend_title_text="")
+            fig_yield_doc.update_layout(
+                yaxis_title="Value (ZAR)", xaxis_title="", legend_title_text="",
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                font_color='#F8F9FA', font_family='Roboto Mono, monospace',
+                legend=dict(bgcolor='rgba(0,0,0,0)')
+            )
+            fig_yield_doc.update_xaxes(gridcolor='rgba(255,255,255,0.05)', zerolinecolor='rgba(255,255,255,0.05)')
+            fig_yield_doc.update_yaxes(gridcolor='rgba(255,255,255,0.05)', zerolinecolor='rgba(255,255,255,0.05)')
             st.plotly_chart(fig_yield_doc, use_container_width=True)
 
     st.markdown("---")

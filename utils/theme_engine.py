@@ -52,24 +52,26 @@ def inject_custom_css():
     }
     html body [data-testid="stSidebar"] * { color: var(--pv-text) !important; }
 
-    /* ---- Metric cards: glassmorphism with neon hover glow ---- */
+    /* ---- Metric cards: ultra-glassmorphism with neon hover glow ---- */
     html body div[data-testid="stMetric"] {
-        background: var(--pv-glass) !important;
-        border: 1px solid var(--pv-glass-border) !important;
+        background: rgba(17, 25, 40, 0.75) !important;
+        border: 1px solid rgba(255, 255, 255, 0.125) !important;
         border-radius: 16px !important;
         padding: 1.1rem 1.3rem !important;
-        backdrop-filter: blur(10px);
+        backdrop-filter: blur(16px) saturate(180%);
+        -webkit-backdrop-filter: blur(16px) saturate(180%);
         transition: all 0.25s ease-in-out;
         box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
     }
     html body div[data-testid="stMetric"]:hover {
         border-color: var(--pv-accent) !important;
-        box-shadow: 0 0 18px var(--pv-glow), 0 0 40px rgba(0, 224, 255, 0.15) !important;
+        box-shadow: 0 0 18px var(--pv-glow), 0 0 40px rgba(0, 255, 102, 0.12) !important;
         transform: translateY(-2px);
     }
     html body div[data-testid="stMetric"] [data-testid="stMetricValue"] {
         color: var(--pv-text) !important;
         font-weight: 600 !important;
+        font-family: 'Roboto Mono', 'Space Mono', monospace !important;
         text-shadow: 0 0 12px rgba(0, 224, 255, 0.25);
     }
     html body div[data-testid="stMetric"] [data-testid="stMetricLabel"] {
@@ -159,6 +161,10 @@ def inject_custom_css():
         background: rgba(255, 255, 255, 0.015) !important;
         color: var(--pv-text) !important;
         border-color: var(--pv-glass-border) !important;
+        font-family: 'Roboto Mono', 'Space Mono', monospace !important;
+    }
+    html body [data-testid="stDataFrame"] div[role="row"]:hover div[role="gridcell"] {
+        background: rgba(0, 229, 255, 0.1) !important;
     }
 
     /* ---- HTML tables (st.table / markdown tables): premium grid ---- */
@@ -180,6 +186,7 @@ def inject_custom_css():
         border: none !important;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
         color: var(--pv-text) !important;
+        font-family: 'Roboto Mono', 'Space Mono', monospace !important;
     }
     html body tr {
         background: transparent !important;
@@ -190,7 +197,7 @@ def inject_custom_css():
         background-color: rgba(0, 229, 255, 0.1) !important;
     }
 
-    /* ---- Inputs & dropdowns: frosted glass, never stark white ---- */
+    /* ---- Inputs & dropdowns: ultra-glassmorphism, never stark white ---- */
     html body input,
     html body textarea,
     html body [data-baseweb="input"],
@@ -200,10 +207,12 @@ def inject_custom_css():
     html body [data-baseweb="input"] > div,
     html body [data-baseweb="base-input"] input,
     html body [data-baseweb="select"] input {
-        background: rgba(20, 25, 40, 0.7) !important;
+        background: rgba(17, 25, 40, 0.75) !important;
         color: #FFFFFF !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border: 1px solid rgba(255, 255, 255, 0.125) !important;
         border-radius: 10px !important;
+        backdrop-filter: blur(16px) saturate(180%);
+        -webkit-backdrop-filter: blur(16px) saturate(180%);
     }
     html body [data-baseweb="select"] span,
     html body [data-baseweb="select"] div {
@@ -217,12 +226,14 @@ def inject_custom_css():
         box-shadow: 0 0 0 1px var(--pv-accent) !important;
     }
 
-    /* ---- Expanders: frosted glass, glowing title ---- */
+    /* ---- Expanders: ultra-glassmorphism, glowing title ---- */
     html body [data-testid="stExpander"] {
-        background: rgba(20, 25, 40, 0.5) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        background: rgba(17, 25, 40, 0.75) !important;
+        border: 1px solid rgba(255, 255, 255, 0.125) !important;
         border-radius: 10px !important;
         overflow: hidden !important;
+        backdrop-filter: blur(16px) saturate(180%);
+        -webkit-backdrop-filter: blur(16px) saturate(180%);
     }
     html body [data-testid="stExpander"] summary {
         background: transparent !important;
@@ -239,6 +250,30 @@ def inject_custom_css():
         background: linear-gradient(to right, transparent, #00E5FF, transparent) !important;
         height: 1px !important;
         border: none !important;
+    }
+
+    /* ---- Security/trust alerts: dark high-security system banners ---- */
+    html body [data-testid="stAlert"] {
+        background: rgba(17, 25, 40, 0.85) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 8px !important;
+        backdrop-filter: blur(12px);
+    }
+    html body [data-testid="stAlertContentSuccess"] {
+        border-left: 3px solid #00FF66 !important;
+        box-shadow: -4px 0 16px rgba(0, 255, 102, 0.25) !important;
+    }
+    html body [data-testid="stAlertContentError"] {
+        border-left: 3px solid #FF3366 !important;
+        box-shadow: -4px 0 16px rgba(255, 51, 102, 0.25) !important;
+    }
+    html body [data-testid="stAlertContentWarning"] {
+        border-left: 3px solid #FFB300 !important;
+        box-shadow: -4px 0 16px rgba(255, 179, 0, 0.25) !important;
+    }
+    html body [data-testid="stAlertContentInfo"] {
+        border-left: 3px solid #00E5FF !important;
+        box-shadow: -4px 0 16px rgba(0, 229, 255, 0.25) !important;
     }
     </style>
     """, unsafe_allow_html=True)
