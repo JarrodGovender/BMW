@@ -7,7 +7,7 @@ import random
 import smtplib
 import hashlib
 from email.message import EmailMessage
-from config import safe_rerun, get_ai_vehicle_specs, create_brochure_excel, SAST
+from config import safe_rerun, get_ai_vehicle_specs, create_brochure_excel, SAST, get_static_reference_data
 
 # ====================================================================
 # MASTER SECURITY GATEKEEPER
@@ -33,20 +33,29 @@ def apply_matrix_filters(query_builder):
         return query_builder.eq("location_id", loc).eq("department_id", dept).eq("brand_id", brand)
 
 # ====================================================================
+# LOCATION-ONLY GATEKEEPER (service_wip is shared across Service/Parts
+# staff at one branch — department_id on the row is always "SERVICE"
+# regardless of who's viewing it, so department/brand scoping doesn't
+# apply here. Use this instead of apply_matrix_filters() for service_wip.
+# ====================================================================
+def apply_location_matrix_filters(query_builder):
+    role = str(st.session_state.get('role', '')).upper()
+    loc = st.session_state.get('location_id')
+
+    if role == 'DIRECTOR':
+        return query_builder
+
+    return query_builder.eq("location_id", loc)
+
+# ====================================================================
 # SHARED COMPONENT: TOKEN & USER MANAGER
 # ====================================================================
 def _render_token_manager(supabase):
     st.markdown("### 🔑 SYSTEM ADMINISTRATION & PROVISIONING")
     st.info("💡 Notice: To ensure accurate system architecture testing, provisioned users will inherit the active God Mode matrix unless manually overridden below.")
     
-    try: db_roles = [r['id'] for r in supabase.table("roles").select("id").execute().data]
-    except: db_roles = ["SALES_REP", "SALES_MANAGER", "FINANCE_ADMIN", "DEALER_PRINCIPAL", "DIRECTOR", "SUPER_USER", "WORKSHOP_MANAGER", "HR_ADMIN"]
-    try: db_locs = [l['id'] for l in supabase.table("locations").select("id").execute().data]
-    except: db_locs = ["BMW_SANDTON", "BMW_BEDFORDVIEW", "BMW_EASTRAND", "BMW_DALPARK", "MF_SANDTON", "MF_FOURWAYS", "GLOBAL_HQ"]
-    try: db_depts = [d['id'] for d in supabase.table("departments").select("id").execute().data]
-    except: db_depts = ["NEW_SALES", "USED_SALES", "SERVICE", "PARTS", "FINANCE", "ALL_DEPTS"]
-    try: db_brands = [b['id'] for b in supabase.table("brands").select("id").execute().data]
-    except: db_brands = ["BMW", "MINI", "MOTORRAD", "MG", "HONDA", "JAC", "ALL_BRANDS"]
+    ref_data = get_static_reference_data(supabase)
+    db_roles, db_locs, db_depts, db_brands = ref_data["roles"], ref_data["locations"], ref_data["departments"], ref_data["brands"]
 
     loc_idx = db_locs.index(st.session_state.get('location_id')) if st.session_state.get('location_id') in db_locs else 0
     dept_idx = db_depts.index(st.session_state.get('department_id')) if st.session_state.get('department_id') in db_depts else 0
@@ -167,8 +176,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                     else: st.warning("Please enter RO Number, Client, and Vehicle.")
 
             try:
-                loc_id = st.session_state.get('location_id', 'BMW_SANDTON')
-                wip_query = supabase.table("service_wip").select("*").eq("location_id", loc_id).neq("status", "Invoiced / Closed")
+                wip_query = apply_location_matrix_filters(supabase.table("service_wip").select("*").neq("status", "Invoiced / Closed"))
                 res = wip_query.order("id", desc=True).execute().data or []
             except: res = []
             
@@ -206,7 +214,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                 npn = st.text_area("PARTS NOTES", value=str(r.get('parts_notes', '')), height=130, key=f"pn_{r['id']}")
                             if st.button("💾 SAVE PARTS UPDATE", key=f"wu_{r['id']}"):
                                 try:
-                                    supabase.table("service_wip").update({"parts_status": nps, "parts_notes": npn}).eq("id", r['id']).execute(); safe_rerun()
+                                    apply_location_matrix_filters(supabase.table("service_wip").update({"parts_status": nps, "parts_notes": npn})).eq("id", r['id']).execute(); safe_rerun()
                                 except Exception as e: st.error(e)
                         else:
                             # Service/Workshop staff: keep control of the RO, view parts updates read-only.
@@ -221,14 +229,13 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                 st.text_area("PARTS NOTES (READ-ONLY)", value=str(r.get('parts_notes', '')), height=80, key=f"pn_ro_{r['id']}", disabled=True)
                             if st.button("💾 SAVE & UPDATE", key=f"wu_{r['id']}"):
                                 try:
-                                    supabase.table("service_wip").update({"status": ns, "technician": nt, "notes": nn}).eq("id", r['id']).execute(); safe_rerun()
+                                    apply_location_matrix_filters(supabase.table("service_wip").update({"status": ns, "technician": nt, "notes": nn})).eq("id", r['id']).execute(); safe_rerun()
                                 except Exception as e: st.error(e)
 
         with t2:
             st.markdown(f"### 📦 {st.session_state.get('location_id', '').replace('_', ' ')} INVOICED / CLOSED RO ARCHIVE")
-            try: 
-                loc_id = st.session_state.get('location_id', 'BMW_SANDTON')
-                arc_query = supabase.table("service_wip").select("*").eq("location_id", loc_id).eq("status", "Invoiced / Closed")
+            try:
+                arc_query = apply_location_matrix_filters(supabase.table("service_wip").select("*").eq("status", "Invoiced / Closed"))
                 ares = arc_query.order("id", desc=True).execute().data or []
             except: ares = []
             
@@ -255,7 +262,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                             nn = st.text_area("ARCHIVE NOTES", value=str(r.get('notes', '')), height=130, key=f"awn_{r['id']}")
                         if st.button("REOPEN RO", key=f"awu_{r['id']}"):
                             try: 
-                                supabase.table("service_wip").update({"status": ns, "notes": nn}).eq("id", r['id']).execute(); safe_rerun()
+                                apply_location_matrix_filters(supabase.table("service_wip").update({"status": ns, "notes": nn})).eq("id", r['id']).execute(); safe_rerun()
                             except Exception as e: st.error(e)
 
         with t3:
@@ -434,14 +441,8 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
     elif active_dept == 'HR':
         t1, t2, t3, t4 = st.tabs(["👥 STAFF ROSTER", "🔄 MATRIX TRANSFERS", "🔐 SECURITY & RESETS", "🔑 TOKEN MANAGER"])
 
-        try: db_roles = [r['id'] for r in supabase.table("roles").select("id").execute().data]
-        except: db_roles = ["SALES_REP", "SALES_MANAGER", "FINANCE_ADMIN", "DEALER_PRINCIPAL", "DIRECTOR", "SUPER_USER", "WORKSHOP_MANAGER", "PARTS_MANAGER", "HR_ADMIN"]
-        try: db_locs = [l['id'] for l in supabase.table("locations").select("id").execute().data]
-        except: db_locs = ["BMW_SANDTON", "BMW_BEDFORDVIEW", "BMW_EASTRAND", "BMW_DALPARK", "MF_SANDTON", "MF_FOURWAYS", "GLOBAL_HQ"]
-        try: db_depts = [d['id'] for d in supabase.table("departments").select("id").execute().data]
-        except: db_depts = ["NEW_SALES", "USED_SALES", "SERVICE", "PARTS", "FINANCE", "HR", "ALL_DEPTS"]
-        try: db_brands = [b['id'] for b in supabase.table("brands").select("id").execute().data]
-        except: db_brands = ["BMW", "MINI", "MOTORRAD", "MG", "HONDA", "JAC", "ALL_BRANDS"]
+        ref_data = get_static_reference_data(supabase)
+        db_roles, db_locs, db_depts, db_brands = ref_data["roles"], ref_data["locations"], ref_data["departments"], ref_data["brands"]
 
         try:
             staff_query = apply_matrix_filters(supabase.table("users").select("name, username, role, role_id, location_id, department_id, brand_id, is_active"))
@@ -484,10 +485,10 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
 
                 if st.button("💾 UPDATE STAFF MATRIX", use_container_width=True):
                     try:
-                        supabase.table("users").update({
+                        apply_matrix_filters(supabase.table("users").update({
                             "role": n_role, "role_id": n_role, "location_id": n_loc,
                             "department_id": n_dept, "brand_id": n_brand, "is_active": n_active
-                        }).eq("username", sel_user).execute()
+                        })).eq("username", sel_user).execute()
                         st.success(f"✅ @{sel_user}'s matrix updated."); safe_rerun()
                     except Exception as e: st.error(f"Error: {e}")
 
@@ -988,7 +989,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                                     # Reverse the F&I Desk's SOLD lock since the deal fell through.
                                     apply_matrix_filters(supabase.table("used_car_stock").update({"floorplan_status": "⚪ PENDING RECON"}).eq("vsb_no", linked_vsb)).execute()
 
-                                supabase.table("sales_pipeline").update({"stage": ns, "planned_delivery_date": nd.strftime('%Y-%m-%d'), "notes": nn}).eq("id", r['id']).execute()
+                                apply_matrix_filters(supabase.table("sales_pipeline").update({"stage": ns, "planned_delivery_date": nd.strftime('%Y-%m-%d'), "notes": nn})).eq("id", r['id']).execute()
                                 safe_rerun()
                             except Exception as e: st.error(e)
 

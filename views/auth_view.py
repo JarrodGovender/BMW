@@ -26,23 +26,25 @@ def render(supabase):
                 hashed_input = get_hash(login_pass)
                 
                 res = supabase.table("users").select("*").eq("username", login_user).execute()
-                
+
                 if res.data:
-                    stored_pass = res.data[0]['password']
-                    
+                    user_data = res.data[0]
+                    stored_pass = user_data['password']
+
                     if stored_pass == hashed_input:
-                        user_data = res.data[0]
-                        
-                        st.session_state['authenticated'] = True
-                        st.session_state['user'] = user_data['username']
-                        st.session_state['name'] = user_data['name']
-                        st.session_state['role'] = user_data.get('role_id', user_data.get('role'))
-                        st.session_state['location_id'] = user_data.get('location_id')
-                        st.session_state['department_id'] = user_data.get('department_id')
-                        st.session_state['brand_id'] = user_data.get('brand_id')
-                        
-                        st.success(f"✅ Access Granted.")
-                        st.rerun()
+                        if user_data.get('is_active', True) is False:
+                            st.error("⛔ Account suspended. Please contact HR or your System Administrator.")
+                        else:
+                            st.session_state['authenticated'] = True
+                            st.session_state['user'] = user_data['username']
+                            st.session_state['name'] = user_data['name']
+                            st.session_state['role'] = user_data.get('role_id', user_data.get('role'))
+                            st.session_state['location_id'] = user_data.get('location_id')
+                            st.session_state['department_id'] = user_data.get('department_id')
+                            st.session_state['brand_id'] = user_data.get('brand_id')
+
+                            st.success(f"✅ Access Granted.")
+                            st.rerun()
                     else:
                         st.error("❌ Authentication Failed: Invalid password.")
                         # Helpful debugging

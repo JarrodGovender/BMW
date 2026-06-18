@@ -31,6 +31,15 @@ if 'page_view' not in st.session_state:
 if not st.session_state['authenticated']:
     auth_view.render(supabase)
 else:
+    # Lightweight session invalidation check — boots a user out mid-session if HR deactivates them
+    try:
+        active_check = supabase.table("users").select("is_active").eq("username", st.session_state.get('user')).execute().data
+        if active_check and active_check[0].get('is_active') is False:
+            st.session_state.update({'authenticated': False, 'role': None, 'page_view': 'dashboard'})
+            safe_rerun()
+    except Exception:
+        pass
+
     # Header
     h1, h2, h3 = st.columns([6, 1.2, 1.2])
     with h1:

@@ -49,6 +49,23 @@ def get_supabase_client():
 def safe_rerun():
     st.rerun() if hasattr(st, "rerun") else st.experimental_rerun()
 
+# --- STATIC REFERENCE DATA (cached) ---
+@st.cache_data(ttl=300)
+def get_static_reference_data(_supabase):
+    fallbacks = {
+        "roles": ["SALES_REP", "SALES_MANAGER", "FINANCE_ADMIN", "DEALER_PRINCIPAL", "DIRECTOR", "SUPER_USER", "WORKSHOP_MANAGER", "PARTS_MANAGER", "HR_ADMIN"],
+        "locations": ["BMW_SANDTON", "BMW_BEDFORDVIEW", "BMW_EASTRAND", "BMW_DALPARK", "MF_SANDTON", "MF_FOURWAYS", "GLOBAL_HQ"],
+        "departments": ["NEW_SALES", "USED_SALES", "SERVICE", "PARTS", "FINANCE", "HR", "ALL_DEPTS"],
+        "brands": ["BMW", "MINI", "MOTORRAD", "MG", "HONDA", "JAC", "ALL_BRANDS"],
+    }
+    data = {}
+    for key, table in [("roles", "roles"), ("locations", "locations"), ("departments", "departments"), ("brands", "brands")]:
+        try:
+            data[key] = [row['id'] for row in _supabase.table(table).select("id").execute().data]
+        except Exception:
+            data[key] = fallbacks[key]
+    return data
+
 # --- 4. GLOBAL CSS STYLING ---
 def apply_theme():
     theme = st.session_state.get('theme', 'Light')
