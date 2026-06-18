@@ -149,7 +149,63 @@ def render(supabase):
     st.markdown("---")
 
     # ==========================================
-    # MODULE 3: DRILL-DOWN TOOL
+    # MODULE 3: EXECUTIVE GROSS PROFIT ROLLUP
+    # ==========================================
+    try:
+        # Fetch deal_desk globally — no branch matrix filters, this is the God Mode overview
+        deal_data = supabase.table("deal_desk").select("location_id, fi_vaps_revenue, net_retained_profit").execute().data
+        deal_df = pd.DataFrame(deal_data)
+    except Exception as e:
+        st.error(f"Failed to load profitability data: {e}")
+        deal_df = pd.DataFrame()
+
+    gp_summary_data = []
+
+    if not deal_df.empty:
+        deal_df['fi_vaps_revenue'] = pd.to_numeric(deal_df['fi_vaps_revenue'], errors='coerce').fillna(0.0)
+        deal_df['net_retained_profit'] = pd.to_numeric(deal_df['net_retained_profit'], errors='coerce').fillna(0.0)
+        deal_df['Dealership'] = deal_df['location_id'].map(dealer_map)
+
+    # Build the Gross Profit Grid
+    for dealer in target_dealers:
+        if not deal_df.empty and 'Dealership' in deal_df.columns:
+            d_deal = deal_df[deal_df['Dealership'] == dealer]
+            t_units = len(d_deal)
+            t_vaps = d_deal['fi_vaps_revenue'].sum()
+            t_profit = d_deal['net_retained_profit'].sum()
+        else:
+            t_units = 0
+            t_vaps = t_profit = 0.0
+
+        gp_summary_data.append({
+            '': dealer,
+            'Locked Units': t_units,
+            'Total VAPS & F&I': t_vaps,
+            'Net Retained Profit': t_profit
+        })
+
+    gp_summary_df = pd.DataFrame(gp_summary_data)
+
+    # Add the Grand Total Row for Gross Profit
+    grand_total_gp = {
+        '': 'GRAND TOTAL',
+        'Locked Units': gp_summary_df['Locked Units'].sum(),
+        'Total VAPS & F&I': gp_summary_df['Total VAPS & F&I'].sum(),
+        'Net Retained Profit': gp_summary_df['Net Retained Profit'].sum()
+    }
+    gp_summary_df = pd.concat([gp_summary_df, pd.DataFrame([grand_total_gp])], ignore_index=True)
+
+    # Formatting
+    gp_summary_df['Locked Units'] = gp_summary_df['Locked Units'].apply(lambda x: f"{x:,.0f}" if isinstance(x, (int, float)) else str(x))
+    gp_summary_df['Total VAPS & F&I'] = gp_summary_df['Total VAPS & F&I'].apply(lambda x: f"R {x:,.2f}" if isinstance(x, (int, float)) else str(x))
+    gp_summary_df['Net Retained Profit'] = gp_summary_df['Net Retained Profit'].apply(lambda x: f"R {x:,.2f}" if isinstance(x, (int, float)) else str(x))
+
+    st.markdown("### 💰 EXECUTIVE GROSS PROFIT ROLLUP")
+    st.dataframe(gp_summary_df, hide_index=True, use_container_width=True)
+    st.markdown("---")
+
+    # ==========================================
+    # MODULE 4: DRILL-DOWN TOOL
     # ==========================================
     st.markdown("### 🔍 DEALERSHIP DEEP-DIVE")
     selected = st.selectbox("Drill down into specific dealership:", ["None"] + target_dealers)
@@ -195,3 +251,16 @@ def render(supabase):
             wc1, wc2 = st.columns(2)
             wc1.metric("Total Open WIPs", len(d_wip))
             wc2.metric("Total Open WIPs Value", f"R {d_wip['estimated_value'].sum():,.2f}")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- GROSS PROFIT METRICS ---
+        st.markdown(f"#### 💰 GROSS PROFIT: {selected}")
+        if deal_df.empty or len(deal_df[deal_df['Dealership'] == selected]) == 0:
+            st.info(f"No locked deals logged for {selected} yet.")
+        else:
+            d_deal = deal_df[deal_df['Dealership'] == selected].copy()
+            fc1, fc2, fc3 = st.columns(3)
+            fc1.metric("Locked Units", len(d_deal))
+            fc2.metric("Total VAPS & F&I", f"R {d_deal['fi_vaps_revenue'].sum():,.2f}")
+            fc3.metric("Net Retained Profit", f"R {d_deal['net_retained_profit'].sum():,.2f}")
