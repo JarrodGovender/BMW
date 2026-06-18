@@ -179,7 +179,10 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
 
                 for _, r in df_wip.iterrows():
                     icon = "⏳" if r['status'] == "Waiting on Parts" else ("✅" if r['status'] == "Ready for Delivery" else "🔧")
-                    with st.expander(f"{icon} RO: {r['ro_number']} | {r['client_name']} ({r['vehicle_details']}) — {r['status'].upper()}"):
+                    parts_badge = ""
+                    if r.get('parts_status') == 'ETA Delayed': parts_badge = " 🚨 [PARTS DELAYED]"
+                    elif r.get('parts_status') == 'Parts Arrived': parts_badge = " ✅ [PARTS READY]"
+                    with st.expander(f"{icon} RO: {r['ro_number']} | {r['client_name']} ({r['vehicle_details']}) — {r['status'].upper()}{parts_badge}"):
                         c1, c2 = st.columns([1, 2])
 
                         if IS_PARTS_VIEW:
@@ -479,6 +482,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
             def map_fp_status(status):
                 if str(status) == "ON FLOORPLAN": return "🏦 ON FLOORPLAN"
                 elif str(status) == "UNENCUMBERED": return "🟢 UNENCUMBERED"
+                elif str(status) == "SOLD - PENDING DELIVERY": return "🔒 SOLD - PENDING DELIVERY"
                 return "⚪ PENDING RECON"
 
             df_live_stock["floorplan_status"] = df_live_stock["floorplan_status"].apply(map_fp_status)
@@ -794,7 +798,81 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
         if t7:
             with t7:
                 st.markdown(f"### 💰 {st.session_state.get('location_id', '').replace('_', ' ')} F&I PROFITABILITY DESK")
-                st.info("F&I desk ready.")
+
+                DEAL_SOURCES = ["📥 Pipeline", "🚗 Master Stockroom", "✏️ Custom Buy-In"]
+                origin = st.radio("DEAL ORIGINATION", DEAL_SOURCES, horizontal=True)
+
+                client_name, vehicle_vsb, vehicle_desc, default_capital = "", "", "", 0.0
+                lock_vsb_field = False
+
+                if origin == "📥 Pipeline":
+                    try:
+                        pipe_query = apply_matrix_filters(supabase.table("sales_pipeline").select("*").neq("stage", "Delivered"))
+                        pipe_deals = pipe_query.order("id", desc=True).execute().data or []
+                    except: pipe_deals = []
+
+                    if not pipe_deals:
+                        st.info("No active pipeline deals to pull from.")
+                    else:
+                        deal_opts = {f"{d['client_name']} — {d['deal_description']}": d for d in pipe_deals}
+                        sel_deal = deal_opts[st.selectbox("SELECT PIPELINE DEAL", list(deal_opts.keys()))]
+                        client_name = sel_deal['client_name']
+                        vehicle_desc = sel_deal['deal_description']
+                        vsb_match = re.match(r"^\s*([\w\-/]+)\s*-\s*(.+)$", vehicle_desc)
+                        vehicle_vsb = vsb_match.group(1) if vsb_match else ""
+                        default_capital = float(sel_deal.get('estimated_value', 0) or 0)
+
+                elif origin == "🚗 Master Stockroom":
+                    try:
+                        stock_query = apply_matrix_filters(supabase.table("used_car_stock").select("vsb_no, description, total_value"))
+                        stock_list = stock_query.execute().data or []
+                    except: stock_list = []
+
+                    if not stock_list:
+                        st.info("No vehicles available in the stockroom.")
+                    else:
+                        stock_opts = {f"{s['vsb_no']} - {s['description']}": s for s in stock_list}
+                        sel_stock = stock_opts[st.selectbox("SELECT VEHICLE FROM STOCK", list(stock_opts.keys()))]
+                        vehicle_vsb = str(sel_stock['vsb_no'])
+                        vehicle_desc = sel_stock['description']
+                        default_capital = float(sel_stock.get('total_value', 0) or 0)
+                        lock_vsb_field = True
+
+                st.markdown("---")
+                fc1, fc2 = st.columns(2)
+                with fc1:
+                    client_name = st.text_input("CLIENT NAME", value=client_name)
+                    vehicle_vsb = st.text_input("VSB NUMBER", value=vehicle_vsb, disabled=lock_vsb_field)
+                    vehicle_desc = st.text_input("VEHICLE DESCRIPTION", value=vehicle_desc, disabled=lock_vsb_field)
+                with fc2:
+                    capital_cost = st.number_input("CAPITAL COST (ZAR)", min_value=0.0, step=500.0, value=default_capital)
+                    retail_price = st.number_input("RETAIL SELLING PRICE (ZAR)", min_value=0.0, step=500.0)
+                    fi_vaps_revenue = st.number_input("F&I VAPS & DIC REVENUE (ZAR)", min_value=0.0, step=100.0)
+
+                net_retained_profit = (retail_price - capital_cost) + fi_vaps_revenue
+                st.markdown("---")
+                st.metric("NET RETAINED PROFIT", f"R {net_retained_profit:,.2f}")
+
+                if st.button("💾 LOCK DEAL", use_container_width=True):
+                    if client_name and vehicle_desc:
+                        deal_payload = {
+                            "deal_source": origin, "client_name": client_name, "vehicle_vsb": vehicle_vsb,
+                            "vehicle_desc": vehicle_desc, "capital_cost": capital_cost, "retail_price": retail_price,
+                            "fi_vaps_revenue": fi_vaps_revenue, "net_retained_profit": net_retained_profit,
+                            "created_by": st.session_state.get('user', ''),
+                            "location_id": st.session_state.get('location_id'),
+                            "department_id": st.session_state.get('department_id'),
+                            "brand_id": st.session_state.get('brand_id')
+                        }
+                        try:
+                            supabase.table("deal_desk").insert(deal_payload).execute()
+                            if vehicle_vsb:
+                                apply_matrix_filters(supabase.table("used_car_stock").update({"floorplan_status": "SOLD - PENDING DELIVERY"}).eq("vsb_no", vehicle_vsb)).execute()
+                            st.success("✅ Deal Locked & Stockroom Updated.")
+                            safe_rerun()
+                        except Exception as e: st.error(f"Error: {e}")
+                    else:
+                        st.warning("Enter client name and vehicle description.")
                 
         if t8:
             with t8:
