@@ -515,14 +515,25 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
     # ROUTE B: SALES / ADMIN DEPARTMENTS
     # ----------------------------------------------------------------
     else:
-        if role == 'SUPER_USER':
-            t1, t2, t3, t4, t5, t6, t7, t8 = st.tabs(["🔥 FEED", "💼 CLAIMED", "🚗 STOCKROOM", "💼 PIPELINE", "📦 ARCHIVE", "📊 OVERVIEW", "💰 F&I DESK", "🔑 TOKEN MANAGER"])
-        elif IS_MANAGEMENT:
-            t1, t2, t3, t4, t5, t6, t7 = st.tabs(["🔥 FEED", "💼 CLAIMED", "🚗 STOCKROOM", "💼 PIPELINE", "📦 ARCHIVE", "📊 OVERVIEW", "💰 F&I DESK"])
-            t8 = None
+        IS_DOC_ADMIN = role in ['FINANCE_ADMIN', 'DEALER_PRINCIPAL', 'SUPER_USER']
+
+        tab_labels = ["🔥 FEED", "💼 CLAIMED", "🚗 STOCKROOM", "💼 PIPELINE", "📦 ARCHIVE"]
+        if IS_MANAGEMENT: tab_labels += ["📊 OVERVIEW", "💰 F&I DESK"]
+        if IS_DOC_ADMIN: tab_labels.append("📉 DOC OVERHEADS")
+        if role == 'SUPER_USER': tab_labels.append("🔑 TOKEN MANAGER")
+
+        tabs = st.tabs(tab_labels)
+        t1, t2, t3, t4, t5 = tabs[0], tabs[1], tabs[2], tabs[3], tabs[4]
+        _next = 5
+        if IS_MANAGEMENT:
+            t6, t7 = tabs[_next], tabs[_next + 1]; _next += 2
         else:
-            t1, t2, t3, t4, t5 = st.tabs(["🔥 FEED", "💼 CLAIMED", "🚗 STOCKROOM", "💼 PIPELINE", "📦 ARCHIVE"])
-            t6 = t7 = t8 = None
+            t6 = t7 = None
+        if IS_DOC_ADMIN:
+            t_doc = tabs[_next]; _next += 1
+        else:
+            t_doc = None
+        t8 = tabs[_next] if role == 'SUPER_USER' else None
 
         with t1:
             if role in ['SUPER_USER', 'DIRECTOR']:
@@ -1033,6 +1044,61 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                     else:
                         st.warning("Enter client name and vehicle description.")
                 
+        if t_doc:
+            with t_doc:
+                st.markdown(f"### 📉 {st.session_state.get('location_id', '').replace('_', ' ')} DEALER OPERATING COSTS (DOC)")
+
+                now = datetime.now(SAST)
+                month_opts = []
+                y, m = now.year, now.month
+                for _ in range(6):
+                    month_opts.append(datetime(y, m, 1).strftime('%B %Y'))
+                    m -= 1
+                    if m == 0: m, y = 12, y - 1
+
+                DOC_CATEGORIES = ["Salaries", "Rent & Facilities", "Marketing", "Utilities", "Miscellaneous"]
+
+                with st.expander("➕ LOG MONTHLY EXPENSE"):
+                    dc1, dc2 = st.columns(2)
+                    exp_month = dc1.selectbox("EXPENSE MONTH", month_opts, key="doc_month_sel")
+                    exp_cat = dc2.selectbox("EXPENSE CATEGORY", DOC_CATEGORIES, key="doc_cat_sel")
+                    exp_amt = st.number_input("AMOUNT (ZAR)", min_value=0.0, step=500.0, key="doc_amt_input")
+
+                    if st.button("💾 COMMIT EXPENSE", use_container_width=True):
+                        if exp_amt > 0:
+                            doc_payload = {
+                                "expense_month": exp_month, "expense_category": exp_cat, "amount": exp_amt,
+                                "logged_by": st.session_state.get('user', ''),
+                                "location_id": st.session_state.get('location_id'),
+                                "department_id": st.session_state.get('department_id'),
+                                "brand_id": st.session_state.get('brand_id')
+                            }
+                            try:
+                                supabase.table("doc_expenses").insert(doc_payload).execute()
+                                st.success("✅ Expense Logged."); safe_rerun()
+                            except Exception as e: st.error(f"Error: {e}")
+                        else:
+                            st.warning("Enter an amount greater than zero.")
+
+                st.markdown("---")
+                try:
+                    doc_query = apply_matrix_filters(supabase.table("doc_expenses").select("*").eq("expense_month", exp_month))
+                    doc_res = doc_query.order("id", desc=True).execute().data or []
+                except: doc_res = []
+
+                df_doc = pd.DataFrame(doc_res)
+                if df_doc.empty:
+                    st.info(f"No overheads logged for {exp_month} yet.")
+                else:
+                    df_doc['amount'] = pd.to_numeric(df_doc['amount'], errors='coerce').fillna(0.0)
+                    st.metric(f"TOTAL MONTHLY DOC ({exp_month})", f"R {df_doc['amount'].sum():,.2f}")
+                    dd = df_doc.rename(columns={
+                        "expense_month": "MONTH", "expense_category": "CATEGORY",
+                        "amount": "AMOUNT", "logged_by": "LOGGED BY"
+                    })
+                    dd["AMOUNT"] = dd["AMOUNT"].apply(lambda x: f"R {x:,.2f}")
+                    st.dataframe(dd[["MONTH", "CATEGORY", "AMOUNT", "LOGGED BY"]], hide_index=True, use_container_width=True)
+
         if t8:
             with t8:
                 _render_token_manager(supabase)

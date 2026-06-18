@@ -167,6 +167,14 @@ def render(supabase):
         st.error(f"Failed to load OTC parts data: {e}")
         otc_df = pd.DataFrame()
 
+    try:
+        # Fetch doc_expenses globally — same unfiltered God Mode overview
+        doc_data = supabase.table("doc_expenses").select("location_id, amount").execute().data
+        doc_df = pd.DataFrame(doc_data)
+    except Exception as e:
+        st.error(f"Failed to load DOC overheads data: {e}")
+        doc_df = pd.DataFrame()
+
     gp_summary_data = []
 
     if not deal_df.empty:
@@ -177,6 +185,10 @@ def render(supabase):
     if not otc_df.empty:
         otc_df['net_profit'] = pd.to_numeric(otc_df['net_profit'], errors='coerce').fillna(0.0)
         otc_df['Dealership'] = otc_df['location_id'].map(dealer_map)
+
+    if not doc_df.empty:
+        doc_df['amount'] = pd.to_numeric(doc_df['amount'], errors='coerce').fillna(0.0)
+        doc_df['Dealership'] = doc_df['location_id'].map(dealer_map)
 
     # Build the Gross Profit Grid
     for dealer in target_dealers:
@@ -194,13 +206,22 @@ def render(supabase):
         else:
             t_otc_profit = 0.0
 
+        if not doc_df.empty and 'Dealership' in doc_df.columns:
+            t_doc = doc_df[doc_df['Dealership'] == dealer]['amount'].sum()
+        else:
+            t_doc = 0.0
+
+        t_branch_profit = t_vehicle_profit + t_otc_profit
+
         gp_summary_data.append({
             '': dealer,
             'Locked Units': t_units,
             'Total VAPS & F&I': t_vaps,
             'Vehicle Net Profit': t_vehicle_profit,
             'Parts OTC Net Profit': t_otc_profit,
-            'Total Branch Net Profit': t_vehicle_profit + t_otc_profit
+            'Total Branch Net Profit': t_branch_profit,
+            'Total DOC': t_doc,
+            'True Net Profit': t_branch_profit - t_doc
         })
 
     gp_summary_df = pd.DataFrame(gp_summary_data)
@@ -212,13 +233,15 @@ def render(supabase):
         'Total VAPS & F&I': gp_summary_df['Total VAPS & F&I'].sum(),
         'Vehicle Net Profit': gp_summary_df['Vehicle Net Profit'].sum(),
         'Parts OTC Net Profit': gp_summary_df['Parts OTC Net Profit'].sum(),
-        'Total Branch Net Profit': gp_summary_df['Total Branch Net Profit'].sum()
+        'Total Branch Net Profit': gp_summary_df['Total Branch Net Profit'].sum(),
+        'Total DOC': gp_summary_df['Total DOC'].sum(),
+        'True Net Profit': gp_summary_df['True Net Profit'].sum()
     }
     gp_summary_df = pd.concat([gp_summary_df, pd.DataFrame([grand_total_gp])], ignore_index=True)
 
     # Formatting
     gp_summary_df['Locked Units'] = gp_summary_df['Locked Units'].apply(lambda x: f"{x:,.0f}" if isinstance(x, (int, float)) else str(x))
-    for col in ['Total VAPS & F&I', 'Vehicle Net Profit', 'Parts OTC Net Profit', 'Total Branch Net Profit']:
+    for col in ['Total VAPS & F&I', 'Vehicle Net Profit', 'Parts OTC Net Profit', 'Total Branch Net Profit', 'Total DOC', 'True Net Profit']:
         gp_summary_df[col] = gp_summary_df[col].apply(lambda x: f"R {x:,.2f}" if isinstance(x, (int, float)) else str(x))
 
     st.markdown("### 💰 EXECUTIVE GROSS PROFIT ROLLUP")
@@ -279,21 +302,27 @@ def render(supabase):
         st.markdown(f"#### 💰 GROSS PROFIT: {selected}")
         has_deals = not deal_df.empty and len(deal_df[deal_df['Dealership'] == selected]) > 0
         has_otc = not otc_df.empty and len(otc_df[otc_df['Dealership'] == selected]) > 0
+        has_doc = not doc_df.empty and len(doc_df[doc_df['Dealership'] == selected]) > 0
 
-        if not has_deals and not has_otc:
-            st.info(f"No locked deals or OTC parts sales logged for {selected} yet.")
+        if not has_deals and not has_otc and not has_doc:
+            st.info(f"No locked deals, OTC parts sales, or overheads logged for {selected} yet.")
         else:
             d_deal = deal_df[deal_df['Dealership'] == selected].copy() if has_deals else pd.DataFrame(columns=['fi_vaps_revenue', 'net_retained_profit'])
             d_otc = otc_df[otc_df['Dealership'] == selected].copy() if has_otc else pd.DataFrame(columns=['net_profit'])
+            d_doc = doc_df[doc_df['Dealership'] == selected].copy() if has_doc else pd.DataFrame(columns=['amount'])
 
             t_vehicle_profit = d_deal['net_retained_profit'].sum() if has_deals else 0.0
             t_otc_profit = d_otc['net_profit'].sum() if has_otc else 0.0
+            t_doc = d_doc['amount'].sum() if has_doc else 0.0
+            t_branch_profit = t_vehicle_profit + t_otc_profit
 
             fc1, fc2, fc3 = st.columns(3)
             fc1.metric("Locked Units", len(d_deal))
             fc2.metric("Total VAPS & F&I", f"R {d_deal['fi_vaps_revenue'].sum() if has_deals else 0.0:,.2f}")
-            fc3.metric("Total Branch Net Profit", f"R {t_vehicle_profit + t_otc_profit:,.2f}")
+            fc3.metric("Total Branch Net Profit", f"R {t_branch_profit:,.2f}")
 
-            fc4, fc5 = st.columns(2)
+            fc4, fc5, fc6, fc7 = st.columns(4)
             fc4.metric("Vehicle Net Profit", f"R {t_vehicle_profit:,.2f}")
             fc5.metric("Parts OTC Net Profit", f"R {t_otc_profit:,.2f}")
+            fc6.metric("Total DOC", f"R {t_doc:,.2f}")
+            fc7.metric("True Net Profit", f"R {t_branch_profit - t_doc:,.2f}")
