@@ -52,7 +52,7 @@ def render_hr(supabase, user_data):
             n_brand = tc2.selectbox("BRAND", db_brands, index=db_brands.index(u_row['brand_id']) if u_row['brand_id'] in db_brands else 0, key="hr_brand_sel")
             n_active = st.checkbox("ACTIVE STATUS", value=bool(u_row.get('is_active', True)), key="hr_active_chk")
 
-            if st.button("💾 UPDATE STAFF MATRIX", use_container_width=True):
+            if st.button("💾 UPDATE STAFF MATRIX", use_container_width=True, key="hr_update_matrix_btn"):
                 try:
                     apply_matrix_filters(supabase.table("users").update({
                         "role": n_role, "role_id": n_role, "location_id": n_loc,
@@ -68,7 +68,7 @@ def render_hr(supabase, user_data):
         else:
             sel_reset_user = st.selectbox("SELECT STAFF MEMBER", df_staff['username'].tolist(), key="hr_reset_user")
             new_pass = st.text_input("NEW PASSWORD", type="password", key="hr_reset_pass")
-            if st.button("⚠️ FORCE PASSWORD RESET", use_container_width=True):
+            if st.button("⚠️ FORCE PASSWORD RESET", use_container_width=True, key="hr_force_reset_btn"):
                 if new_pass:
                     try:
                         hashed_pass = hashlib.sha256(new_pass.encode()).hexdigest()

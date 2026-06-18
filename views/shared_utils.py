@@ -56,9 +56,9 @@ def _render_token_manager(supabase):
 
     with st.form("direct_user_creation_form", clear_on_submit=True):
         st.markdown("#### 👤 INSTANTLY PROVISION TEST USER ACCOUNT")
-        u_username = st.text_input("Username (e.g., test_rep)").strip().lower()
-        u_name = st.text_input("Display Name (e.g., John Doe)").strip()
-        u_pass = st.text_input("Account Password", type="password").strip()
+        u_username = st.text_input("Username (e.g., test_rep)", key="tok_new_username").strip().lower()
+        u_name = st.text_input("Display Name (e.g., John Doe)", key="tok_new_name").strip()
+        u_pass = st.text_input("Account Password", type="password", key="tok_new_password").strip()
 
         uc1, uc2 = st.columns(2)
         u_role = uc1.selectbox("Assigned Role Matrix", db_roles, key="u_role_sel")
@@ -84,7 +84,7 @@ def _render_token_manager(supabase):
     st.markdown("---")
     st.markdown("### 🔑 ENTERPRISE AUTH TOKEN DECK")
     with st.form("generate_token_form", clear_on_submit=True):
-        c_tok = st.text_input("Custom Token Name").strip()
+        c_tok = st.text_input("Custom Token Name", key="tok_custom_name").strip()
         cc1, cc2 = st.columns(2)
         c_role = cc1.selectbox("Matrix Role Override", db_roles, key="t_role_sel")
         c_loc = cc2.selectbox("Location Identifier", db_locs, index=loc_idx, key="t_loc_sel")
@@ -105,8 +105,8 @@ def _render_token_manager(supabase):
         if tokens_res:
             df_tokens = pd.DataFrame(tokens_res).drop(columns=['created_at'], errors='ignore')
             df_display = df_tokens.rename(columns={"token": "TOKEN KEY", "role_id": "ASSIGNED ROLE", "location_id": "LOCATION SCOPE", "department_id": "DEPT SCOPE", "brand_id": "BRAND SILO", "is_active": "ACTIVE STATUS"})
-            edited_tokens = st.data_editor(df_display, disabled=["TOKEN KEY", "ASSIGNED ROLE", "LOCATION SCOPE", "DEPT SCOPE", "BRAND SILO"], hide_index=True, use_container_width=True)
-            if st.button("COMMIT METADATA CHANGES", use_container_width=True):
+            edited_tokens = st.data_editor(df_display, disabled=["TOKEN KEY", "ASSIGNED ROLE", "LOCATION SCOPE", "DEPT SCOPE", "BRAND SILO"], hide_index=True, use_container_width=True, key="tok_data_editor")
+            if st.button("COMMIT METADATA CHANGES", use_container_width=True, key="tok_commit_changes_btn"):
                 chg = 0
                 for i in range(len(edited_tokens)):
                     if bool(df_display.iloc[i]["ACTIVE STATUS"]) != bool(edited_tokens.iloc[i]["ACTIVE STATUS"]):

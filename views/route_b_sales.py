@@ -49,8 +49,8 @@ def render_sales_admin(supabase, user_data):
                             st.success("✅ Local Leads Injected!"); safe_rerun()
                         except Exception as e: st.error(f"Injection Failed: {e}")
 
-        lead_section = st.radio("SELECT OPPORTUNITY CHANNEL", ["🏢 Corporate Fleet (B2B)", "🚗 Individual Leads (B2C)", "🏛️ Gov Tenders (B2B)"], horizontal=True)
-        filter_date_str = st.date_input("FILTER BY GENERATION DATE", datetime.now(SAST)).strftime('%Y-%m-%d')
+        lead_section = st.radio("SELECT OPPORTUNITY CHANNEL", ["🏢 Corporate Fleet (B2B)", "🚗 Individual Leads (B2C)", "🏛️ Gov Tenders (B2B)"], horizontal=True, key="feed_lead_section")
+        filter_date_str = st.date_input("FILTER BY GENERATION DATE", datetime.now(SAST), key="feed_filter_date").strftime('%Y-%m-%d')
         st.markdown("---")
 
         tbl_map = {"🏢 Corporate Fleet (B2B)": "leads", "🚗 Individual Leads (B2C)": "individual_leads", "🏛️ Gov Tenders (B2B)": "tender_leads"}
@@ -218,7 +218,7 @@ def render_sales_admin(supabase, user_data):
             else:
                 st.markdown("### 📄 AI DIGITAL BROCHURE STUDIO")
                 vehicle_series = df_live_stock['VSB NUMBER'].astype(str) + " - " + df_live_stock['VEHICLE DESCRIPTION']
-                selected_brochure = st.selectbox("SEARCH INVENTORY FOR BROCHURE GENERATION", ["Select a Vehicle..."] + vehicle_series.tolist())
+                selected_brochure = st.selectbox("SEARCH INVENTORY FOR BROCHURE GENERATION", ["Select a Vehicle..."] + vehicle_series.tolist(), key="brochure_vehicle_select")
 
                 if selected_brochure != "Select a Vehicle...":
                     sel_vsb = selected_brochure.split(" - ")[0]
@@ -295,9 +295,9 @@ def render_sales_admin(supabase, user_data):
                 st.markdown("---")
                 unique_franchises_options = sorted([f for f in df_live_stock["FRANCHISE DIVISION"].unique() if f.strip() and f.strip() != "LHP"])
                 cf1, cf2, cf3 = st.columns([2, 2, 1])
-                sel_franchises = cf1.multiselect("FILTER BY DIVISION", options=unique_franchises_options)
-                search_query = cf2.text_input("🔍 LIVE SEARCH", "").strip().lower()
-                show_hot_only = cf3.checkbox("🔥 SHOW HOT STOCKS ONLY", value=False)
+                sel_franchises = cf1.multiselect("FILTER BY DIVISION", options=unique_franchises_options, key="stock_filter_franchise")
+                search_query = cf2.text_input("🔍 LIVE SEARCH", "", key="stock_live_search").strip().lower()
+                show_hot_only = cf3.checkbox("🔥 SHOW HOT STOCKS ONLY", value=False, key="stock_show_hot")
 
                 filtered_df = df_live_stock.copy()
                 if sel_franchises: filtered_df = filtered_df[filtered_df["FRANCHISE DIVISION"].isin(sel_franchises)]
@@ -415,19 +415,19 @@ def render_sales_admin(supabase, user_data):
         PIPELINE_STAGES = ["Prospecting", "Test Drive", "Finance App", "Awaiting Delivery", "Delivered", "Cancelled"]
         with st.expander("➕ ADD NEW DEAL"):
             ca, cb = st.columns(2)
-            cname = ca.text_input("CLIENT NAME")
+            cname = ca.text_input("CLIENT NAME", key="pipeline_new_client_name")
             try:
                 p_query = apply_matrix_filters(supabase.table("used_car_stock").select("vsb_no, description"))
                 p_stock = p_query.execute().data or []
             except: p_stock = []
 
             opts = ["✏️ CUSTOM ENTRY (Not in Stock)"] + [f"{s['vsb_no']} - {s['description']}" for s in p_stock]
-            sel_s = cb.selectbox("LINK TO INVENTORY", opts)
-            ddesc = cb.text_input("ENTER CUSTOM DEAL DESC") if sel_s == "✏️ CUSTOM ENTRY (Not in Stock)" else sel_s
-            stage = ca.selectbox("STAGE", PIPELINE_STAGES)
-            ddate = ca.date_input("PLANNED DELIVERY", datetime.now(SAST))
-            val = cb.number_input("EST. VALUE (ZAR)", min_value=0.0)
-            if st.button("COMMIT DEAL"):
+            sel_s = cb.selectbox("LINK TO INVENTORY", opts, key="pipeline_new_link_inventory")
+            ddesc = cb.text_input("ENTER CUSTOM DEAL DESC", key="pipeline_new_custom_desc") if sel_s == "✏️ CUSTOM ENTRY (Not in Stock)" else sel_s
+            stage = ca.selectbox("STAGE", PIPELINE_STAGES, key="pipeline_new_stage")
+            ddate = ca.date_input("PLANNED DELIVERY", datetime.now(SAST), key="pipeline_new_delivery_date")
+            val = cb.number_input("EST. VALUE (ZAR)", min_value=0.0, key="pipeline_new_est_value")
+            if st.button("COMMIT DEAL", key="pipeline_commit_deal_btn"):
                 if cname and ddesc:
                     linked_vsb = sel_s.split(" - ")[0] if sel_s != "✏️ CUSTOM ENTRY (Not in Stock)" else None
                     insert_payload = {
@@ -516,7 +516,7 @@ def render_sales_admin(supabase, user_data):
             st.markdown(f"### 💰 {st.session_state.get('location_id', '').replace('_', ' ')} F&I PROFITABILITY DESK")
 
             DEAL_SOURCES = ["📥 Pipeline", "🚗 Master Stockroom", "✏️ Custom Buy-In"]
-            origin = st.radio("DEAL ORIGINATION", DEAL_SOURCES, horizontal=True)
+            origin = st.radio("DEAL ORIGINATION", DEAL_SOURCES, horizontal=True, key="fi_deal_origin")
 
             client_name, vehicle_vsb, vehicle_desc, default_capital = "", "", "", 0.0
             lock_vsb_field = False
@@ -531,7 +531,7 @@ def render_sales_admin(supabase, user_data):
                     st.info("No active pipeline deals to pull from.")
                 else:
                     deal_opts = {f"{d['client_name']} — {d['deal_description']}": d for d in pipe_deals}
-                    sel_deal = deal_opts[st.selectbox("SELECT PIPELINE DEAL", list(deal_opts.keys()))]
+                    sel_deal = deal_opts[st.selectbox("SELECT PIPELINE DEAL", list(deal_opts.keys()), key="fi_select_pipeline_deal")]
                     client_name = sel_deal['client_name']
                     vehicle_desc = sel_deal['deal_description']
                     vehicle_vsb = sel_deal.get('linked_vsb') or ""
@@ -547,7 +547,7 @@ def render_sales_admin(supabase, user_data):
                     st.info("No vehicles available in the stockroom.")
                 else:
                     stock_opts = {f"{s['vsb_no']} - {s['description']}": s for s in stock_list}
-                    sel_stock = stock_opts[st.selectbox("SELECT VEHICLE FROM STOCK", list(stock_opts.keys()))]
+                    sel_stock = stock_opts[st.selectbox("SELECT VEHICLE FROM STOCK", list(stock_opts.keys()), key="fi_select_stock_vehicle")]
                     vehicle_vsb = str(sel_stock['vsb_no'])
                     vehicle_desc = sel_stock['description']
                     default_capital = float(sel_stock.get('total_value', 0) or 0)
@@ -556,19 +556,19 @@ def render_sales_admin(supabase, user_data):
             st.markdown("---")
             fc1, fc2 = st.columns(2)
             with fc1:
-                client_name = st.text_input("CLIENT NAME", value=client_name)
-                vehicle_vsb = st.text_input("VSB NUMBER", value=vehicle_vsb, disabled=lock_vsb_field)
-                vehicle_desc = st.text_input("VEHICLE DESCRIPTION", value=vehicle_desc, disabled=lock_vsb_field)
+                client_name = st.text_input("CLIENT NAME", value=client_name, key="fi_client_name")
+                vehicle_vsb = st.text_input("VSB NUMBER", value=vehicle_vsb, disabled=lock_vsb_field, key="fi_vehicle_vsb")
+                vehicle_desc = st.text_input("VEHICLE DESCRIPTION", value=vehicle_desc, disabled=lock_vsb_field, key="fi_vehicle_desc")
             with fc2:
-                capital_cost = st.number_input("CAPITAL COST (ZAR)", min_value=0.0, step=500.0, value=default_capital)
-                retail_price = st.number_input("RETAIL SELLING PRICE (ZAR)", min_value=0.0, step=500.0)
-                fi_vaps_revenue = st.number_input("F&I VAPS & DIC REVENUE (ZAR)", min_value=0.0, step=100.0)
+                capital_cost = st.number_input("CAPITAL COST (ZAR)", min_value=0.0, step=500.0, value=default_capital, key="fi_capital_cost")
+                retail_price = st.number_input("RETAIL SELLING PRICE (ZAR)", min_value=0.0, step=500.0, key="fi_retail_price")
+                fi_vaps_revenue = st.number_input("F&I VAPS & DIC REVENUE (ZAR)", min_value=0.0, step=100.0, key="fi_vaps_revenue_input")
 
             net_retained_profit = (retail_price - capital_cost) + fi_vaps_revenue
             st.markdown("---")
             st.metric("NET RETAINED PROFIT", f"R {net_retained_profit:,.2f}")
 
-            if st.button("💾 LOCK DEAL", use_container_width=True):
+            if st.button("💾 LOCK DEAL", use_container_width=True, key="fi_lock_deal_btn"):
                 if client_name and vehicle_desc:
                     deal_payload = {
                         "deal_source": origin, "client_name": client_name, "vehicle_vsb": vehicle_vsb,
@@ -609,7 +609,7 @@ def render_sales_admin(supabase, user_data):
                 exp_cat = dc2.selectbox("EXPENSE CATEGORY", DOC_CATEGORIES, key="doc_cat_sel")
                 exp_amt = st.number_input("AMOUNT (ZAR)", min_value=0.0, step=500.0, key="doc_amt_input")
 
-                if st.button("💾 COMMIT EXPENSE", use_container_width=True):
+                if st.button("💾 COMMIT EXPENSE", use_container_width=True, key="doc_commit_expense_btn"):
                     if exp_amt > 0:
                         doc_payload = {
                             "expense_month": exp_month, "expense_category": exp_cat, "amount": exp_amt,

@@ -33,15 +33,15 @@ def render_service_parts(supabase, user_data):
 
         with st.expander("➕ OPEN NEW REPAIR ORDER (RO)"):
             ca, cb = st.columns(2)
-            ro_num = ca.text_input("RO NUMBER (DMS Sync)")
-            cname = cb.text_input("CLIENT NAME")
-            veh_desc = ca.text_input("VEHICLE (Model/Reg/VIN)")
-            status = cb.selectbox("INITIAL STATUS", WIP_STAGES, index=1)
-            adv = ca.text_input("SERVICE ADVISOR", value=st.session_state.get('name', 'Advisor'))
-            tech = cb.text_input("ASSIGNED TECHNICIAN")
-            val = ca.number_input("EST. RO VALUE (ZAR)", min_value=0.0, step=500.0)
+            ro_num = ca.text_input("RO NUMBER (DMS Sync)", key="ro_new_number")
+            cname = cb.text_input("CLIENT NAME", key="ro_new_client_name")
+            veh_desc = ca.text_input("VEHICLE (Model/Reg/VIN)", key="ro_new_vehicle_desc")
+            status = cb.selectbox("INITIAL STATUS", WIP_STAGES, index=1, key="ro_new_status")
+            adv = ca.text_input("SERVICE ADVISOR", value=st.session_state.get('name', 'Advisor'), key="ro_new_advisor")
+            tech = cb.text_input("ASSIGNED TECHNICIAN", key="ro_new_technician")
+            val = ca.number_input("EST. RO VALUE (ZAR)", min_value=0.0, step=500.0, key="ro_new_value")
 
-            if st.button("CREATE RO"):
+            if st.button("CREATE RO", key="ro_create_btn"):
                 if ro_num and cname and veh_desc:
                     payload = {
                         "ro_number": ro_num, "client_name": cname, "vehicle_details": veh_desc,
@@ -151,9 +151,9 @@ def render_service_parts(supabase, user_data):
         st.markdown(f"### 📊 {st.session_state.get('location_id', '').replace('_', ' ')} WORKSHOP REPORTING & EXTRACTION")
         st.info("💡 Paste your raw DMS Daily WIP Report here. The ingestion engine enforces strict filtering to only capture genuine RO lines.")
 
-        raw_wip_paste = st.text_area("PASTE RAW DMS DATA HERE (From Excel or Kerridge/Drive)", height=200)
+        raw_wip_paste = st.text_area("PASTE RAW DMS DATA HERE (From Excel or Kerridge/Drive)", height=200, key="wip_report_paste")
 
-        if st.button("📊 INGEST & GENERATE REPORT", use_container_width=True):
+        if st.button("📊 INGEST & GENERATE REPORT", use_container_width=True, key="wip_report_ingest_btn"):
             if raw_wip_paste.strip():
                 try:
                     lines = [line.strip() for line in raw_wip_paste.split('\n') if line.strip()]
@@ -265,15 +265,15 @@ def render_service_parts(supabase, user_data):
 
             with st.expander("➕ LOG RETAIL PARTS SALE"):
                 oc1, oc2 = st.columns(2)
-                inv_num = oc1.text_input("INVOICE NUMBER")
-                pclient = oc2.text_input("CLIENT NAME")
-                pdesc = st.text_area("PARTS DESCRIPTION", height=100)
-                ocap = oc1.number_input("CAPITAL COST (ZAR)", min_value=0.0, step=50.0)
-                oretail = oc2.number_input("RETAIL PRICE (ZAR)", min_value=0.0, step=50.0)
+                inv_num = oc1.text_input("INVOICE NUMBER", key="otc_invoice_num")
+                pclient = oc2.text_input("CLIENT NAME", key="otc_client_name")
+                pdesc = st.text_area("PARTS DESCRIPTION", height=100, key="otc_parts_desc")
+                ocap = oc1.number_input("CAPITAL COST (ZAR)", min_value=0.0, step=50.0, key="otc_capital_cost")
+                oretail = oc2.number_input("RETAIL PRICE (ZAR)", min_value=0.0, step=50.0, key="otc_retail_price")
                 onet = oretail - ocap
                 st.metric("NET PROFIT", f"R {onet:,.2f}")
 
-                if st.button("💾 SAVE INVOICE", use_container_width=True):
+                if st.button("💾 SAVE INVOICE", use_container_width=True, key="otc_save_invoice_btn"):
                     if inv_num and pclient and pdesc:
                         otc_payload = {
                             "invoice_number": inv_num, "client_name": pclient, "parts_description": pdesc,
