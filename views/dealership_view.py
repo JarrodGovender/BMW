@@ -21,7 +21,7 @@ def apply_matrix_filters(query_builder):
     if role == 'DIRECTOR':
         return query_builder
         
-    if role in ['SUPER_USER', 'DEALER_PRINCIPAL', 'FINANCE_ADMIN', 'PROPERTY_MANAGER']:
+    if role in ['SUPER_USER', 'DEALER_PRINCIPAL', 'FINANCE_ADMIN', 'PROPERTY_MANAGER', 'HR_ADMIN']:
         return query_builder.eq("location_id", loc)
         
     if role in ['SALES_MANAGER', 'WORKSHOP_MANAGER', 'PARTS_MANAGER']:
@@ -40,7 +40,7 @@ def _render_token_manager(supabase):
     st.info("💡 Notice: To ensure accurate system architecture testing, provisioned users will inherit the active God Mode matrix unless manually overridden below.")
     
     try: db_roles = [r['id'] for r in supabase.table("roles").select("id").execute().data]
-    except: db_roles = ["SALES_REP", "SALES_MANAGER", "FINANCE_ADMIN", "DEALER_PRINCIPAL", "DIRECTOR", "SUPER_USER", "WORKSHOP_MANAGER"]
+    except: db_roles = ["SALES_REP", "SALES_MANAGER", "FINANCE_ADMIN", "DEALER_PRINCIPAL", "DIRECTOR", "SUPER_USER", "WORKSHOP_MANAGER", "HR_ADMIN"]
     try: db_locs = [l['id'] for l in supabase.table("locations").select("id").execute().data]
     except: db_locs = ["BMW_SANDTON", "BMW_BEDFORDVIEW", "BMW_EASTRAND", "BMW_DALPARK", "MF_SANDTON", "MF_FOURWAYS", "GLOBAL_HQ"]
     try: db_depts = [d['id'] for d in supabase.table("departments").select("id").execute().data]
@@ -123,12 +123,19 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
     # ROUTE A: SERVICE / WORKSHOP / PARTS DEPARTMENTS
     # ----------------------------------------------------------------
     if active_dept in ['SERVICE', 'PARTS'] or role == 'WORKSHOP_MANAGER':
-        if role == 'SUPER_USER':
-            t1, t2, t3, t4 = st.tabs(["🔧 DAILY WIP", "📦 ARCHIVE", "📊 WIP REPORTS", "🔑 TOKEN MANAGER"])
+        tab_labels = ["🔧 DAILY WIP", "📦 ARCHIVE", "📊 WIP REPORTS"]
+        if active_dept == 'PARTS': tab_labels.append("📦 OTC SALES")
+        if role == 'SUPER_USER': tab_labels.append("🔑 TOKEN MANAGER")
+
+        tabs = st.tabs(tab_labels)
+        t1, t2, t3 = tabs[0], tabs[1], tabs[2]
+        _next = 3
+        if active_dept == 'PARTS':
+            t_otc = tabs[_next]; _next += 1
         else:
-            t1, t2, t3 = st.tabs(["🔧 DAILY WIP", "📦 ARCHIVE", "📊 WIP REPORTS"])
-            t4 = None
-            
+            t_otc = None
+        t4 = tabs[_next] if role == 'SUPER_USER' else None
+
         with t1:
             st.markdown(f"### 🔧 {st.session_state.get('location_id', '').replace('_', ' ')} {active_dept} DESK")
             WIP_STAGES = ["Scheduled", "Checked In", "In Bay / Diag", "Waiting on Parts", "QC / Wash", "Ready for Delivery", "Invoiced / Closed"]
@@ -363,6 +370,61 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                 else:
                     st.warning("Please paste data into the field before generating.")
 
+        if t_otc:
+            with t_otc:
+                st.markdown(f"### 📦 {st.session_state.get('location_id', '').replace('_', ' ')} OVER-THE-COUNTER PARTS SALES")
+
+                with st.expander("➕ LOG RETAIL PARTS SALE"):
+                    oc1, oc2 = st.columns(2)
+                    inv_num = oc1.text_input("INVOICE NUMBER")
+                    pclient = oc2.text_input("CLIENT NAME")
+                    pdesc = st.text_area("PARTS DESCRIPTION", height=100)
+                    ocap = oc1.number_input("CAPITAL COST (ZAR)", min_value=0.0, step=50.0)
+                    oretail = oc2.number_input("RETAIL PRICE (ZAR)", min_value=0.0, step=50.0)
+                    onet = oretail - ocap
+                    st.metric("NET PROFIT", f"R {onet:,.2f}")
+
+                    if st.button("💾 SAVE INVOICE", use_container_width=True):
+                        if inv_num and pclient and pdesc:
+                            otc_payload = {
+                                "invoice_number": inv_num, "client_name": pclient, "parts_description": pdesc,
+                                "capital_cost": ocap, "retail_price": oretail, "net_profit": onet,
+                                "salesperson": st.session_state.get('user', ''),
+                                "location_id": st.session_state.get('location_id'),
+                                "department_id": st.session_state.get('department_id'),
+                                "brand_id": st.session_state.get('brand_id')
+                            }
+                            try:
+                                supabase.table("parts_otc").insert(otc_payload).execute()
+                                st.success("✅ Invoice Logged."); safe_rerun()
+                            except Exception as e: st.error(f"Error: {e}")
+                        else:
+                            st.warning("Enter invoice number, client name, and parts description.")
+
+                try:
+                    otc_query = apply_matrix_filters(supabase.table("parts_otc").select("*"))
+                    otc_res = otc_query.order("id", desc=True).execute().data or []
+                except: otc_res = []
+
+                df_otc = pd.DataFrame(otc_res)
+                if not df_otc.empty and 'created_at' in df_otc.columns:
+                    today_str = datetime.now(SAST).strftime('%Y-%m-%d')
+                    df_otc = df_otc[pd.to_datetime(df_otc['created_at'], errors='coerce').dt.strftime('%Y-%m-%d') == today_str]
+
+                st.markdown("---")
+                if df_otc.empty:
+                    st.info("No OTC parts sales logged today for this branch.")
+                else:
+                    st.metric("TODAY'S NET PROFIT", f"R {df_otc['net_profit'].astype(float).sum():,.2f}")
+                    do = df_otc.rename(columns={
+                        "invoice_number": "INVOICE", "client_name": "CLIENT", "parts_description": "DESCRIPTION",
+                        "capital_cost": "CAPITAL COST", "retail_price": "RETAIL PRICE", "net_profit": "NET PROFIT",
+                        "salesperson": "SALESPERSON"
+                    })
+                    for col in ["CAPITAL COST", "RETAIL PRICE", "NET PROFIT"]:
+                        do[col] = do[col].astype(float).map(lambda x: f"R {x:,.2f}")
+                    st.dataframe(do[["INVOICE", "CLIENT", "DESCRIPTION", "CAPITAL COST", "RETAIL PRICE", "NET PROFIT", "SALESPERSON"]], hide_index=True, use_container_width=True)
+
         if t4:
             with t4: _render_token_manager(supabase)
 
@@ -373,7 +435,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
         t1, t2, t3, t4 = st.tabs(["👥 STAFF ROSTER", "🔄 MATRIX TRANSFERS", "🔐 SECURITY & RESETS", "🔑 TOKEN MANAGER"])
 
         try: db_roles = [r['id'] for r in supabase.table("roles").select("id").execute().data]
-        except: db_roles = ["SALES_REP", "SALES_MANAGER", "FINANCE_ADMIN", "DEALER_PRINCIPAL", "DIRECTOR", "SUPER_USER", "WORKSHOP_MANAGER", "PARTS_MANAGER"]
+        except: db_roles = ["SALES_REP", "SALES_MANAGER", "FINANCE_ADMIN", "DEALER_PRINCIPAL", "DIRECTOR", "SUPER_USER", "WORKSHOP_MANAGER", "PARTS_MANAGER", "HR_ADMIN"]
         try: db_locs = [l['id'] for l in supabase.table("locations").select("id").execute().data]
         except: db_locs = ["BMW_SANDTON", "BMW_BEDFORDVIEW", "BMW_EASTRAND", "BMW_DALPARK", "MF_SANDTON", "MF_FOURWAYS", "GLOBAL_HQ"]
         try: db_depts = [d['id'] for d in supabase.table("departments").select("id").execute().data]
