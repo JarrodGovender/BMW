@@ -736,17 +736,63 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                             "Active Motorplan / Warranty": "Yes / No (Update Here)"
                         }
                         
+                        car_details = {"desc": car_row['VEHICLE DESCRIPTION'], "vsb": car_row['VSB NUMBER'], "vin": car_row.get('CHASSIS / VIN', 'N/A'), "price": f"R {float(car_row.get('CAPITAL VAL (ZAR)', 0)):,.2f}", "raw_price": float(car_row.get('CAPITAL VAL (ZAR)', 0))}
+
                         col_b1, col_b2 = st.columns([1, 2])
                         with col_b1:
                             st.write("**AI Verified Specs:**")
                             for k, v in specs_to_render.items(): st.write(f"- **{k}:** {v}")
                         with col_b2:
-                            car_details = {"desc": car_row['VEHICLE DESCRIPTION'], "vsb": car_row['VSB NUMBER'], "vin": car_row.get('CHASSIS / VIN', 'N/A'), "price": f"R {float(car_row.get('CAPITAL VAL (ZAR)', 0)):,.2f}", "raw_price": float(car_row.get('CAPITAL VAL (ZAR)', 0))}
                             try:
                                 excel_bytes = create_brochure_excel(car_details, specs_to_render)
                                 st.download_button(label="📥 DOWNLOAD EXCEL SPEC SHEET", data=excel_bytes, file_name=f"PhaseV_Spec_Sheet_{sel_vsb}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                             except Exception as e: st.error(f"Failed Excel generation: {e}")
-                    
+
+                        st.markdown("---")
+                        st.markdown("##### ✉️ DIRECT CLIENT DISPATCH")
+                        client_email = st.text_input("Client Email Address", key=f"brochure_email_{sel_vsb}")
+                        personal_message = st.text_area("Personalized Message (Optional)", key=f"brochure_msg_{sel_vsb}")
+
+                        if st.button("🚀 SEND DIGITAL BROCHURE", key=f"brochure_send_{sel_vsb}"):
+                            if not client_email.strip():
+                                st.warning("⚠️ Please provide a client email address before dispatching.")
+                            else:
+                                specs_rows = "".join(
+                                    f"<tr><td style='padding:6px 12px;border:1px solid #ddd;'><strong>{k}</strong></td>"
+                                    f"<td style='padding:6px 12px;border:1px solid #ddd;'>{v}</td></tr>"
+                                    for k, v in specs_to_render.items()
+                                )
+                                html_body = f"""
+                                <html>
+                                  <body style="font-family: Arial, sans-serif; color: #222;">
+                                    {f'<p>{personal_message}</p>' if personal_message.strip() else ''}
+                                    <h2 style="color:#0066b1;">{car_details['desc']}</h2>
+                                    <p><strong>Retail Price:</strong> {car_details['price']}</p>
+                                    <table style="border-collapse: collapse; margin-top: 10px;">
+                                      {specs_rows}
+                                    </table>
+                                    <p style="margin-top:20px;color:#888;font-size:12px;">Sent via Phase V Enterprise Digital Brochure Studio.</p>
+                                  </body>
+                                </html>
+                                """
+                                try:
+                                    with st.spinner("Transmitting to client..."):
+                                        msg = EmailMessage()
+                                        msg["Subject"] = f"Vehicle Brochure: {car_details['desc']}"
+                                        msg["From"] = st.secrets["smtp"]["username"]
+                                        msg["To"] = client_email.strip()
+                                        msg.set_content("Please view this email in an HTML-capable client to see the digital brochure.")
+                                        msg.add_alternative(html_body, subtype="html")
+
+                                        with smtplib.SMTP(st.secrets["smtp"]["server"], st.secrets["smtp"]["port"]) as server:
+                                            server.starttls()
+                                            server.login(st.secrets["smtp"]["username"], st.secrets["smtp"]["password"])
+                                            server.send_message(msg)
+
+                                    st.success("✅ Digital Brochure delivered successfully!")
+                                except Exception as e:
+                                    st.error(f"Failed to send brochure: {e}")
+
                     st.markdown("---")
                     unique_franchises_options = sorted([f for f in df_live_stock["FRANCHISE DIVISION"].unique() if f.strip() and f.strip() != "LHP"])
                     cf1, cf2, cf3 = st.columns([2, 2, 1])
