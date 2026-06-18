@@ -31,6 +31,23 @@ Route A dispatch condition) — SERVICE_MANAGER does not exist anywhere in
 the codebase's role vocabulary, so using it would silently fall through
 to a stricter, brand-scoped filter bucket instead of the intended
 manager-tier bypass.
+
+SALES and ADMIN are likewise mapped to the actual department_id rows that
+exist in this Supabase project's `departments` table (NEW_SALES and
+FINANCE respectively) — a generic "SALES" or "ADMIN" id does not exist
+and is rejected by the users_department_id_fkey constraint.
+
+--------------------------------------------------------------------------
+SCHEMA PREREQUISITE — HR
+--------------------------------------------------------------------------
+This database had no "HR" row in `departments` and no "HR_ADMIN" row in
+`roles` until this script was first run — meaning the HR module
+(views/route_c_hr.py) was unreachable by any real account. Both rows were
+added once, by hand:
+    departments: {"id": "HR", "name": "Human Resources"}
+    roles:       {"id": "HR_ADMIN", "title": "HR Administrator", "access_level": 2}
+If you point this script at a different Supabase project, add those two
+rows first or the HR test-account insert will fail the same way.
 --------------------------------------------------------------------------
 """
 
@@ -75,8 +92,8 @@ LOCATIONS = [
 DEPARTMENTS = [
     ("SERVICE", "WORKSHOP_MANAGER"),
     ("PARTS", "PARTS_MANAGER"),
-    ("SALES", "SALES_MANAGER"),
-    ("ADMIN", "FINANCE_ADMIN"),
+    ("NEW_SALES", "SALES_MANAGER"),
+    ("FINANCE", "FINANCE_ADMIN"),
     ("HR", "HR_ADMIN"),
 ]
 
