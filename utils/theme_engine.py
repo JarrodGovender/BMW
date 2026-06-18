@@ -161,6 +161,35 @@ def inject_custom_css():
         border-color: var(--pv-glass-border) !important;
     }
 
+    /* ---- HTML tables (st.table / markdown tables): premium grid ---- */
+    html body table {
+        background: transparent !important;
+        border-collapse: collapse !important;
+        border: none !important;
+    }
+    html body th {
+        background: rgba(15, 20, 35, 0.9) !important;
+        color: var(--pv-accent) !important;
+        border: none !important;
+        border-bottom: 2px solid #00E5FF !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+    }
+    html body td {
+        background: transparent !important;
+        border: none !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+        color: var(--pv-text) !important;
+    }
+    html body tr {
+        background: transparent !important;
+        border: none !important;
+        transition: background-color 0.2s ease-in-out;
+    }
+    html body tr:hover {
+        background-color: rgba(0, 229, 255, 0.1) !important;
+    }
+
     /* ---- Inputs & dropdowns: frosted glass, never stark white ---- */
     html body input,
     html body textarea,
@@ -188,11 +217,28 @@ def inject_custom_css():
         box-shadow: 0 0 0 1px var(--pv-accent) !important;
     }
 
-    /* ---- Expanders ---- */
+    /* ---- Expanders: frosted glass, glowing title ---- */
     html body [data-testid="stExpander"] {
-        background: var(--pv-glass) !important;
-        border: 1px solid var(--pv-glass-border) !important;
-        border-radius: 14px !important;
+        background: rgba(20, 25, 40, 0.5) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 10px !important;
+        overflow: hidden !important;
+    }
+    html body [data-testid="stExpander"] summary {
+        background: transparent !important;
+    }
+    html body [data-testid="stExpander"] summary p,
+    html body [data-testid="stExpander"] summary span,
+    html body [data-testid="stExpander"] summary div {
+        color: #00E5FF !important;
+        font-weight: 600 !important;
+    }
+
+    /* ---- Dividers: fading neon gradient instead of a flat grey line ---- */
+    html body hr {
+        background: linear-gradient(to right, transparent, #00E5FF, transparent) !important;
+        height: 1px !important;
+        border: none !important;
     }
     </style>
     """, unsafe_allow_html=True)
