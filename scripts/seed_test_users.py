@@ -48,6 +48,26 @@ added once, by hand:
     roles:       {"id": "HR_ADMIN", "title": "HR Administrator", "access_level": 2}
 If you point this script at a different Supabase project, add those two
 rows first or the HR test-account insert will fail the same way.
+
+--------------------------------------------------------------------------
+ENTERPRISE ACCOUNTS — DIRECTOR / PROPERTY_MANAGER
+--------------------------------------------------------------------------
+These two roles aren't branch-scoped, so they don't fit the location x
+department loop above. Rather than NULL location/department/brand (which
+buys nothing — these columns aren't NOT NULL, but apply_matrix_filters()
+still runs an .eq() against whatever value is stored, and an .eq() on
+NULL matches nothing), they're pinned to this project's existing global
+sentinel rows: locations.GLOBAL_HQ, departments.ALL_DEPTS, brands.ALL_BRANDS.
+
+Caveat: apply_matrix_filters() only gives DIRECTOR a true bypass (no
+filter at all). PROPERTY_MANAGER falls in the location-only bucket
+(query.eq("location_id", loc)) — so test_property will only ever see
+rows tagged location_id == "GLOBAL_HQ", and no branch-level data (stock,
+WIP, deals, etc.) carries that tag today. test_director will see
+everything, unaffected by this, since DIRECTOR skips filtering entirely.
+This is a property of apply_matrix_filters() itself, not something this
+script can fix — flagging it so a "PROPERTY_MANAGER sees no data" result
+isn't mistaken for a seeding bug.
 --------------------------------------------------------------------------
 """
 
@@ -97,6 +117,25 @@ DEPARTMENTS = [
     ("HR", "HR_ADMIN"),
 ]
 
+ENTERPRISE_ACCOUNTS = [
+    {
+        "username": "test_director",
+        "name": "Test Director — Enterprise",
+        "role": "DIRECTOR",
+        "location_id": "GLOBAL_HQ",
+        "department_id": "ALL_DEPTS",
+        "brand_id": "ALL_BRANDS",
+    },
+    {
+        "username": "test_property",
+        "name": "Test Property Manager — Enterprise",
+        "role": "PROPERTY_MANAGER",
+        "location_id": "GLOBAL_HQ",
+        "department_id": "ALL_DEPTS",
+        "brand_id": "ALL_BRANDS",
+    },
+]
+
 PLAIN_PASSWORD = "Test123!"
 HASHED_PASSWORD = hashlib.sha256(PLAIN_PASSWORD.encode()).hexdigest()
 
@@ -142,6 +181,36 @@ def main():
                 "STATUS": status,
             })
             print(f"[{status}] {username} -> {loc_id} / {dept_id} / {role}")
+
+    for acct in ENTERPRISE_ACCOUNTS:
+        payload = {
+            "username": acct["username"],
+            "name": acct["name"],
+            "password": HASHED_PASSWORD,
+            "role": acct["role"],
+            "role_id": acct["role"],
+            "location_id": acct["location_id"],
+            "department_id": acct["department_id"],
+            "brand_id": acct["brand_id"],
+            "is_active": True,
+        }
+
+        status = "CREATED"
+        try:
+            supabase.table("users").insert(payload).execute()
+        except Exception as e:
+            status = f"FAILED: {e}"
+
+        roster_rows.append({
+            "USERNAME": acct["username"],
+            "PASSWORD": PLAIN_PASSWORD,
+            "LOCATION": "Enterprise (Global)",
+            "LOCATION_ID": acct["location_id"],
+            "DEPARTMENT": acct["department_id"],
+            "ROLE": acct["role"],
+            "STATUS": status,
+        })
+        print(f"[{status}] {acct['username']} -> {acct['location_id']} / {acct['department_id']} / {acct['role']}")
 
     df = pd.DataFrame(roster_rows)
     out_path = "test_accounts_matrix.xlsx"
