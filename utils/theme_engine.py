@@ -40,8 +40,8 @@ def inject_custom_css():
         color: var(--pv-text) !important;
     }
     html body h1, html body h2, html body h3, html body h4, html body h5, html body h6,
-    html body p, html body label, html body span {
-        color: var(--pv-text);
+    html body p, html body label, html body span, html body div {
+        color: var(--pv-text) !important;
     }
 
     /* ---- Sidebar: frosted glass, distinct shade ---- */
@@ -127,6 +127,19 @@ def inject_custom_css():
     html body [data-baseweb="tab-highlight"] { display: none !important; }
     html body [data-baseweb="tab-border"] { display: none !important; }
 
+    /* ---- Tab text contrast (BaseWeb wraps tab labels in nested p/span/div) ---- */
+    html body [data-baseweb="tab"] p,
+    html body [data-baseweb="tab"] span,
+    html body [data-baseweb="tab"] div {
+        color: #A0AEC0 !important;
+    }
+    html body [data-baseweb="tab"][aria-selected="true"] p,
+    html body [data-baseweb="tab"][aria-selected="true"] span,
+    html body [data-baseweb="tab"][aria-selected="true"] div {
+        color: #FFFFFF !important;
+        text-shadow: 0 0 10px var(--pv-glow);
+    }
+
     /* ---- DataFrames / tables: integrated dark styling ---- */
     html body [data-testid="stDataFrame"],
     html body [data-testid="stTable"] {
@@ -148,18 +161,29 @@ def inject_custom_css():
         border-color: var(--pv-glass-border) !important;
     }
 
-    /* ---- Inputs: match the glass aesthetic ---- */
+    /* ---- Inputs & dropdowns: frosted glass, never stark white ---- */
     html body input,
     html body textarea,
-    html body div[data-baseweb="select"] > div,
-    html body div[data-baseweb="base-input"] {
-        background: var(--pv-glass) !important;
-        color: var(--pv-text) !important;
-        border: 1px solid var(--pv-glass-border) !important;
+    html body [data-baseweb="input"],
+    html body [data-baseweb="select"],
+    html body [data-baseweb="base-input"],
+    html body [data-baseweb="select"] > div,
+    html body [data-baseweb="input"] > div,
+    html body [data-baseweb="base-input"] input,
+    html body [data-baseweb="select"] input {
+        background: rgba(20, 25, 40, 0.7) !important;
+        color: #FFFFFF !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
         border-radius: 10px !important;
     }
+    html body [data-baseweb="select"] span,
+    html body [data-baseweb="select"] div {
+        color: #FFFFFF !important;
+    }
     html body input:focus,
-    html body textarea:focus {
+    html body textarea:focus,
+    html body [data-baseweb="input"]:focus-within,
+    html body [data-baseweb="select"]:focus-within {
         border-color: var(--pv-accent) !important;
         box-shadow: 0 0 0 1px var(--pv-accent) !important;
     }
