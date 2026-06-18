@@ -4,3 +4,4 @@ supabase
 pytz
 xlsxwriter
 fpdf
+plotly

@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 def render(supabase):
     st.markdown("## 👑 PHASE V EXECUTIVE COMMAND CENTER")
@@ -60,6 +61,42 @@ def render(supabase):
 
         # Map the raw DB location_id to the exact Excel names
         df['Dealership'] = df['location_id'].map(dealer_map)
+
+    # ==========================================
+    # ENTERPRISE INVENTORY RISK (Aging Stock Donut Chart)
+    # ==========================================
+    st.markdown("### 📊 ENTERPRISE INVENTORY RISK")
+
+    if df.empty:
+        st.info("No active inventory logged across the enterprise yet.")
+    else:
+        bucket_order = ["0-30 Days (Healthy)", "31-60 Days (Watch)", "61-90 Days (Warning)", "91+ Days (High Risk)"]
+
+        def bucket_age(d):
+            if d <= 30: return bucket_order[0]
+            elif d <= 60: return bucket_order[1]
+            elif d <= 90: return bucket_order[2]
+            else: return bucket_order[3]
+
+        df['age_bucket'] = df['days_in_stock'].apply(bucket_age)
+        risk_df = df.groupby('age_bucket')['total_value'].sum().reindex(bucket_order).fillna(0.0).reset_index()
+        risk_df.columns = ['Aging Bucket', 'Capital Value']
+
+        risk_colors = {
+            "0-30 Days (Healthy)": "#2ECC71",
+            "31-60 Days (Watch)": "#F1C40F",
+            "61-90 Days (Warning)": "#E67E22",
+            "91+ Days (High Risk)": "#E74C3C"
+        }
+
+        fig = px.pie(
+            risk_df, values='Capital Value', names='Aging Bucket', hole=0.45,
+            color='Aging Bucket', color_discrete_map=risk_colors
+        )
+        fig.update_traces(textinfo='percent+label', hovertemplate="%{label}<br>R %{value:,.2f}<extra></extra>")
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("---")
 
     # Build the Grid
     for dealer in target_dealers:
