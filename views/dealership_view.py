@@ -772,7 +772,20 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                             nd = st.date_input("DATE", value=d, key=f"d_{r['id']}")
                         with c2: nn = st.text_area("NOTES", value=str(r.get('notes', '')), height=130, key=f"n_{r['id']}")
                         if st.button("SAVE", key=f"u_{r['id']}"):
-                            try: supabase.table("sales_pipeline").update({"stage": ns, "planned_delivery_date": nd.strftime('%Y-%m-%d'), "notes": nn}).eq("id", r['id']).execute(); safe_rerun()
+                            try:
+                                deal_desc = r.get('deal_description', '') or ''
+                                vsb_match = re.match(r"^\s*([\w\-/]+)\s*-\s*(.+)$", deal_desc)
+                                linked_vsb = vsb_match.group(1) if vsb_match else None
+
+                                if ns == "Delivered" and linked_vsb:
+                                    # Vehicle has left the floorplan — purge it so it stops accruing ghost aging provisions.
+                                    apply_matrix_filters(supabase.table("used_car_stock").delete().eq("vsb_no", linked_vsb)).execute()
+                                elif ns == "Cancelled" and linked_vsb:
+                                    # Reverse the F&I Desk's SOLD lock since the deal fell through.
+                                    apply_matrix_filters(supabase.table("used_car_stock").update({"floorplan_status": "⚪ PENDING RECON"}).eq("vsb_no", linked_vsb)).execute()
+
+                                supabase.table("sales_pipeline").update({"stage": ns, "planned_delivery_date": nd.strftime('%Y-%m-%d'), "notes": nn}).eq("id", r['id']).execute()
+                                safe_rerun()
                             except Exception as e: st.error(e)
 
         with t5:
