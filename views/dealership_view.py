@@ -728,10 +728,12 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                 val = cb.number_input("EST. VALUE (ZAR)", min_value=0.0)
                 if st.button("COMMIT DEAL"):
                     if cname and ddesc:
+                        linked_vsb = sel_s.split(" - ")[0] if sel_s != "✏️ CUSTOM ENTRY (Not in Stock)" else None
                         insert_payload = {
-                            "salesperson_username": st.session_state['user'], "client_name": cname, 
-                            "deal_description": ddesc, "stage": stage, "estimated_value": val, 
+                            "salesperson_username": st.session_state['user'], "client_name": cname,
+                            "deal_description": ddesc, "stage": stage, "estimated_value": val,
                             "planned_delivery_date": ddate.strftime('%Y-%m-%d'), "notes": "",
+                            "linked_vsb": linked_vsb,
                             "location_id": st.session_state['location_id'],
                             "department_id": st.session_state['department_id'],
                             "brand_id": st.session_state['brand_id']
@@ -754,6 +756,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                 if IS_MANAGEMENT: rp["REP"] = df_p["salesperson_username"].apply(lambda x: f"@{x}")
                 rp["CLIENT"] = df_p["client_name"]
                 rp["DEAL"] = df_p["deal_description"]
+                rp["VSB"] = df_p.get("linked_vsb", pd.Series([None]*len(df_p))).apply(lambda x: x if pd.notna(x) and str(x).strip() else "Custom")
                 rp["STAGE"] = df_p["stage"]
                 rp["EST VALUE"] = df_p.get("estimated_value", pd.Series([0]*len(df_p))).map(lambda x: f"R {float(x):,.2f}")
                 rp["DELIVERY"] = pd.to_datetime(df_p.get("planned_delivery_date", pd.Series()), errors='coerce').dt.strftime('%d %b %Y').fillna("Unscheduled")
@@ -766,6 +769,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         with c1:
                             st.markdown(f"**REP:** `@{r['salesperson_username']}`")
                             st.markdown(f"**EST. VALUE:** R {float(r.get('estimated_value', 0)):,.2f}")
+                            st.markdown(f"**LINKED VSB:** `{r.get('linked_vsb') or 'Custom Deal'}`")
                             ns = st.selectbox("STATUS", PIPELINE_STAGES, index=PIPELINE_STAGES.index(r['stage']) if r['stage'] in PIPELINE_STAGES else 0, key=f"s_{r['id']}")
                             try: d = datetime.strptime(str(r.get('planned_delivery_date')).split("T")[0], '%Y-%m-%d').date()
                             except: d = datetime.now(SAST).date()
@@ -773,9 +777,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         with c2: nn = st.text_area("NOTES", value=str(r.get('notes', '')), height=130, key=f"n_{r['id']}")
                         if st.button("SAVE", key=f"u_{r['id']}"):
                             try:
-                                deal_desc = r.get('deal_description', '') or ''
-                                vsb_match = re.match(r"^\s*([\w\-/]+)\s*-\s*(.+)$", deal_desc)
-                                linked_vsb = vsb_match.group(1) if vsb_match else None
+                                linked_vsb = r.get('linked_vsb')
 
                                 if ns == "Delivered" and linked_vsb:
                                     # Vehicle has left the floorplan — purge it so it stops accruing ghost aging provisions.
@@ -831,8 +833,7 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                         sel_deal = deal_opts[st.selectbox("SELECT PIPELINE DEAL", list(deal_opts.keys()))]
                         client_name = sel_deal['client_name']
                         vehicle_desc = sel_deal['deal_description']
-                        vsb_match = re.match(r"^\s*([\w\-/]+)\s*-\s*(.+)$", vehicle_desc)
-                        vehicle_vsb = vsb_match.group(1) if vsb_match else ""
+                        vehicle_vsb = sel_deal.get('linked_vsb') or ""
                         default_capital = float(sel_deal.get('estimated_value', 0) or 0)
 
                 elif origin == "🚗 Master Stockroom":
