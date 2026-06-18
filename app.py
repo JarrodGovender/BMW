@@ -2,18 +2,14 @@ import streamlit as st
 import hashlib
 from datetime import datetime
 from config import apply_theme, get_supabase_client, safe_rerun, BMW_LOGO, SAST
+from utils.theme_engine import inject_custom_css
 from views import auth_view, property_view, director_view, dealership_view, command_center
 
-st.set_page_config(page_title="Phase V Enterprise Hub", layout="wide")
+st.set_page_config(page_title="Phase V Enterprise Hub", layout="wide", initial_sidebar_state="expanded")
+inject_custom_css()
 
 # Initialize Environment & Database
 text_color, container_bg, metric_label, border_color, theme = apply_theme()
-
-# Global Button CSS
-st.markdown("""<style>
-    .stButton > button { background-color: #111111 !important; color: #FFFFFF !important; }
-    .stButton > button:hover { background-color: #222222 !important; border-color: #FFFFFF !important; }
-</style>""", unsafe_allow_html=True)
 
 supabase = get_supabase_client()
 
