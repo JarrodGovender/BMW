@@ -174,21 +174,45 @@ def render(supabase, container_bg, text_color, metric_label, border_color, theme
                 m3.metric("TOTAL WIP VALUE", f"R {df_wip['estimated_value'].astype(float).sum():,.2f}")
                 st.markdown("---")
                 
+                PARTS_STAGES = ["Pending Diagnosis", "Parts Ordered", "ETA Delayed", "Parts Arrived"]
+                IS_PARTS_VIEW = (active_dept == 'PARTS') or (role == 'PARTS_MANAGER')
+
                 for _, r in df_wip.iterrows():
                     icon = "⏳" if r['status'] == "Waiting on Parts" else ("✅" if r['status'] == "Ready for Delivery" else "🔧")
                     with st.expander(f"{icon} RO: {r['ro_number']} | {r['client_name']} ({r['vehicle_details']}) — {r['status'].upper()}"):
                         c1, c2 = st.columns([1, 2])
-                        with c1:
-                            st.markdown(f"**Advisor:** `{r['service_advisor']}`")
-                            st.markdown(f"**Value:** R {float(r.get('estimated_value', 0)):,.2f}")
-                            ns = st.selectbox("UPDATE STATUS", WIP_STAGES, index=WIP_STAGES.index(r['status']) if r['status'] in WIP_STAGES else 0, key=f"ws_{r['id']}")
-                            nt = st.text_input("TECHNICIAN", value=str(r.get('technician', '')), key=f"wt_{r['id']}")
-                        with c2: 
-                            nn = st.text_area("WORKSHOP NOTES", value=str(r.get('notes', '')), height=130, key=f"wn_{r['id']}")
-                        if st.button("💾 SAVE & UPDATE", key=f"wu_{r['id']}"):
-                            try:
-                                supabase.table("service_wip").update({"status": ns, "technician": nt, "notes": nn}).eq("id", r['id']).execute(); safe_rerun()
-                            except Exception as e: st.error(e)
+
+                        if IS_PARTS_VIEW:
+                            # Parts staff: RO/workshop fields are read-only, parts fields are theirs to edit.
+                            with c1:
+                                st.markdown(f"**Advisor:** `{r['service_advisor']}`")
+                                st.markdown(f"**Technician:** `{r.get('technician', '')}`")
+                                st.markdown(f"**Value:** R {float(r.get('estimated_value', 0)):,.2f}")
+                                st.text_input("RO STATUS (READ-ONLY)", value=r['status'], disabled=True, key=f"ws_ro_{r['id']}")
+                                st.text_area("WORKSHOP NOTES (READ-ONLY)", value=str(r.get('notes', '')), height=130, key=f"wn_ro_{r['id']}", disabled=True)
+                            with c2:
+                                current_ps = r.get('parts_status') or PARTS_STAGES[0]
+                                nps = st.selectbox("PARTS STATUS", PARTS_STAGES, index=PARTS_STAGES.index(current_ps) if current_ps in PARTS_STAGES else 0, key=f"ps_{r['id']}")
+                                npn = st.text_area("PARTS NOTES", value=str(r.get('parts_notes', '')), height=130, key=f"pn_{r['id']}")
+                            if st.button("💾 SAVE PARTS UPDATE", key=f"wu_{r['id']}"):
+                                try:
+                                    supabase.table("service_wip").update({"parts_status": nps, "parts_notes": npn}).eq("id", r['id']).execute(); safe_rerun()
+                                except Exception as e: st.error(e)
+                        else:
+                            # Service/Workshop staff: keep control of the RO, view parts updates read-only.
+                            with c1:
+                                st.markdown(f"**Advisor:** `{r['service_advisor']}`")
+                                st.markdown(f"**Value:** R {float(r.get('estimated_value', 0)):,.2f}")
+                                ns = st.selectbox("UPDATE STATUS", WIP_STAGES, index=WIP_STAGES.index(r['status']) if r['status'] in WIP_STAGES else 0, key=f"ws_{r['id']}")
+                                nt = st.text_input("TECHNICIAN", value=str(r.get('technician', '')), key=f"wt_{r['id']}")
+                            with c2:
+                                nn = st.text_area("WORKSHOP NOTES", value=str(r.get('notes', '')), height=130, key=f"wn_{r['id']}")
+                                st.text_input("PARTS STATUS (READ-ONLY)", value=r.get('parts_status') or "—", disabled=True, key=f"ps_ro_{r['id']}")
+                                st.text_area("PARTS NOTES (READ-ONLY)", value=str(r.get('parts_notes', '')), height=80, key=f"pn_ro_{r['id']}", disabled=True)
+                            if st.button("💾 SAVE & UPDATE", key=f"wu_{r['id']}"):
+                                try:
+                                    supabase.table("service_wip").update({"status": ns, "technician": nt, "notes": nn}).eq("id", r['id']).execute(); safe_rerun()
+                                except Exception as e: st.error(e)
 
         with t2:
             st.markdown(f"### 📦 {st.session_state.get('location_id', '').replace('_', ' ')} INVOICED / CLOSED RO ARCHIVE")
