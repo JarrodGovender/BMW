@@ -263,6 +263,10 @@ def render(supabase):
 
     gp_summary_df = pd.DataFrame(gp_summary_data)
 
+    # Snapshot the raw numeric rollup (pre-formatting, pre-Grand-Total) to power the
+    # leaderboard charts below — reuses this exact aggregation instead of re-querying.
+    chart_df = gp_summary_df.rename(columns={'': 'Dealership'}).copy()
+
     # Add the Grand Total Row for Gross Profit
     grand_total_gp = {
         '': 'GRAND TOTAL',
@@ -280,6 +284,48 @@ def render(supabase):
     gp_summary_df['Locked Units'] = gp_summary_df['Locked Units'].apply(lambda x: f"{x:,.0f}" if isinstance(x, (int, float)) else str(x))
     for col in ['Total VAPS & F&I', 'Vehicle Net Profit', 'Parts OTC Net Profit', 'Total Branch Net Profit', 'Total DOC', 'True Net Profit']:
         gp_summary_df[col] = gp_summary_df[col].apply(lambda x: f"R {x:,.2f}" if isinstance(x, (int, float)) else str(x))
+
+    # ==========================================
+    # ENTERPRISE PERFORMANCE LEADERBOARD (Charts)
+    # ==========================================
+    st.markdown("### 📊 ENTERPRISE PERFORMANCE LEADERBOARD")
+
+    if chart_df.empty or chart_df[['True Net Profit', 'Total Branch Net Profit', 'Total DOC']].abs().sum().sum() == 0:
+        st.info("No profitability data logged across the enterprise yet — charts will populate once deals, OTC sales, or overheads are recorded.")
+    else:
+        lb1, lb2 = st.columns(2)
+
+        with lb1:
+            leaderboard_df = chart_df.sort_values('True Net Profit', ascending=False).copy()
+            leaderboard_df['Result'] = leaderboard_df['True Net Profit'].apply(lambda x: 'Profit' if x >= 0 else 'Loss')
+
+            fig_leaderboard = px.bar(
+                leaderboard_df, x='Dealership', y='True Net Profit', color='Result',
+                color_discrete_map={'Profit': '#2ECC71', 'Loss': '#E74C3C'},
+                category_orders={'Dealership': leaderboard_df['Dealership'].tolist()},
+                title="True Net Profit Leaderboard", text='True Net Profit'
+            )
+            fig_leaderboard.update_traces(texttemplate='R %{text:,.0f}', textposition='outside')
+            fig_leaderboard.update_layout(showlegend=False, yaxis_title="True Net Profit (ZAR)", xaxis_title="")
+            st.plotly_chart(fig_leaderboard, use_container_width=True)
+
+        with lb2:
+            yield_vs_doc_df = chart_df.melt(
+                id_vars='Dealership',
+                value_vars=['Total Branch Net Profit', 'Total DOC'],
+                var_name='Metric', value_name='Value (ZAR)'
+            )
+
+            fig_yield_doc = px.bar(
+                yield_vs_doc_df, x='Dealership', y='Value (ZAR)', color='Metric', barmode='group',
+                color_discrete_map={'Total Branch Net Profit': '#3498DB', 'Total DOC': '#E67E22'},
+                category_orders={'Dealership': chart_df['Dealership'].tolist()},
+                title="Gross Yield vs. Overhead"
+            )
+            fig_yield_doc.update_layout(yaxis_title="Value (ZAR)", xaxis_title="", legend_title_text="")
+            st.plotly_chart(fig_yield_doc, use_container_width=True)
+
+    st.markdown("---")
 
     st.markdown("### 💰 EXECUTIVE GROSS PROFIT ROLLUP")
     st.dataframe(gp_summary_df, hide_index=True, use_container_width=True)
