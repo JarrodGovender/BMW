@@ -7,6 +7,7 @@ import smtplib
 from email.message import EmailMessage
 from config import safe_rerun, get_ai_vehicle_specs, create_brochure_excel, SAST
 from views.shared_utils import apply_matrix_filters, _render_token_manager
+from views.route_d_crm import render_crm
 
 # ====================================================================
 # ROUTE B: SALES / ADMIN DEPARTMENTS
@@ -16,14 +17,15 @@ def render_sales_admin(supabase, user_data):
     IS_MANAGEMENT = role in ['DEALER_PRINCIPAL', 'FINANCE_ADMIN', 'SALES_MANAGER', 'WORKSHOP_MANAGER', 'DIRECTOR', 'SUPER_USER']
     IS_DOC_ADMIN = role in ['FINANCE_ADMIN', 'DEALER_PRINCIPAL', 'SUPER_USER']
 
-    tab_labels = ["🔥 FEED", "💼 CLAIMED", "🚗 STOCKROOM", "💼 PIPELINE", "📦 ARCHIVE"]
+    tab_labels = ["🔥 FEED", "💼 CLAIMED", "🚗 STOCKROOM", "💼 PIPELINE", "📦 ARCHIVE", "🎯 CRM PIPELINE"]
     if IS_MANAGEMENT: tab_labels += ["📊 OVERVIEW", "💰 F&I DESK"]
     if IS_DOC_ADMIN: tab_labels.append("📉 DOC OVERHEADS")
     if role == 'SUPER_USER': tab_labels.append("🔑 TOKEN MANAGER")
 
     tabs = st.tabs(tab_labels)
     t1, t2, t3, t4, t5 = tabs[0], tabs[1], tabs[2], tabs[3], tabs[4]
-    _next = 5
+    t_crm = tabs[5]
+    _next = 6
     if IS_MANAGEMENT:
         t6, t7 = tabs[_next], tabs[_next + 1]; _next += 2
     else:
@@ -643,6 +645,9 @@ def render_sales_admin(supabase, user_data):
                 })
                 dd["AMOUNT"] = dd["AMOUNT"].apply(lambda x: f"R {x:,.2f}")
                 st.dataframe(dd[["MONTH", "CATEGORY", "AMOUNT", "LOGGED BY"]], hide_index=True, use_container_width=True)
+
+    with t_crm:
+        render_crm(supabase, user_data)
 
     if t8:
         with t8:

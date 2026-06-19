@@ -4,6 +4,7 @@ from datetime import datetime
 from config import apply_theme, get_supabase_client, safe_rerun, BMW_LOGO, SAST
 from utils.theme_engine import inject_custom_css
 from views import auth_view, property_view, director_view, dealership_view, command_center
+from views.route_d_crm import render_crm
 
 st.set_page_config(page_title="Phase V Enterprise Hub", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css()
@@ -63,7 +64,7 @@ else:
         if role == 'SUPER_USER':
             with st.sidebar:
                 st.markdown("### 👑 WORKSPACE")
-                nav_mode = st.radio("Select View:", ["📊 Executive Command Center", "🏢 Dealership Operations"], label_visibility="collapsed")
+                nav_mode = st.radio("Select View:", ["📊 Executive Command Center", "🎯 CRM Pipeline", "🏢 Dealership Operations"], label_visibility="collapsed")
                 
                 if nav_mode == "🏢 Dealership Operations":
                     st.markdown("---")
@@ -124,6 +125,8 @@ else:
             # Route to the selected view
             if nav_mode == "📊 Executive Command Center":
                 command_center.render(supabase)
+            elif nav_mode == "🎯 CRM Pipeline":
+                render_crm(supabase)
             else:
                 st.markdown(f"**CURRENT ACTIVE NODE:** `{selected_div[4:].upper()}` — `{selected_dept[2:].upper()}`")
                 dealership_view.render(supabase, container_bg, text_color, metric_label, border_color, theme)
