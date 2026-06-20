@@ -8,6 +8,7 @@ from email.message import EmailMessage
 from config import safe_rerun, get_ai_vehicle_specs, create_brochure_excel, SAST
 from utils.helpers import get_role
 from utils import demo_data
+from utils.rate_limiter import throttled
 from views.shared_utils import apply_matrix_filters, _render_token_manager
 from views.route_d_crm import render_crm
 
@@ -43,15 +44,18 @@ def render_sales_admin(supabase, user_data):
             with st.expander("🤖 LEAD INJECTION ENGINE (SUPER USER ONLY)"):
                 st.caption(f"Leads injected here will be routed directly to the active node: {st.session_state.get('location_id')}")
                 if st.button("🔥 INJECT 12 NEW LEADS", key="inject_leads_btn"):
-                    today_str = datetime.now(SAST).strftime('%Y-%m-%d')
-                    b2b_list = [{"company": "Apex Logistics", "location": "Sandton", "target": "Fleet Manager", "score": random.randint(80, 99), "lead_date": today_str, "signal": "Expanding executive luxury fleet.", "status": "Unassigned", "location_id": st.session_state.get('location_id'), "department_id": st.session_state.get('department_id', 'NEW_SALES'), "brand_id": "BMW"}]
-                    b2c_list = [{"client_name": "Sarah Jenkins", "title": "Senior Partner", "company": "Bowmans Law", "location": "Sandton", "score": random.randint(75, 99), "lead_date": today_str, "signal": "Current X5 M Competition lease expiring.", "status": "Unassigned", "location_id": st.session_state.get('location_id'), "department_id": st.session_state.get('department_id', 'NEW_SALES'), "brand_id": "BMW"}]
-                    with st.spinner("Injecting fresh leads..."):
-                        try:
-                            supabase.table("leads").insert(b2b_list).execute()
-                            supabase.table("individual_leads").insert(b2c_list).execute()
-                            st.success("✅ Local Leads Injected!"); safe_rerun()
-                        except Exception as e: st.error(f"Injection Failed: {e}")
+                    if throttled("inject_leads_btn"):
+                        st.warning("⏳ Action throttled. Please slow down.")
+                    else:
+                        today_str = datetime.now(SAST).strftime('%Y-%m-%d')
+                        b2b_list = [{"company": "Apex Logistics", "location": "Sandton", "target": "Fleet Manager", "score": random.randint(80, 99), "lead_date": today_str, "signal": "Expanding executive luxury fleet.", "status": "Unassigned", "location_id": st.session_state.get('location_id'), "department_id": st.session_state.get('department_id', 'NEW_SALES'), "brand_id": "BMW"}]
+                        b2c_list = [{"client_name": "Sarah Jenkins", "title": "Senior Partner", "company": "Bowmans Law", "location": "Sandton", "score": random.randint(75, 99), "lead_date": today_str, "signal": "Current X5 M Competition lease expiring.", "status": "Unassigned", "location_id": st.session_state.get('location_id'), "department_id": st.session_state.get('department_id', 'NEW_SALES'), "brand_id": "BMW"}]
+                        with st.spinner("Injecting fresh leads..."):
+                            try:
+                                supabase.table("leads").insert(b2b_list).execute()
+                                supabase.table("individual_leads").insert(b2c_list).execute()
+                                st.success("✅ Local Leads Injected!"); safe_rerun()
+                            except Exception as e: st.error(f"Injection Failed: {e}")
 
         lead_section = st.radio("SELECT OPPORTUNITY CHANNEL", ["🏢 Corporate Fleet (B2B)", "🚗 Individual Leads (B2C)", "🏛️ Gov Tenders (B2B)"], horizontal=True, key="feed_lead_section")
         filter_date_str = st.date_input("FILTER BY GENERATION DATE", datetime.now(SAST), key="feed_filter_date").strftime('%Y-%m-%d')
@@ -88,7 +92,10 @@ def render_sales_admin(supabase, user_data):
                         st.info(f"🏛️ {row.get('tender_desc', '')}")
 
                     if st.button("CLAIM LEAD", key=f"claim_{active_tbl}_{row['id']}"):
-                        supabase.table(active_tbl).update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute(); safe_rerun()
+                        if throttled(f"claim_{active_tbl}_{row['id']}"):
+                            st.warning("⏳ Action throttled. Please slow down.")
+                        else:
+                            supabase.table(active_tbl).update({"status": "Claimed", "assigned_to": st.session_state['user']}).eq("id", row['id']).execute(); safe_rerun()
 
     with t2:
         try: my_corp = supabase.table("leads").select("*").eq("assigned_to", st.session_state['user']).eq("status", "Claimed").order("id", desc=True).execute().data
@@ -113,8 +120,11 @@ def render_sales_admin(supabase, user_data):
                         st.markdown("---")
                         note_text = st.text_area("LOG NOTE", key=f"n_{tbl_name}_{row['id']}")
                         if st.button("SAVE LOG NOTE", key=f"s_{tbl_name}_{row['id']}") and note_text:
-                            supabase.table("lead_notes").insert({"lead_id": row['id'], "lead_type": tbl_name.replace("_leads", ""), "username": st.session_state['user'], "salesperson_name": st.session_state['name'], "note_text": note_text, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')}).execute()
-                            st.success("Note committed."); safe_rerun()
+                            if throttled(f"s_{tbl_name}_{row['id']}"):
+                                st.warning("⏳ Action throttled. Please slow down.")
+                            else:
+                                supabase.table("lead_notes").insert({"lead_id": row['id'], "lead_type": tbl_name.replace("_leads", ""), "username": st.session_state['user'], "salesperson_name": st.session_state['name'], "note_text": note_text, "timestamp": datetime.now(SAST).strftime('%Y-%m-%d %H:%M:%S')}).execute()
+                                st.success("Note committed."); safe_rerun()
                         ac1, ac2, ac3 = st.columns(3)
                         if ac1.button("✅ CLOSE", key=f"cl_{tbl_name}_{row['id']}"): supabase.table(tbl_name).update({"status": "Closed"}).eq("id", row['id']).execute(); safe_rerun()
                         if ac2.button("💀 DEAD", key=f"dead_{tbl_name}_{row['id']}"): supabase.table(tbl_name).update({"status": "Dead"}).eq("id", row['id']).execute(); safe_rerun()
@@ -173,9 +183,11 @@ def render_sales_admin(supabase, user_data):
                 with st.expander(f"🛠️ ADMIN CONSOLE: {st.session_state.get('location_id')} UPLOAD", expanded=False):
                     raw_paste_data = st.text_area("PASTE RAW DATA ROWS HERE", height=150, key="used_paste")
                     proceed_overwrite = st.button("PROCESS OVERWRITE", key="process_stock_paste_btn") and raw_paste_data.strip()
-                    if proceed_overwrite and st.session_state.get('presentation_mode'):
+                    if proceed_overwrite and throttled("process_stock_paste_btn"):
+                        st.warning("⏳ Action throttled. Please slow down.")
+                    elif proceed_overwrite and st.session_state.get('presentation_mode'):
                         st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to overwrite live stock.")
-                    if proceed_overwrite and not st.session_state.get('presentation_mode'):
+                    elif proceed_overwrite and not st.session_state.get('presentation_mode'):
                         try:
                             mem_query = apply_matrix_filters(supabase.table("used_car_stock").select("vsb_no, comments"))
                             try: mem_res = mem_query.execute().data
@@ -264,7 +276,9 @@ def render_sales_admin(supabase, user_data):
                     personal_message = st.text_area("Personalized Message (Optional)", key=f"brochure_msg_{sel_vsb}")
 
                     if st.button("🚀 SEND DIGITAL BROCHURE", key=f"brochure_send_{sel_vsb}"):
-                        if not client_email.strip():
+                        if throttled(f"brochure_send_{sel_vsb}"):
+                            st.warning("⏳ Action throttled. Please slow down.")
+                        elif not client_email.strip():
                             st.warning("⚠️ Please provide a client email address before dispatching.")
                         else:
                             specs_rows = "".join(
@@ -338,9 +352,11 @@ def render_sales_admin(supabase, user_data):
                 with st.expander(f"🛠️ ADMIN CONSOLE: {st.session_state.get('location_id')} DEMO UPLOAD", expanded=False):
                     raw_demo = st.text_area("PASTE RAW DATA ROWS HERE (DEMO)", height=150, key="demo_paste")
                     proceed_demo_overwrite = st.button("PROCESS OVERWRITE DEMO", key="process_demo_btn") and raw_demo.strip()
-                    if proceed_demo_overwrite and st.session_state.get('presentation_mode'):
+                    if proceed_demo_overwrite and throttled("process_demo_btn"):
+                        st.warning("⏳ Action throttled. Please slow down.")
+                    elif proceed_demo_overwrite and st.session_state.get('presentation_mode'):
                         st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to overwrite live stock.")
-                    if proceed_demo_overwrite and not st.session_state.get('presentation_mode'):
+                    elif proceed_demo_overwrite and not st.session_state.get('presentation_mode'):
                         try:
                             mem_query = apply_matrix_filters(supabase.table("used_car_stock").select("vsb_no, comments"))
                             try: mem_res = mem_query.execute().data
@@ -417,7 +433,9 @@ def render_sales_admin(supabase, user_data):
                         edit_cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "ADMIN COMMENTS"]
                         e_unenc = st.data_editor(unenc_df[edit_cols], disabled=["VSB NUMBER", "VEHICLE DESCRIPTION", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"], hide_index=True, use_container_width=True, key="u_edit")
                         if st.button("💾 SAVE COMMENTS", key="save_u_comments"):
-                            if st.session_state.get('presentation_mode'):
+                            if throttled("save_u_comments"):
+                                st.warning("⏳ Action throttled. Please slow down.")
+                            elif st.session_state.get('presentation_mode'):
                                 st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to save comments.")
                             else:
                                 uc = 0
@@ -445,7 +463,9 @@ def render_sales_admin(supabase, user_data):
             ddate = ca.date_input("PLANNED DELIVERY", datetime.now(SAST), key="pipeline_new_delivery_date")
             val = cb.number_input("EST. VALUE (ZAR)", min_value=0.0, key="pipeline_new_est_value")
             if st.button("COMMIT DEAL", key="pipeline_commit_deal_btn"):
-                if cname and ddesc:
+                if throttled("pipeline_commit_deal_btn"):
+                    st.warning("⏳ Action throttled. Please slow down.")
+                elif cname and ddesc:
                     linked_vsb = sel_s.split(" - ")[0] if sel_s != "✏️ CUSTOM ENTRY (Not in Stock)" else None
                     insert_payload = {
                         "salesperson_username": st.session_state['user'], "client_name": cname,
@@ -494,19 +514,22 @@ def render_sales_admin(supabase, user_data):
                         nd = st.date_input("DATE", value=d, key=f"d_{r['id']}")
                     with c2: nn = st.text_area("NOTES", value=str(r.get('notes', '')), height=130, key=f"n_{r['id']}")
                     if st.button("SAVE", key=f"u_{r['id']}"):
-                        try:
-                            linked_vsb = r.get('linked_vsb')
+                        if throttled(f"u_{r['id']}"):
+                            st.warning("⏳ Action throttled. Please slow down.")
+                        else:
+                            try:
+                                linked_vsb = r.get('linked_vsb')
 
-                            if ns == "Delivered" and linked_vsb:
-                                # Vehicle has left the floorplan — purge it so it stops accruing ghost aging provisions.
-                                apply_matrix_filters(supabase.table("used_car_stock").delete().eq("vsb_no", linked_vsb)).execute()
-                            elif ns == "Cancelled" and linked_vsb:
-                                # Reverse the F&I Desk's SOLD lock since the deal fell through.
-                                apply_matrix_filters(supabase.table("used_car_stock").update({"floorplan_status": "⚪ PENDING RECON"}).eq("vsb_no", linked_vsb)).execute()
+                                if ns == "Delivered" and linked_vsb:
+                                    # Vehicle has left the floorplan — purge it so it stops accruing ghost aging provisions.
+                                    apply_matrix_filters(supabase.table("used_car_stock").delete().eq("vsb_no", linked_vsb)).execute()
+                                elif ns == "Cancelled" and linked_vsb:
+                                    # Reverse the F&I Desk's SOLD lock since the deal fell through.
+                                    apply_matrix_filters(supabase.table("used_car_stock").update({"floorplan_status": "⚪ PENDING RECON"}).eq("vsb_no", linked_vsb)).execute()
 
-                            apply_matrix_filters(supabase.table("sales_pipeline").update({"stage": ns, "planned_delivery_date": nd.strftime('%Y-%m-%d'), "notes": nn})).eq("id", r['id']).execute()
-                            safe_rerun()
-                        except Exception as e: st.error(e)
+                                apply_matrix_filters(supabase.table("sales_pipeline").update({"stage": ns, "planned_delivery_date": nd.strftime('%Y-%m-%d'), "notes": nn})).eq("id", r['id']).execute()
+                                safe_rerun()
+                            except Exception as e: st.error(e)
 
     with t5:
         st.markdown(f"### 📦 {st.session_state.get('location_id', '').replace('_', ' ')} ARCHIVED DELIVERIES")
@@ -586,7 +609,9 @@ def render_sales_admin(supabase, user_data):
             st.metric("NET RETAINED PROFIT", f"R {net_retained_profit:,.2f}")
 
             if st.button("💾 LOCK DEAL", use_container_width=True, key="fi_lock_deal_btn"):
-                if st.session_state.get('presentation_mode'):
+                if throttled("fi_lock_deal_btn"):
+                    st.warning("⏳ Action throttled. Please slow down.")
+                elif st.session_state.get('presentation_mode'):
                     st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to lock a live deal.")
                 elif client_name and vehicle_desc:
                     deal_payload = {
@@ -629,7 +654,9 @@ def render_sales_admin(supabase, user_data):
                 exp_amt = st.number_input("AMOUNT (ZAR)", min_value=0.0, step=500.0, key="doc_amt_input")
 
                 if st.button("💾 COMMIT EXPENSE", use_container_width=True, key="doc_commit_expense_btn"):
-                    if exp_amt > 0:
+                    if throttled("doc_commit_expense_btn"):
+                        st.warning("⏳ Action throttled. Please slow down.")
+                    elif exp_amt > 0:
                         doc_payload = {
                             "expense_month": exp_month, "expense_category": exp_cat, "amount": exp_amt,
                             "logged_by": st.session_state.get('user', ''),

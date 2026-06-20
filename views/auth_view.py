@@ -32,9 +32,17 @@ def render(supabase):
                     stored_pass = user_data['password']
 
                     if stored_pass == hashed_input:
-                        if user_data.get('is_active', True) is False:
+                        if user_data.get('is_revoked') is True:
+                            st.error("⛔ Account access has been revoked by a System Administrator.")
+                        elif user_data.get('is_active', True) is False:
                             st.error("⛔ Account suspended. Please contact HR or your System Administrator.")
                         else:
+                            if user_data.get('force_logout') is True:
+                                try:
+                                    supabase.table("users").update({"force_logout": False}).eq("username", user_data['username']).execute()
+                                except Exception:
+                                    pass
+
                             st.session_state['authenticated'] = True
                             st.session_state['user'] = user_data['username']
                             st.session_state['name'] = user_data['name']

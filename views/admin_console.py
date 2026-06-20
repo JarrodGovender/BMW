@@ -6,7 +6,9 @@ a recent-activity log, a raw-table viewer, and user/token management.
 """
 import streamlit as st
 from views import settings as settings_view
+from views import admin_telemetry, admin_users, admin_properties
 from views.shared_utils import _render_token_manager
+from utils.rate_limiter import throttled
 
 RAW_DATA_TABLES = [
     "used_car_stock", "service_wip", "deal_desk", "parts_otc",
@@ -20,11 +22,14 @@ RAW_DATA_TABLES = [
 LOG_SOURCES = ["deal_desk", "service_wip", "parts_otc", "doc_expenses"]
 
 
-def render(supabase):
+def render(supabase, container_bg="#1c1c1c", text_color="#ffffff", theme="Dark"):
     st.markdown("## 👑 ADMIN / GOD MODE")
     st.caption("Enterprise-wide tools -- visible only to Super User roles.")
 
-    t1, t2, t3, t4 = st.tabs(["⚙️ SETTINGS", "🪵 LOGS", "🗄️ RAW DATA", "👥 USER MANAGEMENT"])
+    t1, t2, t3, t4, t5, t6, t7 = st.tabs([
+        "⚙️ SETTINGS", "🪵 LOGS", "🗄️ RAW DATA", "👥 USER MANAGEMENT",
+        "🛰️ TELEMETRY", "🔐 ACCESS CONTROL", "🏗️ PROPERTIES",
+    ])
 
     with t1:
         settings_view.render(supabase)
@@ -37,6 +42,15 @@ def render(supabase):
 
     with t4:
         _render_token_manager(supabase)
+
+    with t5:
+        admin_telemetry.render(supabase, container_bg, text_color)
+
+    with t6:
+        admin_users.render(supabase)
+
+    with t7:
+        admin_properties.render(supabase, container_bg, text_color, theme)
 
 
 def _render_logs(supabase):
@@ -73,6 +87,9 @@ def _render_raw_data(supabase):
     limit = st.slider("Row limit:", 10, 1000, 200, step=10, key="admin_raw_table_limit")
 
     if st.button("🔍 LOAD", key="admin_raw_table_load"):
+        if throttled("admin_raw_table_load"):
+            st.warning("⏳ Action throttled. Please slow down.")
+            return
         try:
             res = supabase.table(table).select("*").limit(limit).execute().data
             if res:

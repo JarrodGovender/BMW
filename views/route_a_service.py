@@ -5,6 +5,7 @@ import re
 from config import safe_rerun, SAST
 from utils.helpers import get_role
 from utils import demo_data
+from utils.rate_limiter import throttled
 from views.shared_utils import apply_matrix_filters, apply_location_matrix_filters, _render_token_manager
 
 # ====================================================================
@@ -44,7 +45,9 @@ def render_service_parts(supabase, user_data):
             val = ca.number_input("EST. RO VALUE (ZAR)", min_value=0.0, step=500.0, key="ro_new_value")
 
             if st.button("CREATE RO", key="ro_create_btn"):
-                if st.session_state.get('presentation_mode'):
+                if throttled("ro_create_btn"):
+                    st.warning("⏳ Action throttled. Please slow down.")
+                elif st.session_state.get('presentation_mode'):
                     st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to open a live RO.")
                 elif ro_num and cname and veh_desc:
                     payload = {
@@ -105,7 +108,9 @@ def render_service_parts(supabase, user_data):
                             nps = st.selectbox("PARTS STATUS", PARTS_STAGES, index=PARTS_STAGES.index(current_ps) if current_ps in PARTS_STAGES else 0, key=f"ps_{r['id']}")
                             npn = st.text_area("PARTS NOTES", value=str(r.get('parts_notes', '')), height=130, key=f"pn_{r['id']}")
                         if st.button("💾 SAVE PARTS UPDATE", key=f"wu_{r['id']}"):
-                            if st.session_state.get('presentation_mode'):
+                            if throttled(f"wu_{r['id']}"):
+                                st.warning("⏳ Action throttled. Please slow down.")
+                            elif st.session_state.get('presentation_mode'):
                                 st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to save changes.")
                             else:
                                 try:
@@ -123,7 +128,9 @@ def render_service_parts(supabase, user_data):
                             st.text_input("PARTS STATUS (READ-ONLY)", value=r.get('parts_status') or "—", disabled=True, key=f"ps_ro_{r['id']}")
                             st.text_area("PARTS NOTES (READ-ONLY)", value=str(r.get('parts_notes', '')), height=80, key=f"pn_ro_{r['id']}", disabled=True)
                         if st.button("💾 SAVE & UPDATE", key=f"wu_{r['id']}"):
-                            if st.session_state.get('presentation_mode'):
+                            if throttled(f"wu_{r['id']}"):
+                                st.warning("⏳ Action throttled. Please slow down.")
+                            elif st.session_state.get('presentation_mode'):
                                 st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to save changes.")
                             else:
                                 try:
@@ -165,7 +172,9 @@ def render_service_parts(supabase, user_data):
                     with c2:
                         nn = st.text_area("ARCHIVE NOTES", value=str(r.get('notes', '')), height=130, key=f"awn_{r['id']}")
                     if st.button("REOPEN RO", key=f"awu_{r['id']}"):
-                        if st.session_state.get('presentation_mode'):
+                        if throttled(f"awu_{r['id']}"):
+                            st.warning("⏳ Action throttled. Please slow down.")
+                        elif st.session_state.get('presentation_mode'):
                             st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to reopen a live RO.")
                         else:
                             try:
@@ -179,7 +188,9 @@ def render_service_parts(supabase, user_data):
         raw_wip_paste = st.text_area("PASTE RAW DMS DATA HERE (From Excel or Kerridge/Drive)", height=200, key="wip_report_paste")
 
         if st.button("📊 INGEST & GENERATE REPORT", use_container_width=True, key="wip_report_ingest_btn"):
-            if raw_wip_paste.strip():
+            if throttled("wip_report_ingest_btn"):
+                st.warning("⏳ Action throttled. Please slow down.")
+            elif raw_wip_paste.strip():
                 try:
                     lines = [line.strip() for line in raw_wip_paste.split('\n') if line.strip()]
 
@@ -299,7 +310,9 @@ def render_service_parts(supabase, user_data):
                 st.metric("NET PROFIT", f"R {onet:,.2f}")
 
                 if st.button("💾 SAVE INVOICE", use_container_width=True, key="otc_save_invoice_btn"):
-                    if inv_num and pclient and pdesc:
+                    if throttled("otc_save_invoice_btn"):
+                        st.warning("⏳ Action throttled. Please slow down.")
+                    elif inv_num and pclient and pdesc:
                         otc_payload = {
                             "invoice_number": inv_num, "client_name": pclient, "parts_description": pdesc,
                             "capital_cost": ocap, "retail_price": oretail, "net_profit": onet,

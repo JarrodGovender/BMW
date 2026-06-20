@@ -1,10 +1,13 @@
+import time
+_render_start = time.time()
+
 import streamlit as st
 import hashlib
 from datetime import datetime
 from config import apply_theme, get_supabase_client, safe_rerun, BMW_LOGO, SAST
 from utils.theme_engine import inject_custom_css
 from utils.helpers import get_role, is_super_user
-from utils import demo_data
+from utils import demo_data, telemetry
 from views import auth_view, property_view, director_view, dealership_view, command_center, settings, admin_console
 from views.route_d_crm import render_crm
 
@@ -39,14 +42,26 @@ if st.session_state.get('presentation_mode'):
 if not st.session_state['authenticated']:
     auth_view.render(supabase)
 else:
-    # Lightweight session invalidation check — boots a user out mid-session if HR deactivates them
+    # Lightweight session invalidation check — boots a user out mid-session if HR
+    # deactivates them, a Super User forces a logout, or revokes the account outright.
     try:
-        active_check = supabase.table("users").select("is_active").eq("username", st.session_state.get('user')).execute().data
-        if active_check and active_check[0].get('is_active') is False:
-            st.session_state.update({'authenticated': False, 'role': None, 'page_view': 'dashboard'})
-            safe_rerun()
+        active_check = supabase.table("users").select("is_active, force_logout, is_revoked").eq("username", st.session_state.get('user')).execute().data
+        if active_check:
+            row = active_check[0]
+            if row.get('is_active') is False or row.get('is_revoked') is True:
+                st.session_state.update({'authenticated': False, 'role': None, 'page_view': 'dashboard'})
+                safe_rerun()
+            elif row.get('force_logout') is True:
+                try:
+                    supabase.table("users").update({"force_logout": False}).eq("username", st.session_state.get('user')).execute()
+                except Exception:
+                    pass
+                st.session_state.update({'authenticated': False, 'role': None, 'page_view': 'dashboard'})
+                safe_rerun()
     except Exception:
         pass
+
+    telemetry.heartbeat(supabase)
 
     # Header
     h1, h2, h3 = st.columns([6, 1.2, 1.2])
@@ -151,7 +166,7 @@ else:
                 else:
                     director_view.render(supabase, container_bg, text_color, metric_label, theme)
             elif nav_mode == "👑 Admin / God Mode":
-                admin_console.render(supabase)
+                admin_console.render(supabase, container_bg, text_color, theme)
             else:
                 st.markdown(f"**CURRENT ACTIVE NODE:** `{selected_div[4:].upper()}` — `{selected_dept[2:].upper()}`")
                 dealership_view.render(supabase, container_bg, text_color, metric_label, border_color, theme)
@@ -161,3 +176,5 @@ else:
         # =========================================================
         else:
             dealership_view.render(supabase, container_bg, text_color, metric_label, border_color, theme)
+
+telemetry.record_render_time(time.time() - _render_start)
