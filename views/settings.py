@@ -36,6 +36,19 @@ def _render_appearance():
     )
     render_logo(PHASEV_LOGO, height=40)
 
+    st.markdown("---")
+    with st.expander("⚙️ Advanced — Command Center data source"):
+        demo_on = st.toggle(
+            "Presentation Demo Data",
+            value=st.session_state.get('presentation_mode', True),
+            help="On: Command Center shows curated demo figures. Off: live Supabase data.",
+            key="settings_presentation_toggle",
+        )
+        if demo_on != st.session_state.get('presentation_mode', True):
+            st.session_state['presentation_mode'] = demo_on
+            safe_rerun()
+        st.caption("Live Supabase Data" if not demo_on else "Presentation Demo Data")
+
 
 def _render_security(supabase):
     st.markdown("#### CHANGE PASSWORD")

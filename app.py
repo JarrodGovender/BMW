@@ -26,6 +26,9 @@ if 'page_view' not in st.session_state:
 if 'theme' not in st.session_state:
     st.session_state['theme'] = 'Dark'
 
+if 'presentation_mode' not in st.session_state:
+    st.session_state['presentation_mode'] = True
+
 # ====================================================================
 # ROUTER
 # ====================================================================

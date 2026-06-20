@@ -321,10 +321,22 @@ def inject_custom_css():
     }}
 
     /* ---- Dynamic Logo Logic: Phase V logo gets a black bounding box in
-       Light Mode only (it's a light/transparent mark, invisible otherwise) ---- */
+       Light Mode only (it's a light/transparent mark, invisible otherwise).
+       inline-flex + line-height:0 keeps the box sized exactly to the logo
+       plus its padding -- no baseline gap, no lopsided edges at any height. ---- */
     html body .pv-logo-box {{
-        display: inline-block;
-        {"background: #0a0f1a; padding: 6px 14px; border-radius: 8px;" if theme == "Light" else "background: transparent; padding: 0;"}
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 0;
+        border-radius: 8px;
+        box-sizing: border-box;
+        {"background: #0a0f1a; padding: 10px 18px;" if theme == "Light" else "background: transparent; padding: 0;"}
+    }}
+    html body .pv-logo-box img {{
+        display: block;
+        width: auto;
+        max-width: 100%;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -333,6 +345,6 @@ def inject_custom_css():
 def render_logo(logo_data_uri, height=32):
     """Phase V logo with the Dynamic Logo Logic black bounding box in Light Mode."""
     st.markdown(
-        f'<div class="pv-logo-box"><img src="{logo_data_uri}" height="{height}"></div>',
+        f'<div class="pv-logo-box"><img src="{logo_data_uri}" height="{height}" style="height:{height}px;"></div>',
         unsafe_allow_html=True,
     )

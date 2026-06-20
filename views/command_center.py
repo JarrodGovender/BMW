@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 from config import BMW_LOGO, MINI_LOGO, MG_LOGO, SAST
 from utils.helpers import fmt_currency
+from utils import demo_data
 
 TARGET_DEALERS = [
     "BMW Bedfordview",
@@ -28,19 +29,27 @@ PODIUM_RANK_COLORS = {1: "#FFD700", 2: "#C0C0C0", 3: "#CD7F32"}
 
 
 # ====================================================================
-# DATA LAYER — single round of Supabase fetches, reused by every panel
-# below (the mockup-aligned dashboard AND the legacy detail rollups).
+# DATA LAYER — single round of fetches, reused by every panel below
+# (the mockup-aligned dashboard AND the legacy detail rollups). When
+# presentation_mode is on, Supabase is never called: synthetic rows from
+# utils/demo_data.py are run through this exact same cleaning/aggregation
+# code instead, so a demo and a live render are visually identical in
+# structure and there's zero risk of a network error or empty table
+# surfacing mid-presentation.
 # ====================================================================
-def _fetch_data(supabase):
+def _fetch_data(supabase, presentation_mode):
     out = {}
 
-    try:
-        stock = pd.DataFrame(supabase.table("used_car_stock")
-                              .select("location_id, total_value, days_in_stock, floorplan_status")
-                              .execute().data)
-    except Exception as e:
-        st.error(f"Failed to load stock data: {e}")
-        stock = pd.DataFrame()
+    if presentation_mode:
+        stock = pd.DataFrame(demo_data.get_demo_stock_rows())
+    else:
+        try:
+            stock = pd.DataFrame(supabase.table("used_car_stock")
+                                  .select("location_id, total_value, days_in_stock, floorplan_status")
+                                  .execute().data)
+        except Exception as e:
+            st.error(f"Failed to load stock data: {e}")
+            stock = pd.DataFrame()
     if not stock.empty:
         stock['total_value'] = pd.to_numeric(stock['total_value'], errors='coerce').fillna(0.0)
         stock['days_in_stock'] = pd.to_numeric(stock['days_in_stock'], errors='coerce').fillna(0)
@@ -59,50 +68,62 @@ def _fetch_data(supabase):
         stock['Dealership'] = stock['location_id'].map(DEALER_MAP)
     out['stock'] = stock
 
-    try:
-        wip = pd.DataFrame(supabase.table("service_wip")
-                            .select("location_id, estimated_value, status, created_at")
-                            .execute().data)
-    except Exception as e:
-        st.error(f"Failed to load WIP data: {e}")
-        wip = pd.DataFrame()
+    if presentation_mode:
+        wip = pd.DataFrame(demo_data.get_demo_service_wip_rows())
+    else:
+        try:
+            wip = pd.DataFrame(supabase.table("service_wip")
+                                .select("location_id, estimated_value, status, created_at")
+                                .execute().data)
+        except Exception as e:
+            st.error(f"Failed to load WIP data: {e}")
+            wip = pd.DataFrame()
     if not wip.empty:
         wip['estimated_value'] = pd.to_numeric(wip['estimated_value'], errors='coerce').fillna(0.0)
         wip['Dealership'] = wip['location_id'].map(DEALER_MAP)
         wip['is_closed'] = wip['status'] == 'Invoiced / Closed'
     out['wip'] = wip
 
-    try:
-        deal = pd.DataFrame(supabase.table("deal_desk")
-                             .select("location_id, retail_price, fi_vaps_revenue, net_retained_profit")
-                             .execute().data)
-    except Exception as e:
-        st.error(f"Failed to load deal desk data: {e}")
-        deal = pd.DataFrame()
+    if presentation_mode:
+        deal = pd.DataFrame(demo_data.get_demo_deal_desk_rows())
+    else:
+        try:
+            deal = pd.DataFrame(supabase.table("deal_desk")
+                                 .select("location_id, retail_price, fi_vaps_revenue, net_retained_profit")
+                                 .execute().data)
+        except Exception as e:
+            st.error(f"Failed to load deal desk data: {e}")
+            deal = pd.DataFrame()
     if not deal.empty:
         for c in ['retail_price', 'fi_vaps_revenue', 'net_retained_profit']:
             deal[c] = pd.to_numeric(deal[c], errors='coerce').fillna(0.0)
         deal['Dealership'] = deal['location_id'].map(DEALER_MAP)
     out['deal'] = deal
 
-    try:
-        otc = pd.DataFrame(supabase.table("parts_otc")
-                            .select("location_id, retail_price, net_profit")
-                            .execute().data)
-    except Exception as e:
-        st.error(f"Failed to load parts OTC data: {e}")
-        otc = pd.DataFrame()
+    if presentation_mode:
+        otc = pd.DataFrame(demo_data.get_demo_parts_otc_rows())
+    else:
+        try:
+            otc = pd.DataFrame(supabase.table("parts_otc")
+                                .select("location_id, retail_price, net_profit")
+                                .execute().data)
+        except Exception as e:
+            st.error(f"Failed to load parts OTC data: {e}")
+            otc = pd.DataFrame()
     if not otc.empty:
         for c in ['retail_price', 'net_profit']:
             otc[c] = pd.to_numeric(otc[c], errors='coerce').fillna(0.0)
         otc['Dealership'] = otc['location_id'].map(DEALER_MAP)
     out['otc'] = otc
 
-    try:
-        doc = pd.DataFrame(supabase.table("doc_expenses").select("location_id, amount").execute().data)
-    except Exception as e:
-        st.error(f"Failed to load DOC overheads data: {e}")
-        doc = pd.DataFrame()
+    if presentation_mode:
+        doc = pd.DataFrame(demo_data.get_demo_doc_expenses_rows())
+    else:
+        try:
+            doc = pd.DataFrame(supabase.table("doc_expenses").select("location_id, amount").execute().data)
+        except Exception as e:
+            st.error(f"Failed to load DOC overheads data: {e}")
+            doc = pd.DataFrame()
     if not doc.empty:
         doc['amount'] = pd.to_numeric(doc['amount'], errors='coerce').fillna(0.0)
         doc['Dealership'] = doc['location_id'].map(DEALER_MAP)
@@ -117,7 +138,7 @@ def _fetch_data(supabase):
 # rollup query is date-scoped anywhere) so it's rendered as a clearly
 # inert reference control rather than a fake-working filter.
 # ====================================================================
-def _render_top_bar():
+def _render_top_bar(presentation_mode):
     logos = [
         (BMW_LOGO, "BMW"), (MINI_LOGO, "MINI"), (MG_LOGO, "MG"),
     ]
@@ -141,10 +162,16 @@ def _render_top_bar():
             unsafe_allow_html=True,
         )
     with c3:
+        demo_badge = (
+            '<span style="font-size:0.62rem;font-weight:700;letter-spacing:0.5px;'
+            'padding:2px 7px;border-radius:4px;background:rgba(241,196,15,0.18);'
+            'border:1px solid rgba(241,196,15,0.5);color:#F1C40F;margin-right:8px;">DEMO</span>'
+            if presentation_mode else ""
+        )
         st.markdown(
             f"<div style='text-align:right;'>"
             f"<span style='font-size:0.7rem;color:var(--pv-text-dim);text-transform:uppercase;'>Data as at</span><br>"
-            f"<b>{datetime.now(SAST).strftime('%d %b %Y, %H:%M')}</b> &nbsp; "
+            f"{demo_badge}<b>{datetime.now(SAST).strftime('%d %b %Y, %H:%M')}</b> &nbsp; "
             f"<span style='opacity:0.5;'>📅 Filters</span></div>",
             unsafe_allow_html=True,
         )
@@ -168,20 +195,24 @@ def _podium_html(title, icon, totals):
     ranked = sorted(totals.items(), key=lambda kv: kv[1], reverse=True)[:3]
     while len(ranked) < 3:
         ranked.append(("—", 0.0))
-    max_val = max(v for _, v in ranked) or 1.0
     order = [ranked[1], ranked[0], ranked[2]]  # 2nd, 1st, 3rd visual order
     ranks = [2, 1, 3]
     heights = [55, 95, 38]
 
+    # Fixed-width flex columns (flex-shrink:0, no wrap) so the 3 bars always
+    # render as a rigid podium grid regardless of branch-name length or
+    # container width -- never collapse/wrap into a stacked column.
     bars = ""
     for (name, val), rank, h in zip(order, ranks, heights):
         color = PODIUM_RANK_COLORS[rank]
         bars += f"""
-        <div style="display:flex;flex-direction:column;align-items:center;flex:1;">
-            <div style="font-size:0.72rem;font-weight:600;margin-bottom:4px;text-align:center;">{name}</div>
-            <div style="font-size:0.68rem;color:var(--pv-text-dim);margin-bottom:6px;">{fmt_currency(val, 0)}</div>
-            <div style="width:70%;height:{h}px;background:linear-gradient(180deg,{color}33,{color});
-                        border-top:3px solid {color};border-radius:6px 6px 0 0;
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+                    flex:0 0 33.33%;max-width:33.33%;box-sizing:border-box;height:160px;flex-shrink:0;">
+            <div style="font-size:0.72rem;font-weight:600;margin-bottom:4px;text-align:center;
+                        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;">{name}</div>
+            <div style="font-size:0.68rem;color:var(--pv-text-dim);margin-bottom:6px;white-space:nowrap;">{fmt_currency(val, 0)}</div>
+            <div style="width:64px;max-width:80%;height:{h}px;flex-shrink:0;background:linear-gradient(180deg,{color}33,{color});
+                        border-top:3px solid {color};border-radius:6px 6px 0 0;box-sizing:border-box;
                         display:flex;align-items:flex-start;justify-content:center;padding-top:4px;">
                 <span style="font-weight:800;color:#0b0f19;">{rank}</span>
             </div>
@@ -189,9 +220,9 @@ def _podium_html(title, icon, totals):
 
     st.markdown(f"""
     <div style="background:var(--pv-card-bg);border:1px solid var(--pv-card-border);border-radius:14px;
-                padding:14px;backdrop-filter:blur(16px);">
-        <div style="font-weight:700;letter-spacing:0.5px;margin-bottom:10px;">{icon} {title}</div>
-        <div style="display:flex;align-items:flex-end;gap:6px;">{bars}</div>
+                padding:14px;backdrop-filter:blur(16px);box-sizing:border-box;">
+        <div style="font-weight:700;letter-spacing:0.5px;margin-bottom:10px;white-space:nowrap;">{icon} {title}</div>
+        <div style="display:flex;flex-wrap:nowrap;align-items:flex-end;justify-content:space-between;gap:4px;width:100%;">{bars}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -312,7 +343,7 @@ def _stock_ageing_donut_fig(stock_df):
     return fig
 
 
-def _render_doc_stock_wip_row(data):
+def _render_doc_stock_wip_row(data, presentation_mode):
     c1, c2, c3 = st.columns(3)
 
     with c1:
@@ -349,7 +380,10 @@ def _render_doc_stock_wip_row(data):
         st.metric("Total WIP Value", fmt_currency(v_open, 0))
         st.metric("Avg WIP per RO", fmt_currency(avg_wip, 0))
         st.metric("ROs Opened Today", f"{opened_today}")
-        st.metric("ROs Closed Today", "N/A", help="No closed_at timestamp tracked in this schema — placeholder.")
+        if presentation_mode:
+            st.metric("ROs Closed Today", f"{demo_data.ROS_CLOSED_TODAY}")
+        else:
+            st.metric("ROs Closed Today", "N/A", help="No closed_at timestamp tracked in this schema — placeholder.")
 
 
 # ====================================================================
@@ -358,12 +392,12 @@ def _render_doc_stock_wip_row(data):
 # layout (matching the mockup's dot-status UI pattern) rather than
 # fabricated real-looking status data.
 # ====================================================================
-def _render_division_department_matrix():
+def _render_division_department_matrix(presentation_mode):
     st.markdown("##### 🧭 DIVISION & DEPARTMENT PERFORMANCE")
     st.caption("Sample layout — pending a KPI-target backend. Not live data.")
 
     dot = {"green": "#2ECC71", "amber": "#F1C40F", "red": "#E74C3C"}
-    sample_rows = [
+    sample_rows = demo_data.DIVISION_MATRIX if presentation_mode else [
         ("BMW Sandton", ["green", "green", "amber", "green"]),
         ("BMW Bedfordview", ["amber", "green", "green", "red"]),
         ("BMW East Rand", ["green", "amber", "amber", "green"]),
@@ -373,17 +407,39 @@ def _render_division_department_matrix():
     ]
     cols = ["Division", "New Sales", "Used Sales", "Service", "Parts"]
 
+    # table-layout:fixed + an explicit colgroup locks every column to a fixed
+    # width regardless of branch-name length, so the colored dots line up in
+    # a perfect grid across all rows -- the actual content can never push a
+    # column wider than its neighbours.
+    colgroup_html = (
+        "<colgroup>"
+        "<col style='width:40%;'>"
+        "<col style='width:15%;'><col style='width:15%;'><col style='width:15%;'><col style='width:15%;'>"
+        "</colgroup>"
+    )
+
     rows_html = ""
     for name, statuses in sample_rows:
         cells = "".join(
-            f'<td style="text-align:center;"><span style="display:inline-block;width:12px;height:12px;'
+            f'<td style="text-align:center;width:15%;box-sizing:border-box;">'
+            f'<span style="display:inline-block;width:12px;height:12px;'
             f'border-radius:50%;background:{dot[s]};"></span></td>'
             for s in statuses
         )
-        rows_html += f"<tr><td>{name}</td>{cells}</tr>"
+        rows_html += (
+            f'<tr><td style="width:40%;box-sizing:border-box;white-space:nowrap;'
+            f'overflow:hidden;text-overflow:ellipsis;">{name}</td>{cells}</tr>'
+        )
 
-    header_html = "".join(f"<th>{c}</th>" for c in cols)
-    st.markdown(f"<table style='width:100%;'><tr>{header_html}</tr>{rows_html}</table>", unsafe_allow_html=True)
+    header_html = "".join(
+        f'<th style="width:40%;box-sizing:border-box;" >{c}</th>' if i == 0
+        else f'<th style="width:15%;text-align:center;box-sizing:border-box;">{c}</th>'
+        for i, c in enumerate(cols)
+    )
+    st.markdown(
+        f"<table style='width:100%;table-layout:fixed;'>{colgroup_html}<tr>{header_html}</tr>{rows_html}</table>",
+        unsafe_allow_html=True,
+    )
 
 
 # ====================================================================
@@ -578,18 +634,19 @@ def _render_legacy_detail(data):
 # ENTRYPOINT
 # ====================================================================
 def render(supabase):
-    _render_top_bar()
-    data = _fetch_data(supabase)
+    presentation_mode = st.session_state.get('presentation_mode', True)
+    _render_top_bar(presentation_mode)
+    data = _fetch_data(supabase, presentation_mode)
 
     _render_sales_podiums(data)
     st.markdown("<br>", unsafe_allow_html=True)
     _render_key_metrics_and_idea_board(data)
 
     st.markdown("---")
-    _render_doc_stock_wip_row(data)
+    _render_doc_stock_wip_row(data, presentation_mode)
 
     st.markdown("---")
-    _render_division_department_matrix()
+    _render_division_department_matrix(presentation_mode)
     st.caption("Source: Phase V Automotive BI System")
 
     st.markdown("---")
