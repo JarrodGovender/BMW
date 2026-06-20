@@ -1,279 +1,461 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime
+from config import BMW_LOGO, MINI_LOGO, MG_LOGO, SAST
+from utils.helpers import fmt_currency
 
-def render(supabase):
-    st.markdown("## 👑 PHASE V EXECUTIVE COMMAND CENTER")
-    
-    # 1. Define the exact layout rows from your Excel sheets
-    target_dealers = [
-        "BMW Bedfordview",
-        "BMW Sandton",
-        "BMW East Rand",
-        "BMW Dalpark",
-        "MF Sandton",
-        "MF Fourways"
-    ]
+TARGET_DEALERS = [
+    "BMW Bedfordview",
+    "BMW Sandton",
+    "BMW East Rand",
+    "BMW Dalpark",
+    "MF Sandton",
+    "MF Fourways",
+]
 
-    # Map database IDs to your preferred display names
-    dealer_map = {
-        'BMW_BEDFORDVIEW': 'BMW Bedfordview',
-        'BMW_SANDTON': 'BMW Sandton',
-        'BMW_EASTRAND': 'BMW East Rand',
-        'BMW_DALPARK': 'BMW Dalpark',
-        'MF_SANDTON': 'MF Sandton',
-        'MF_FOURWAYS': 'MF Fourways'
-    }
+DEALER_MAP = {
+    'BMW_BEDFORDVIEW': 'BMW Bedfordview',
+    'BMW_SANDTON': 'BMW Sandton',
+    'BMW_EASTRAND': 'BMW East Rand',
+    'BMW_DALPARK': 'BMW Dalpark',
+    'MF_SANDTON': 'MF Sandton',
+    'MF_FOURWAYS': 'MF Fourways',
+}
 
-    # ==========================================
-    # MODULE 1: VEHICLE STOCK ROLLUP
-    # ==========================================
+PODIUM_RANK_COLORS = {1: "#FFD700", 2: "#C0C0C0", 3: "#CD7F32"}
+
+
+# ====================================================================
+# DATA LAYER — single round of Supabase fetches, reused by every panel
+# below (the mockup-aligned dashboard AND the legacy detail rollups).
+# ====================================================================
+def _fetch_data(supabase):
+    out = {}
+
     try:
-        data = supabase.table("used_car_stock").select("location_id, total_value, days_in_stock, floorplan_status").execute().data
-        df = pd.DataFrame(data)
+        stock = pd.DataFrame(supabase.table("used_car_stock")
+                              .select("location_id, total_value, days_in_stock, floorplan_status")
+                              .execute().data)
     except Exception as e:
-        st.error(f"Failed to load portfolio data: {e}")
-        df = pd.DataFrame()
+        st.error(f"Failed to load stock data: {e}")
+        stock = pd.DataFrame()
+    if not stock.empty:
+        stock['total_value'] = pd.to_numeric(stock['total_value'], errors='coerce').fillna(0.0)
+        stock['days_in_stock'] = pd.to_numeric(stock['days_in_stock'], errors='coerce').fillna(0)
+        stock['floorplan_status'] = stock['floorplan_status'].astype(str).str.upper()
+        stock['is_unencumbered'] = stock['floorplan_status'].str.contains('UNENCUMBERED', na=False)
+        stock['unencumbered_value'] = stock.apply(lambda r: r['total_value'] if r['is_unencumbered'] else 0.0, axis=1)
 
-    summary_data = []
-
-    if not df.empty:
-        # Clean data types
-        df['total_value'] = pd.to_numeric(df['total_value'], errors='coerce').fillna(0.0)
-        df['days_in_stock'] = pd.to_numeric(df['days_in_stock'], errors='coerce').fillna(0)
-        df['floorplan_status'] = df['floorplan_status'].astype(str).str.upper()
-
-        # Apply Aging Provision Logic
         def calc_prov(row):
-            d = row['days_in_stock']
-            v = row['total_value']
+            d, v = row['days_in_stock'], row['total_value']
             if 30 <= d <= 60: return v * 0.025
-            elif 61 <= d <= 90: return v * 0.050
-            elif 91 <= d <= 120: return v * 0.075
-            elif d >= 121: return v * 0.100
+            if 61 <= d <= 90: return v * 0.050
+            if 91 <= d <= 120: return v * 0.075
+            if d >= 121: return v * 0.100
             return 0.0
+        stock['provision_value'] = stock.apply(calc_prov, axis=1)
+        stock['Dealership'] = stock['location_id'].map(DEALER_MAP)
+    out['stock'] = stock
 
-        df['provision_value'] = df.apply(calc_prov, axis=1)
-        
-        # Determine Unencumbered Status
-        df['is_unencumbered'] = df['floorplan_status'].str.contains('UNENCUMBERED', na=False)
-        df['unencumbered_value'] = df.apply(lambda x: x['total_value'] if x['is_unencumbered'] else 0.0, axis=1)
+    try:
+        wip = pd.DataFrame(supabase.table("service_wip")
+                            .select("location_id, estimated_value, status, created_at")
+                            .execute().data)
+    except Exception as e:
+        st.error(f"Failed to load WIP data: {e}")
+        wip = pd.DataFrame()
+    if not wip.empty:
+        wip['estimated_value'] = pd.to_numeric(wip['estimated_value'], errors='coerce').fillna(0.0)
+        wip['Dealership'] = wip['location_id'].map(DEALER_MAP)
+        wip['is_closed'] = wip['status'] == 'Invoiced / Closed'
+    out['wip'] = wip
 
-        # Map the raw DB location_id to the exact Excel names
-        df['Dealership'] = df['location_id'].map(dealer_map)
+    try:
+        deal = pd.DataFrame(supabase.table("deal_desk")
+                             .select("location_id, retail_price, fi_vaps_revenue, net_retained_profit")
+                             .execute().data)
+    except Exception as e:
+        st.error(f"Failed to load deal desk data: {e}")
+        deal = pd.DataFrame()
+    if not deal.empty:
+        for c in ['retail_price', 'fi_vaps_revenue', 'net_retained_profit']:
+            deal[c] = pd.to_numeric(deal[c], errors='coerce').fillna(0.0)
+        deal['Dealership'] = deal['location_id'].map(DEALER_MAP)
+    out['deal'] = deal
 
-    # ==========================================
-    # ENTERPRISE INVENTORY RISK (Aging Stock Donut Chart)
-    # ==========================================
-    st.markdown("### 📊 ENTERPRISE INVENTORY RISK")
+    try:
+        otc = pd.DataFrame(supabase.table("parts_otc")
+                            .select("location_id, retail_price, net_profit")
+                            .execute().data)
+    except Exception as e:
+        st.error(f"Failed to load parts OTC data: {e}")
+        otc = pd.DataFrame()
+    if not otc.empty:
+        for c in ['retail_price', 'net_profit']:
+            otc[c] = pd.to_numeric(otc[c], errors='coerce').fillna(0.0)
+        otc['Dealership'] = otc['location_id'].map(DEALER_MAP)
+    out['otc'] = otc
 
-    if df.empty:
-        st.info("No active inventory logged across the enterprise yet.")
-    else:
-        bucket_order = ["0-30 Days (Healthy)", "31-60 Days (Watch)", "61-90 Days (Warning)", "91+ Days (High Risk)"]
+    try:
+        doc = pd.DataFrame(supabase.table("doc_expenses").select("location_id, amount").execute().data)
+    except Exception as e:
+        st.error(f"Failed to load DOC overheads data: {e}")
+        doc = pd.DataFrame()
+    if not doc.empty:
+        doc['amount'] = pd.to_numeric(doc['amount'], errors='coerce').fillna(0.0)
+        doc['Dealership'] = doc['location_id'].map(DEALER_MAP)
+    out['doc'] = doc
 
-        def bucket_age(d):
-            if d <= 30: return bucket_order[0]
-            elif d <= 60: return bucket_order[1]
-            elif d <= 90: return bucket_order[2]
-            else: return bucket_order[3]
+    return out
 
-        df['age_bucket'] = df['days_in_stock'].apply(bucket_age)
-        risk_df = df.groupby('age_bucket')['total_value'].sum().reindex(bucket_order).fillna(0.0).reset_index()
-        risk_df.columns = ['Aging Bucket', 'Capital Value']
 
-        risk_colors = {
-            "0-30 Days (Healthy)": "#2ECC71",
-            "31-60 Days (Watch)": "#F1C40F",
-            "61-90 Days (Warning)": "#E67E22",
-            "91+ Days (High Risk)": "#E74C3C"
-        }
+# ====================================================================
+# TOP BAR — brand row, title, live "as at" timestamp. The mockup's date
+# range / filter control has no functional backend in this app (no
+# rollup query is date-scoped anywhere) so it's rendered as a clearly
+# inert reference control rather than a fake-working filter.
+# ====================================================================
+def _render_top_bar():
+    logos = [
+        (BMW_LOGO, "BMW"), (MINI_LOGO, "MINI"), (MG_LOGO, "MG"),
+    ]
+    text_badges = ["🏍️ MOTORRAD", "HONDA", "JAC"]
 
-        fig = px.pie(
-            risk_df, values='Capital Value', names='Aging Bucket', hole=0.45,
-            color='Aging Bucket', color_discrete_map=risk_colors
+    c1, c2, c3 = st.columns([3, 5, 3])
+    with c1:
+        badge_html = "".join(
+            f'<img src="{src}" height="26" style="margin-right:10px;vertical-align:middle;border-radius:4px;background:#fff;padding:2px 6px;">'
+            for src, _ in logos
         )
-        fig.update_traces(textinfo='percent+label', hovertemplate="%{label}<br>R %{value:,.2f}<extra></extra>")
-        fig.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-            font_color='#F8F9FA', font_family='Roboto Mono, monospace',
-            legend=dict(bgcolor='rgba(0,0,0,0)')
+        badge_html += "".join(
+            f'<span style="font-size:0.7rem;font-weight:700;letter-spacing:0.5px;margin-right:10px;'
+            f'padding:4px 8px;border-radius:4px;background:var(--pv-glass);border:1px solid var(--pv-glass-border);">{t}</span>'
+            for t in text_badges
         )
-        st.plotly_chart(fig, use_container_width=True)
-
+        st.markdown(badge_html, unsafe_allow_html=True)
+    with c2:
+        st.markdown(
+            "<h3 style='text-align:center;margin:0;'>👑 PHASE V EXECUTIVE COMMAND CENTER</h3>",
+            unsafe_allow_html=True,
+        )
+    with c3:
+        st.markdown(
+            f"<div style='text-align:right;'>"
+            f"<span style='font-size:0.7rem;color:var(--pv-text-dim);text-transform:uppercase;'>Data as at</span><br>"
+            f"<b>{datetime.now(SAST).strftime('%d %b %Y, %H:%M')}</b> &nbsp; "
+            f"<span style='opacity:0.5;'>📅 Filters</span></div>",
+            unsafe_allow_html=True,
+        )
     st.markdown("---")
 
-    # Build the Grid
-    for dealer in target_dealers:
+
+# ====================================================================
+# SALES PODIUMS — top-3 branches per stream, rendered as 2nd-1st-3rd
+# ranked bars. Vehicle = deal_desk retail value, Parts = parts_otc
+# retail value, Service = invoiced/closed service_wip value.
+# ====================================================================
+def _branch_totals(df, value_col, extra_filter=None):
+    if df.empty or 'Dealership' not in df.columns:
+        return {d: 0.0 for d in TARGET_DEALERS}
+    scoped = df[extra_filter(df)] if extra_filter else df
+    grp = scoped.groupby('Dealership')[value_col].sum()
+    return {d: float(grp.get(d, 0.0)) for d in TARGET_DEALERS}
+
+
+def _podium_html(title, icon, totals):
+    ranked = sorted(totals.items(), key=lambda kv: kv[1], reverse=True)[:3]
+    while len(ranked) < 3:
+        ranked.append(("—", 0.0))
+    max_val = max(v for _, v in ranked) or 1.0
+    order = [ranked[1], ranked[0], ranked[2]]  # 2nd, 1st, 3rd visual order
+    ranks = [2, 1, 3]
+    heights = [55, 95, 38]
+
+    bars = ""
+    for (name, val), rank, h in zip(order, ranks, heights):
+        color = PODIUM_RANK_COLORS[rank]
+        bars += f"""
+        <div style="display:flex;flex-direction:column;align-items:center;flex:1;">
+            <div style="font-size:0.72rem;font-weight:600;margin-bottom:4px;text-align:center;">{name}</div>
+            <div style="font-size:0.68rem;color:var(--pv-text-dim);margin-bottom:6px;">{fmt_currency(val, 0)}</div>
+            <div style="width:70%;height:{h}px;background:linear-gradient(180deg,{color}33,{color});
+                        border-top:3px solid {color};border-radius:6px 6px 0 0;
+                        display:flex;align-items:flex-start;justify-content:center;padding-top:4px;">
+                <span style="font-weight:800;color:#0b0f19;">{rank}</span>
+            </div>
+        </div>"""
+
+    st.markdown(f"""
+    <div style="background:var(--pv-card-bg);border:1px solid var(--pv-card-border);border-radius:14px;
+                padding:14px;backdrop-filter:blur(16px);">
+        <div style="font-weight:700;letter-spacing:0.5px;margin-bottom:10px;">{icon} {title}</div>
+        <div style="display:flex;align-items:flex-end;gap:6px;">{bars}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def _render_sales_podiums(data):
+    p1, p2, p3 = st.columns(3)
+    with p1:
+        _podium_html("VEHICLE SALES", "🚗", _branch_totals(data['deal'], 'retail_price'))
+    with p2:
+        _podium_html("PARTS SALES", "⚙️", _branch_totals(data['otc'], 'retail_price'))
+    with p3:
+        _podium_html("SERVICE SALES", "🔧", _branch_totals(
+            data['wip'], 'estimated_value', extra_filter=lambda d: d['is_closed']
+        ))
+
+
+# ====================================================================
+# KEY METRICS (MTD) + IDEA BOARD
+# RO Margin / CSI Score / Idea Board have no backing table in this
+# schema — rendered as clearly tagged placeholders, never as fabricated
+# real-looking figures, per the "strictly a mock up" instruction.
+# ====================================================================
+def _render_key_metrics_and_idea_board(data):
+    col_metrics, col_idea = st.columns([2, 1])
+
+    with col_metrics:
+        st.markdown("##### 🔑 KEY METRICS (MTD)")
+        total_revenue = (
+            data['deal']['retail_price'].sum() if not data['deal'].empty else 0.0
+        ) + (
+            data['otc']['retail_price'].sum() if not data['otc'].empty else 0.0
+        ) + (
+            data['wip'][data['wip']['is_closed']]['estimated_value'].sum() if not data['wip'].empty else 0.0
+        )
+        gross_profit = (
+            data['deal']['net_retained_profit'].sum() if not data['deal'].empty else 0.0
+        ) + (
+            data['otc']['net_profit'].sum() if not data['otc'].empty else 0.0
+        )
+        gp_pct = (gross_profit / total_revenue * 100) if total_revenue else 0.0
+        units_sold = len(data['deal']) if not data['deal'].empty else 0
+
+        m1, m2 = st.columns(2)
+        m1.metric("Total Revenue", fmt_currency(total_revenue, 0))
+        m2.metric("Gross Profit", fmt_currency(gross_profit, 0))
+        m3, m4 = st.columns(2)
+        m3.metric("Gross Profit %", f"{gp_pct:.1f}%")
+        m4.metric("Units Sold", f"{units_sold}")
+        m5, m6 = st.columns(2)
+        m5.metric("RO Margin", "N/A", help="No backing column in this schema — placeholder.")
+        m6.metric("CSI Score", "N/A", help="No backing column in this schema — placeholder.")
+
+    with col_idea:
+        st.markdown("##### 💡 IDEA BOARD")
+        st.caption("Sample layout — no live data source yet.")
+        for label in ["Reduce 90+ day stock provisions", "Parts counter upsell script", "Loaner fleet refresh"]:
+            st.markdown(
+                f"<div style='background:var(--pv-glass);border:1px solid var(--pv-glass-border);"
+                f"border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:0.8rem;'>📋 {label}</div>",
+                unsafe_allow_html=True,
+            )
+
+
+# ====================================================================
+# DOC GAUGE · STOCK AGEING DONUT (by unit count) · DAILY WIP
+# ====================================================================
+def _doc_gauge_fig(pct):
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=round(pct, 1),
+        number={'suffix': "%", 'font': {'color': '#e8ecf4'}},
+        gauge={
+            'axis': {'range': [0, 100], 'tickcolor': '#8993a8'},
+            'bar': {'color': '#00e0ff'},
+            'bgcolor': 'rgba(0,0,0,0)',
+            'steps': [
+                {'range': [0, 65], 'color': 'rgba(46,204,113,0.25)'},
+                {'range': [65, 100], 'color': 'rgba(231,76,60,0.25)'},
+            ],
+            'threshold': {'line': {'color': '#FF3366', 'width': 3}, 'thickness': 0.8, 'value': 65},
+        },
+    ))
+    fig.update_layout(
+        height=220, margin=dict(t=10, b=0, l=20, r=20),
+        paper_bgcolor='rgba(0,0,0,0)', font_color='#e8ecf4',
+    )
+    return fig
+
+
+def _stock_ageing_donut_fig(stock_df):
+    bucket_order = ["0-30", "31-60", "61-90", "91-120", "120+"]
+    colors = ["#2ECC71", "#F1C40F", "#E67E22", "#E74C3C", "#8E44AD"]
+
+    def bucket(d):
+        if d <= 30: return bucket_order[0]
+        if d <= 60: return bucket_order[1]
+        if d <= 90: return bucket_order[2]
+        if d <= 120: return bucket_order[3]
+        return bucket_order[4]
+
+    if stock_df.empty:
+        counts = pd.Series([0] * 5, index=bucket_order)
+    else:
+        counts = stock_df['days_in_stock'].apply(bucket).value_counts().reindex(bucket_order).fillna(0)
+
+    total_units = int(counts.sum())
+    fig = px.pie(
+        names=bucket_order, values=counts.values, hole=0.55,
+        color=bucket_order, color_discrete_sequence=colors,
+    )
+    fig.update_traces(textinfo='percent', hovertemplate="%{label} Days<br>%{value:.0f} units<extra></extra>")
+    fig.update_layout(
+        height=260, margin=dict(t=10, b=0, l=0, r=0),
+        paper_bgcolor='rgba(0,0,0,0)', font_color='#e8ecf4',
+        showlegend=True, legend=dict(orientation='h', y=-0.1, bgcolor='rgba(0,0,0,0)'),
+        annotations=[dict(text=f"{total_units}<br>Total Units", x=0.5, y=0.5, showarrow=False, font_size=14)],
+    )
+    return fig
+
+
+def _render_doc_stock_wip_row(data):
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        st.markdown("##### ⛽ DOC RATIO")
+        branch_profit = (
+            (data['deal']['net_retained_profit'].sum() if not data['deal'].empty else 0.0)
+            + (data['otc']['net_profit'].sum() if not data['otc'].empty else 0.0)
+        )
+        doc_total = data['doc']['amount'].sum() if not data['doc'].empty else 0.0
+        doc_pct = (doc_total / branch_profit * 100) if branch_profit else 0.0
+        st.plotly_chart(_doc_gauge_fig(doc_pct), use_container_width=True)
+        st.caption("Target < 65% of gross profit")
+
+    with c2:
+        st.markdown("##### 📦 STOCK AGEING (UNITS)")
+        st.plotly_chart(_stock_ageing_donut_fig(data['stock']), use_container_width=True)
+
+    with c3:
+        st.markdown("##### 🛠️ DAILY WIP")
+        wip = data['wip']
+        open_wip = wip[~wip['is_closed']] if not wip.empty else pd.DataFrame()
+        n_open = len(open_wip)
+        v_open = open_wip['estimated_value'].sum() if not open_wip.empty else 0.0
+        avg_wip = (v_open / n_open) if n_open else 0.0
+
+        if not wip.empty:
+            today_str = datetime.now(SAST).strftime('%Y-%m-%d')
+            opened_today = (pd.to_datetime(wip['created_at'], errors='coerce')
+                             .dt.strftime('%Y-%m-%d') == today_str).sum()
+        else:
+            opened_today = 0
+
+        st.metric("Open ROs", f"{n_open}")
+        st.metric("Total WIP Value", fmt_currency(v_open, 0))
+        st.metric("Avg WIP per RO", fmt_currency(avg_wip, 0))
+        st.metric("ROs Opened Today", f"{opened_today}")
+        st.metric("ROs Closed Today", "N/A", help="No closed_at timestamp tracked in this schema — placeholder.")
+
+
+# ====================================================================
+# DIVISION & DEPARTMENT PERFORMANCE — no KPI-target backend exists for
+# this matrix anywhere in the schema, so it's a clearly-tagged sample
+# layout (matching the mockup's dot-status UI pattern) rather than
+# fabricated real-looking status data.
+# ====================================================================
+def _render_division_department_matrix():
+    st.markdown("##### 🧭 DIVISION & DEPARTMENT PERFORMANCE")
+    st.caption("Sample layout — pending a KPI-target backend. Not live data.")
+
+    dot = {"green": "#2ECC71", "amber": "#F1C40F", "red": "#E74C3C"}
+    sample_rows = [
+        ("BMW Sandton", ["green", "green", "amber", "green"]),
+        ("BMW Bedfordview", ["amber", "green", "green", "red"]),
+        ("BMW East Rand", ["green", "amber", "amber", "green"]),
+        ("BMW Dalpark", ["red", "amber", "green", "amber"]),
+        ("MF Sandton", ["green", "green", "green", "green"]),
+        ("MF Fourways", ["amber", "red", "amber", "green"]),
+    ]
+    cols = ["Division", "New Sales", "Used Sales", "Service", "Parts"]
+
+    rows_html = ""
+    for name, statuses in sample_rows:
+        cells = "".join(
+            f'<td style="text-align:center;"><span style="display:inline-block;width:12px;height:12px;'
+            f'border-radius:50%;background:{dot[s]};"></span></td>'
+            for s in statuses
+        )
+        rows_html += f"<tr><td>{name}</td>{cells}</tr>"
+
+    header_html = "".join(f"<th>{c}</th>" for c in cols)
+    st.markdown(f"<table style='width:100%;'><tr>{header_html}</tr>{rows_html}</table>", unsafe_allow_html=True)
+
+
+# ====================================================================
+# LEGACY DETAIL ROLLUPS & DRILL-DOWN — fully preserved, real-data
+# functionality from the previous Command Center build. Tucked into a
+# collapsed section beneath the new mockup-aligned dashboard so no
+# existing capability is lost in the rebuild.
+# ====================================================================
+def _render_legacy_detail(data):
+    df, wip_df, deal_df, otc_df, doc_df = data['stock'], data['wip'], data['deal'], data['otc'], data['doc']
+
+    summary_data = []
+    for dealer in TARGET_DEALERS:
         if not df.empty and 'Dealership' in df.columns:
             d_df = df[df['Dealership'] == dealer]
-            t_stock = d_df['total_value'].sum()
-            t_unenc = d_df['unencumbered_value'].sum()
-            t_prov = d_df['provision_value'].sum()
+            t_stock, t_unenc, t_prov = d_df['total_value'].sum(), d_df['unencumbered_value'].sum(), d_df['provision_value'].sum()
         else:
             t_stock = t_unenc = t_prov = 0.0
-
-        summary_data.append({
-            '': dealer,
-            'Total Stock Values': t_stock,
-            'Total Unencumbered': t_unenc,
-            'Total Aging Provision': t_prov
-        })
-
+        summary_data.append({'': dealer, 'Total Stock Values': t_stock, 'Total Unencumbered': t_unenc, 'Total Aging Provision': t_prov})
     summary_df = pd.DataFrame(summary_data)
-
-    # Add the Grand Total Row
-    grand_total = {
+    summary_df = pd.concat([summary_df, pd.DataFrame([{
         '': 'GRAND TOTAL',
         'Total Stock Values': summary_df['Total Stock Values'].sum(),
         'Total Unencumbered': summary_df['Total Unencumbered'].sum(),
-        'Total Aging Provision': summary_df['Total Aging Provision'].sum()
-    }
-    summary_df = pd.concat([summary_df, pd.DataFrame([grand_total])], ignore_index=True)
-
-    # Format as proper ZAR Currency
+        'Total Aging Provision': summary_df['Total Aging Provision'].sum(),
+    }])], ignore_index=True)
     for col in ['Total Stock Values', 'Total Unencumbered', 'Total Aging Provision']:
-        summary_df[col] = summary_df[col].apply(lambda x: f"R {x:,.2f}")
+        summary_df[col] = summary_df[col].apply(fmt_currency)
 
     st.markdown("### 🏢 EXECUTIVE DEALERSHIP ROLLUP")
     st.dataframe(summary_df, hide_index=True, use_container_width=True)
     st.markdown("---")
 
-    # ==========================================
-    # MODULE 2: WORKSHOP WIP ROLLUP
-    # ==========================================
-    try:
-        # Fetch only Active/Open WIPs across all dealerships
-        wip_data = supabase.table("service_wip").select("location_id, estimated_value, status").neq("status", "Invoiced / Closed").execute().data
-        wip_df = pd.DataFrame(wip_data)
-    except Exception as e:
-        st.error(f"Failed to load WIP data: {e}")
-        wip_df = pd.DataFrame()
-
     wip_summary_data = []
-
-    if not wip_df.empty:
-        wip_df['estimated_value'] = pd.to_numeric(wip_df['estimated_value'], errors='coerce').fillna(0.0)
-        wip_df['Dealership'] = wip_df['location_id'].map(dealer_map)
-
-    # Build the WIP Grid
-    for dealer in target_dealers:
+    for dealer in TARGET_DEALERS:
         if not wip_df.empty and 'Dealership' in wip_df.columns:
-            d_wip = wip_df[wip_df['Dealership'] == dealer]
-            t_wips = len(d_wip)
-            t_wip_val = d_wip['estimated_value'].sum()
+            d_wip = wip_df[(wip_df['Dealership'] == dealer) & (~wip_df['is_closed'])]
+            t_wips, t_wip_val = len(d_wip), d_wip['estimated_value'].sum()
         else:
-            t_wips = 0
-            t_wip_val = 0.0
-
-        wip_summary_data.append({
-            '': dealer,
-            'Open WIPs': t_wips,
-            'Open WIPs Value': t_wip_val
-        })
-
+            t_wips, t_wip_val = 0, 0.0
+        wip_summary_data.append({'': dealer, 'Open WIPs': t_wips, 'Open WIPs Value': t_wip_val})
     wip_summary_df = pd.DataFrame(wip_summary_data)
-
-    # Add the Grand Total Row for WIPs
-    grand_total_wip = {
+    wip_summary_df = pd.concat([wip_summary_df, pd.DataFrame([{
         '': 'GRAND TOTAL',
         'Open WIPs': wip_summary_df['Open WIPs'].sum(),
-        'Open WIPs Value': wip_summary_df['Open WIPs Value'].sum()
-    }
-    wip_summary_df = pd.concat([wip_summary_df, pd.DataFrame([grand_total_wip])], ignore_index=True)
-
-    # Formatting
-    wip_summary_df['Open WIPs'] = wip_summary_df['Open WIPs'].apply(lambda x: f"{x:,.0f}" if isinstance(x, (int, float)) else str(x))
-    wip_summary_df['Open WIPs Value'] = wip_summary_df['Open WIPs Value'].apply(lambda x: f"R {x:,.2f}" if isinstance(x, (int, float)) else str(x))
+        'Open WIPs Value': wip_summary_df['Open WIPs Value'].sum(),
+    }])], ignore_index=True)
+    wip_summary_df['Open WIPs'] = wip_summary_df['Open WIPs'].apply(lambda x: f"{x:,.0f}")
+    wip_summary_df['Open WIPs Value'] = wip_summary_df['Open WIPs Value'].apply(fmt_currency)
 
     st.markdown("### 🔧 EXECUTIVE WORKSHOP ROLLUP")
     st.dataframe(wip_summary_df, hide_index=True, use_container_width=True)
     st.markdown("---")
 
-    # ==========================================
-    # MODULE 3: EXECUTIVE GROSS PROFIT ROLLUP
-    # ==========================================
-    try:
-        # Fetch deal_desk globally — no branch matrix filters, this is the God Mode overview
-        deal_data = supabase.table("deal_desk").select("location_id, fi_vaps_revenue, net_retained_profit").execute().data
-        deal_df = pd.DataFrame(deal_data)
-    except Exception as e:
-        st.error(f"Failed to load profitability data: {e}")
-        deal_df = pd.DataFrame()
-
-    try:
-        # Fetch parts_otc globally — same unfiltered God Mode overview as deal_desk
-        otc_data = supabase.table("parts_otc").select("location_id, net_profit").execute().data
-        otc_df = pd.DataFrame(otc_data)
-    except Exception as e:
-        st.error(f"Failed to load OTC parts data: {e}")
-        otc_df = pd.DataFrame()
-
-    try:
-        # Fetch doc_expenses globally — same unfiltered God Mode overview
-        doc_data = supabase.table("doc_expenses").select("location_id, amount").execute().data
-        doc_df = pd.DataFrame(doc_data)
-    except Exception as e:
-        st.error(f"Failed to load DOC overheads data: {e}")
-        doc_df = pd.DataFrame()
-
     gp_summary_data = []
-
-    if not deal_df.empty:
-        deal_df['fi_vaps_revenue'] = pd.to_numeric(deal_df['fi_vaps_revenue'], errors='coerce').fillna(0.0)
-        deal_df['net_retained_profit'] = pd.to_numeric(deal_df['net_retained_profit'], errors='coerce').fillna(0.0)
-        deal_df['Dealership'] = deal_df['location_id'].map(dealer_map)
-
-    if not otc_df.empty:
-        otc_df['net_profit'] = pd.to_numeric(otc_df['net_profit'], errors='coerce').fillna(0.0)
-        otc_df['Dealership'] = otc_df['location_id'].map(dealer_map)
-
-    if not doc_df.empty:
-        doc_df['amount'] = pd.to_numeric(doc_df['amount'], errors='coerce').fillna(0.0)
-        doc_df['Dealership'] = doc_df['location_id'].map(dealer_map)
-
-    # Build the Gross Profit Grid
-    for dealer in target_dealers:
+    for dealer in TARGET_DEALERS:
         if not deal_df.empty and 'Dealership' in deal_df.columns:
             d_deal = deal_df[deal_df['Dealership'] == dealer]
-            t_units = len(d_deal)
-            t_vaps = d_deal['fi_vaps_revenue'].sum()
-            t_vehicle_profit = d_deal['net_retained_profit'].sum()
+            t_units, t_vaps, t_vehicle_profit = len(d_deal), d_deal['fi_vaps_revenue'].sum(), d_deal['net_retained_profit'].sum()
         else:
-            t_units = 0
-            t_vaps = t_vehicle_profit = 0.0
-
-        if not otc_df.empty and 'Dealership' in otc_df.columns:
-            t_otc_profit = otc_df[otc_df['Dealership'] == dealer]['net_profit'].sum()
-        else:
-            t_otc_profit = 0.0
-
-        if not doc_df.empty and 'Dealership' in doc_df.columns:
-            t_doc = doc_df[doc_df['Dealership'] == dealer]['amount'].sum()
-        else:
-            t_doc = 0.0
-
+            t_units, t_vaps, t_vehicle_profit = 0, 0.0, 0.0
+        t_otc_profit = otc_df[otc_df['Dealership'] == dealer]['net_profit'].sum() if not otc_df.empty and 'Dealership' in otc_df.columns else 0.0
+        t_doc = doc_df[doc_df['Dealership'] == dealer]['amount'].sum() if not doc_df.empty and 'Dealership' in doc_df.columns else 0.0
         t_branch_profit = t_vehicle_profit + t_otc_profit
-
         gp_summary_data.append({
-            '': dealer,
-            'Locked Units': t_units,
-            'Total VAPS & F&I': t_vaps,
-            'Vehicle Net Profit': t_vehicle_profit,
-            'Parts OTC Net Profit': t_otc_profit,
-            'Total Branch Net Profit': t_branch_profit,
-            'Total DOC': t_doc,
-            'True Net Profit': t_branch_profit - t_doc
+            '': dealer, 'Locked Units': t_units, 'Total VAPS & F&I': t_vaps,
+            'Vehicle Net Profit': t_vehicle_profit, 'Parts OTC Net Profit': t_otc_profit,
+            'Total Branch Net Profit': t_branch_profit, 'Total DOC': t_doc, 'True Net Profit': t_branch_profit - t_doc,
         })
-
     gp_summary_df = pd.DataFrame(gp_summary_data)
-
-    # Snapshot the raw numeric rollup (pre-formatting, pre-Grand-Total) to power the
-    # leaderboard charts below — reuses this exact aggregation instead of re-querying.
     chart_df = gp_summary_df.rename(columns={'': 'Dealership'}).copy()
-
-    # Add the Grand Total Row for Gross Profit
-    grand_total_gp = {
+    gp_summary_df = pd.concat([gp_summary_df, pd.DataFrame([{
         '': 'GRAND TOTAL',
         'Locked Units': gp_summary_df['Locked Units'].sum(),
         'Total VAPS & F&I': gp_summary_df['Total VAPS & F&I'].sum(),
@@ -281,149 +463,135 @@ def render(supabase):
         'Parts OTC Net Profit': gp_summary_df['Parts OTC Net Profit'].sum(),
         'Total Branch Net Profit': gp_summary_df['Total Branch Net Profit'].sum(),
         'Total DOC': gp_summary_df['Total DOC'].sum(),
-        'True Net Profit': gp_summary_df['True Net Profit'].sum()
-    }
-    gp_summary_df = pd.concat([gp_summary_df, pd.DataFrame([grand_total_gp])], ignore_index=True)
-
-    # Formatting
-    gp_summary_df['Locked Units'] = gp_summary_df['Locked Units'].apply(lambda x: f"{x:,.0f}" if isinstance(x, (int, float)) else str(x))
+        'True Net Profit': gp_summary_df['True Net Profit'].sum(),
+    }])], ignore_index=True)
+    gp_summary_df['Locked Units'] = gp_summary_df['Locked Units'].apply(lambda x: f"{x:,.0f}")
     for col in ['Total VAPS & F&I', 'Vehicle Net Profit', 'Parts OTC Net Profit', 'Total Branch Net Profit', 'Total DOC', 'True Net Profit']:
-        gp_summary_df[col] = gp_summary_df[col].apply(lambda x: f"R {x:,.2f}" if isinstance(x, (int, float)) else str(x))
+        gp_summary_df[col] = gp_summary_df[col].apply(fmt_currency)
 
-    # ==========================================
-    # ENTERPRISE PERFORMANCE LEADERBOARD (Charts)
-    # ==========================================
     st.markdown("### 📊 ENTERPRISE PERFORMANCE LEADERBOARD")
-
     if chart_df.empty or chart_df[['True Net Profit', 'Total Branch Net Profit', 'Total DOC']].abs().sum().sum() == 0:
-        st.info("No profitability data logged across the enterprise yet — charts will populate once deals, OTC sales, or overheads are recorded.")
+        st.info("No profitability data logged across the enterprise yet.")
     else:
         lb1, lb2 = st.columns(2)
-
         with lb1:
             leaderboard_df = chart_df.sort_values('True Net Profit', ascending=False).copy()
             leaderboard_df['Result'] = leaderboard_df['True Net Profit'].apply(lambda x: 'Profit' if x >= 0 else 'Loss')
-
             fig_leaderboard = px.bar(
                 leaderboard_df, x='Dealership', y='True Net Profit', color='Result',
                 color_discrete_map={'Profit': '#2ECC71', 'Loss': '#E74C3C'},
                 category_orders={'Dealership': leaderboard_df['Dealership'].tolist()},
-                title="True Net Profit Leaderboard", text='True Net Profit'
+                title="True Net Profit Leaderboard", text='True Net Profit',
             )
             fig_leaderboard.update_traces(texttemplate='R %{text:,.0f}', textposition='outside')
             fig_leaderboard.update_layout(
                 showlegend=False, yaxis_title="True Net Profit (ZAR)", xaxis_title="",
                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                font_color='#F8F9FA', font_family='Roboto Mono, monospace'
+                font_color='#e8ecf4', font_family='Roboto Mono, monospace',
             )
-            fig_leaderboard.update_xaxes(gridcolor='rgba(255,255,255,0.05)', zerolinecolor='rgba(255,255,255,0.05)')
-            fig_leaderboard.update_yaxes(gridcolor='rgba(255,255,255,0.05)', zerolinecolor='rgba(255,255,255,0.05)')
             st.plotly_chart(fig_leaderboard, use_container_width=True)
-
         with lb2:
-            yield_vs_doc_df = chart_df.melt(
-                id_vars='Dealership',
-                value_vars=['Total Branch Net Profit', 'Total DOC'],
-                var_name='Metric', value_name='Value (ZAR)'
-            )
-
+            yield_vs_doc_df = chart_df.melt(id_vars='Dealership', value_vars=['Total Branch Net Profit', 'Total DOC'],
+                                             var_name='Metric', value_name='Value (ZAR)')
             fig_yield_doc = px.bar(
                 yield_vs_doc_df, x='Dealership', y='Value (ZAR)', color='Metric', barmode='group',
                 color_discrete_map={'Total Branch Net Profit': '#3498DB', 'Total DOC': '#E67E22'},
                 category_orders={'Dealership': chart_df['Dealership'].tolist()},
-                title="Gross Yield vs. Overhead"
+                title="Gross Yield vs. Overhead",
             )
             fig_yield_doc.update_layout(
                 yaxis_title="Value (ZAR)", xaxis_title="", legend_title_text="",
                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                font_color='#F8F9FA', font_family='Roboto Mono, monospace',
-                legend=dict(bgcolor='rgba(0,0,0,0)')
+                font_color='#e8ecf4', font_family='Roboto Mono, monospace',
             )
-            fig_yield_doc.update_xaxes(gridcolor='rgba(255,255,255,0.05)', zerolinecolor='rgba(255,255,255,0.05)')
-            fig_yield_doc.update_yaxes(gridcolor='rgba(255,255,255,0.05)', zerolinecolor='rgba(255,255,255,0.05)')
             st.plotly_chart(fig_yield_doc, use_container_width=True)
-
     st.markdown("---")
 
     st.markdown("### 💰 EXECUTIVE GROSS PROFIT ROLLUP")
     st.dataframe(gp_summary_df, hide_index=True, use_container_width=True)
     st.markdown("---")
 
-    # ==========================================
-    # MODULE 4: DRILL-DOWN TOOL
-    # ==========================================
     st.markdown("### 🔍 DEALERSHIP DEEP-DIVE")
-    selected = st.selectbox("Drill down into specific dealership:", ["None"] + target_dealers)
-    
-    if selected != "None":
-        # --- STOCK METRICS ---
-        st.markdown(f"#### 🚗 STOCK EXPOSURE: {selected}")
-        if df.empty or len(df[df['Dealership'] == selected]) == 0:
-            st.info(f"No active inventory logged for {selected} yet.")
+    selected = st.selectbox("Drill down into specific dealership:", ["None"] + TARGET_DEALERS)
+    if selected == "None":
+        return
+
+    st.markdown(f"#### 🚗 STOCK EXPOSURE: {selected}")
+    if df.empty or len(df[df['Dealership'] == selected]) == 0:
+        st.info(f"No active inventory logged for {selected} yet.")
+    else:
+        s_df = df[df['Dealership'] == selected].copy()
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total Units", len(s_df))
+        c2.metric("Unencumbered Units", len(s_df[s_df['is_unencumbered']]))
+        c3.metric("Avg Days on Floor", f"{int(s_df['days_in_stock'].mean()) if not s_df.empty else 0} Days")
+
+        st.markdown("##### ⚠️ High Exposure Vehicles (90+ Days)")
+        exposure_df = s_df[s_df['days_in_stock'] >= 90].sort_values('days_in_stock', ascending=False)
+        if exposure_df.empty:
+            st.success("No critical aging stock (90+ days).")
         else:
-            s_df = df[df['Dealership'] == selected].copy()
-            
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Total Units", len(s_df))
-            c2.metric("Unencumbered Units", len(s_df[s_df['is_unencumbered']]))
-            c3.metric("Avg Days on Floor", f"{int(s_df['days_in_stock'].mean()) if not s_df.empty else 0} Days")
-            
-            st.markdown("##### ⚠️ High Exposure Vehicles (90+ Days)")
-            exposure_df = s_df[s_df['days_in_stock'] >= 90].sort_values('days_in_stock', ascending=False)
-            
-            if exposure_df.empty:
-                st.success("No critical aging stock (90+ days).")
-            else:
-                exp_display = exposure_df[['days_in_stock', 'total_value', 'provision_value']].copy()
-                exp_display['total_value'] = exp_display['total_value'].apply(lambda x: f"R {x:,.2f}")
-                exp_display['provision_value'] = exp_display['provision_value'].apply(lambda x: f"R {x:,.2f}")
-                exp_display.rename(columns={
-                    'days_in_stock': 'Days on Floor', 
-                    'total_value': 'Capital Value', 
-                    'provision_value': 'Required Provision'
-                }, inplace=True)
-                
-                st.dataframe(exp_display, hide_index=True, use_container_width=True)
+            exp_display = exposure_df[['days_in_stock', 'total_value', 'provision_value']].copy()
+            exp_display['total_value'] = exp_display['total_value'].apply(fmt_currency)
+            exp_display['provision_value'] = exp_display['provision_value'].apply(fmt_currency)
+            exp_display.rename(columns={'days_in_stock': 'Days on Floor', 'total_value': 'Capital Value', 'provision_value': 'Required Provision'}, inplace=True)
+            st.dataframe(exp_display, hide_index=True, use_container_width=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(f"#### 🔧 WORKSHOP WIP: {selected}")
+    d_wip_all = wip_df[(wip_df['Dealership'] == selected) & (~wip_df['is_closed'])] if not wip_df.empty else pd.DataFrame()
+    if d_wip_all.empty:
+        st.info(f"No active WIPs logged for {selected} yet.")
+    else:
+        wc1, wc2 = st.columns(2)
+        wc1.metric("Total Open WIPs", len(d_wip_all))
+        wc2.metric("Total Open WIPs Value", fmt_currency(d_wip_all['estimated_value'].sum()))
 
-        # --- WIP METRICS ---
-        st.markdown(f"#### 🔧 WORKSHOP WIP: {selected}")
-        if wip_df.empty or len(wip_df[wip_df['Dealership'] == selected]) == 0:
-            st.info(f"No active WIPs logged for {selected} yet.")
-        else:
-            d_wip = wip_df[wip_df['Dealership'] == selected].copy()
-            wc1, wc2 = st.columns(2)
-            wc1.metric("Total Open WIPs", len(d_wip))
-            wc2.metric("Total Open WIPs Value", f"R {d_wip['estimated_value'].sum():,.2f}")
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(f"#### 💰 GROSS PROFIT: {selected}")
+    has_deals = not deal_df.empty and len(deal_df[deal_df['Dealership'] == selected]) > 0
+    has_otc = not otc_df.empty and len(otc_df[otc_df['Dealership'] == selected]) > 0
+    has_doc = not doc_df.empty and len(doc_df[doc_df['Dealership'] == selected]) > 0
+    if not has_deals and not has_otc and not has_doc:
+        st.info(f"No locked deals, OTC parts sales, or overheads logged for {selected} yet.")
+    else:
+        d_deal = deal_df[deal_df['Dealership'] == selected].copy() if has_deals else pd.DataFrame(columns=['fi_vaps_revenue', 'net_retained_profit'])
+        d_otc = otc_df[otc_df['Dealership'] == selected].copy() if has_otc else pd.DataFrame(columns=['net_profit'])
+        d_doc = doc_df[doc_df['Dealership'] == selected].copy() if has_doc else pd.DataFrame(columns=['amount'])
+        t_vehicle_profit = d_deal['net_retained_profit'].sum() if has_deals else 0.0
+        t_otc_profit = d_otc['net_profit'].sum() if has_otc else 0.0
+        t_doc = d_doc['amount'].sum() if has_doc else 0.0
+        t_branch_profit = t_vehicle_profit + t_otc_profit
 
-        st.markdown("<br>", unsafe_allow_html=True)
+        fc1, fc2, fc3 = st.columns(3)
+        fc1.metric("Locked Units", len(d_deal))
+        fc2.metric("Total VAPS & F&I", fmt_currency(d_deal['fi_vaps_revenue'].sum() if has_deals else 0.0))
+        fc3.metric("Total Branch Net Profit", fmt_currency(t_branch_profit))
+        fc4, fc5, fc6, fc7 = st.columns(4)
+        fc4.metric("Vehicle Net Profit", fmt_currency(t_vehicle_profit))
+        fc5.metric("Parts OTC Net Profit", fmt_currency(t_otc_profit))
+        fc6.metric("Total DOC", fmt_currency(t_doc))
+        fc7.metric("True Net Profit", fmt_currency(t_branch_profit - t_doc))
 
-        # --- GROSS PROFIT METRICS ---
-        st.markdown(f"#### 💰 GROSS PROFIT: {selected}")
-        has_deals = not deal_df.empty and len(deal_df[deal_df['Dealership'] == selected]) > 0
-        has_otc = not otc_df.empty and len(otc_df[otc_df['Dealership'] == selected]) > 0
-        has_doc = not doc_df.empty and len(doc_df[doc_df['Dealership'] == selected]) > 0
 
-        if not has_deals and not has_otc and not has_doc:
-            st.info(f"No locked deals, OTC parts sales, or overheads logged for {selected} yet.")
-        else:
-            d_deal = deal_df[deal_df['Dealership'] == selected].copy() if has_deals else pd.DataFrame(columns=['fi_vaps_revenue', 'net_retained_profit'])
-            d_otc = otc_df[otc_df['Dealership'] == selected].copy() if has_otc else pd.DataFrame(columns=['net_profit'])
-            d_doc = doc_df[doc_df['Dealership'] == selected].copy() if has_doc else pd.DataFrame(columns=['amount'])
+# ====================================================================
+# ENTRYPOINT
+# ====================================================================
+def render(supabase):
+    _render_top_bar()
+    data = _fetch_data(supabase)
 
-            t_vehicle_profit = d_deal['net_retained_profit'].sum() if has_deals else 0.0
-            t_otc_profit = d_otc['net_profit'].sum() if has_otc else 0.0
-            t_doc = d_doc['amount'].sum() if has_doc else 0.0
-            t_branch_profit = t_vehicle_profit + t_otc_profit
+    _render_sales_podiums(data)
+    st.markdown("<br>", unsafe_allow_html=True)
+    _render_key_metrics_and_idea_board(data)
 
-            fc1, fc2, fc3 = st.columns(3)
-            fc1.metric("Locked Units", len(d_deal))
-            fc2.metric("Total VAPS & F&I", f"R {d_deal['fi_vaps_revenue'].sum() if has_deals else 0.0:,.2f}")
-            fc3.metric("Total Branch Net Profit", f"R {t_branch_profit:,.2f}")
+    st.markdown("---")
+    _render_doc_stock_wip_row(data)
 
-            fc4, fc5, fc6, fc7 = st.columns(4)
-            fc4.metric("Vehicle Net Profit", f"R {t_vehicle_profit:,.2f}")
-            fc5.metric("Parts OTC Net Profit", f"R {t_otc_profit:,.2f}")
-            fc6.metric("Total DOC", f"R {t_doc:,.2f}")
-            fc7.metric("True Net Profit", f"R {t_branch_profit - t_doc:,.2f}")
+    st.markdown("---")
+    _render_division_department_matrix()
+    st.caption("Source: Phase V Automotive BI System")
+
+    st.markdown("---")
+    with st.expander("📂 DETAILED ENTERPRISE ROLLUPS & DRILL-DOWN"):
+        _render_legacy_detail(data)
