@@ -6,6 +6,7 @@ import random
 import smtplib
 from email.message import EmailMessage
 from config import safe_rerun, get_ai_vehicle_specs, create_brochure_excel, SAST
+from utils.helpers import get_role
 from views.shared_utils import apply_matrix_filters, _render_token_manager
 from views.route_d_crm import render_crm
 
@@ -13,7 +14,7 @@ from views.route_d_crm import render_crm
 # ROUTE B: SALES / ADMIN DEPARTMENTS
 # ====================================================================
 def render_sales_admin(supabase, user_data):
-    role = str(st.session_state.get('role', '')).upper()
+    role = get_role()
     IS_MANAGEMENT = role in ['DEALER_PRINCIPAL', 'FINANCE_ADMIN', 'SALES_MANAGER', 'WORKSHOP_MANAGER', 'DIRECTOR', 'SUPER_USER']
     IS_DOC_ADMIN = role in ['FINANCE_ADMIN', 'DEALER_PRINCIPAL', 'SUPER_USER']
 

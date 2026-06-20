@@ -3,13 +3,14 @@ import pandas as pd
 from datetime import datetime
 import re
 from config import safe_rerun, SAST
+from utils.helpers import get_role
 from views.shared_utils import apply_matrix_filters, apply_location_matrix_filters, _render_token_manager
 
 # ====================================================================
 # ROUTE A: SERVICE / WORKSHOP / PARTS DEPARTMENTS
 # ====================================================================
 def render_service_parts(supabase, user_data):
-    role = str(st.session_state.get('role', '')).upper()
+    role = get_role()
     active_dept = str(st.session_state.get('department_id', '')).upper()
     container_bg = user_data.get('container_bg')
     text_color = user_data.get('text_color')

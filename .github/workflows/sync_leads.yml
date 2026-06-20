@@ -25,11 +25,11 @@ jobs:
         env:
           SUPABASE_KEY: "sb_publishable_9C4lD6aJd1h9cIq0SqVanA_6Yz_mvs_"
         run: |
-          python scraper.py
+          python scripts/scraper.py
 
       - name: Execute Commercial Real Estate Ingest Run
         env:
           SUPABASE_URL: "https://gffororcnwexymymitqi.supabase.co"
           SUPABASE_KEY: "sb_publishable_9C4lD6aJd1h9cIq0SqVanA_6Yz_mvs_"
         run: |
-          python cre_scraper.py
+          python scripts/cre_scraper.py

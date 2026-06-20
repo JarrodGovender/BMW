@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from config import safe_rerun, SAST
+from utils.helpers import get_role
 
 # ====================================================================
 # ROUTE D: CRM PIPELINE (PHASE VI CADENCE ENGINE)
@@ -15,7 +16,7 @@ from config import safe_rerun, SAST
 # treatment.
 # ====================================================================
 def render_crm(supabase, user_data=None):
-    role = str(st.session_state.get('role', '')).upper()
+    role = get_role()
     username = st.session_state.get('user')
     location = st.session_state.get('location_id')
 

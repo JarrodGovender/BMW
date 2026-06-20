@@ -3,7 +3,8 @@ import hashlib
 from datetime import datetime
 from config import apply_theme, get_supabase_client, safe_rerun, BMW_LOGO, SAST
 from utils.theme_engine import inject_custom_css
-from views import auth_view, property_view, director_view, dealership_view, command_center
+from utils.helpers import get_role
+from views import auth_view, property_view, director_view, dealership_view, command_center, settings
 from views.route_d_crm import render_crm
 
 st.set_page_config(page_title="Phase V Enterprise Hub", layout="wide", initial_sidebar_state="expanded")
@@ -21,6 +22,9 @@ for key in ['authenticated', 'user', 'name', 'role', 'location_id', 'department_
 
 if 'page_view' not in st.session_state:
     st.session_state['page_view'] = 'dashboard'
+
+if 'theme' not in st.session_state:
+    st.session_state['theme'] = 'Dark'
 
 # ====================================================================
 # ROUTER
@@ -50,13 +54,13 @@ else:
 
     st.markdown("---")
 
-    role = str(st.session_state.get('role', '')).upper()
+    role = get_role()
 
     # VIEW LOGIC
     if st.session_state['page_view'] == 'settings':
-        st.markdown("## ⚙️ SETTINGS")
         if st.button("⬅️ BACK"): st.session_state['page_view'] = 'dashboard'; safe_rerun()
-    
+        settings.render(supabase)
+
     else:
         # =========================================================
         # NAVIGATION FOR SUPER USERS (GOD MODE SIDEBAR)

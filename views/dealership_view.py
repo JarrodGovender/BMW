@@ -1,4 +1,5 @@
 import streamlit as st
+from utils.helpers import get_role
 from views.route_a_service import render_service_parts
 from views.route_b_sales import render_sales_admin
 from views.route_c_hr import render_hr
@@ -8,7 +9,7 @@ from views.route_c_hr import render_hr
 # active department. Matrix gatekeepers live in views/shared_utils.py.
 # ====================================================================
 def render(supabase, container_bg, text_color, metric_label, border_color, theme):
-    role = str(st.session_state.get('role', '')).upper()
+    role = get_role()
     active_dept = str(st.session_state.get('department_id', '')).upper()
     user_data = {
         "container_bg": container_bg,

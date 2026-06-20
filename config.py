@@ -37,9 +37,10 @@ def get_local_img(file_name, cdn_fallback):
         except Exception: return cdn_fallback
     return cdn_fallback
 
-BMW_LOGO = get_local_img("BMW.png", "https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg")
-MINI_LOGO = get_local_img("MINI.png", "https://upload.wikimedia.org/wikipedia/commons/e/ea/MINI_logo.svg")
-MG_LOGO = get_local_img("MG.png", "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/MG_logo.svg/512px-MG_logo.svg.png")
+BMW_LOGO = get_local_img("assets/BMW.png", "https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg")
+MINI_LOGO = get_local_img("assets/MINI.png", "https://upload.wikimedia.org/wikipedia/commons/e/ea/MINI_logo.svg")
+MG_LOGO = get_local_img("assets/MG.png", "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/MG_logo.svg/512px-MG_logo.svg.png")
+PHASEV_LOGO = get_local_img("assets/PHASEV.png", "")
 
 # --- 3. DATABASE INITIALIZATION ---
 @st.cache_resource

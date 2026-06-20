@@ -2,12 +2,13 @@ import streamlit as st
 import pandas as pd
 import hashlib
 from config import safe_rerun, get_static_reference_data
+from utils.helpers import get_role
 
 # ====================================================================
 # MASTER SECURITY GATEKEEPER
 # ====================================================================
 def apply_matrix_filters(query_builder):
-    role = str(st.session_state.get('role', '')).upper()
+    role = get_role()
     loc = st.session_state.get('location_id')
     dept = st.session_state.get('department_id')
     brand = st.session_state.get('brand_id')
@@ -33,7 +34,7 @@ def apply_matrix_filters(query_builder):
 # apply here. Use this instead of apply_matrix_filters() for service_wip.
 # ====================================================================
 def apply_location_matrix_filters(query_builder):
-    role = str(st.session_state.get('role', '')).upper()
+    role = get_role()
     loc = st.session_state.get('location_id')
 
     if role == 'DIRECTOR':
