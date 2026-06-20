@@ -7,6 +7,7 @@ import smtplib
 from email.message import EmailMessage
 from config import safe_rerun, get_ai_vehicle_specs, create_brochure_excel, SAST
 from utils.helpers import get_role
+from utils import demo_data
 from views.shared_utils import apply_matrix_filters, _render_token_manager
 from views.route_d_crm import render_crm
 
@@ -122,12 +123,16 @@ def render_sales_admin(supabase, user_data):
 
     with t3:
         st.markdown(f"### 🚗 {st.session_state.get('location_id', '').replace('_', ' ')} USED CAR STOCKROOM")
-        try:
-            base_stock = supabase.table("used_car_stock").select("*")
-            secure_stock = apply_matrix_filters(base_stock)
-            stock_res = secure_stock.order("days_in_stock", desc=True).execute().data
-            df_live_stock = pd.DataFrame(stock_res) if stock_res else pd.DataFrame()
-        except Exception as e: df_live_stock = pd.DataFrame()
+        if st.session_state.get('presentation_mode'):
+            stock_res = [r for r in demo_data.get_demo_stockbook() if r['location_id'] == st.session_state.get('location_id')]
+            df_live_stock = pd.DataFrame(stock_res).sort_values('days_in_stock', ascending=False) if stock_res else pd.DataFrame()
+        else:
+            try:
+                base_stock = supabase.table("used_car_stock").select("*")
+                secure_stock = apply_matrix_filters(base_stock)
+                stock_res = secure_stock.order("days_in_stock", desc=True).execute().data
+                df_live_stock = pd.DataFrame(stock_res) if stock_res else pd.DataFrame()
+            except Exception as e: df_live_stock = pd.DataFrame()
 
         if df_live_stock.empty:
              df_live_stock = pd.DataFrame(columns=["vsb_no", "description", "into_stock", "days_in_stock", "total_value", "location", "floorplan_status", "chassis_no", "comments", "stock_type"])
@@ -167,7 +172,10 @@ def render_sales_admin(supabase, user_data):
             if role in ['FINANCE_ADMIN', 'SUPER_USER']:
                 with st.expander(f"🛠️ ADMIN CONSOLE: {st.session_state.get('location_id')} UPLOAD", expanded=False):
                     raw_paste_data = st.text_area("PASTE RAW DATA ROWS HERE", height=150, key="used_paste")
-                    if st.button("PROCESS OVERWRITE", key="process_stock_paste_btn") and raw_paste_data.strip():
+                    proceed_overwrite = st.button("PROCESS OVERWRITE", key="process_stock_paste_btn") and raw_paste_data.strip()
+                    if proceed_overwrite and st.session_state.get('presentation_mode'):
+                        st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to overwrite live stock.")
+                    if proceed_overwrite and not st.session_state.get('presentation_mode'):
                         try:
                             mem_query = apply_matrix_filters(supabase.table("used_car_stock").select("vsb_no, comments"))
                             try: mem_res = mem_query.execute().data
@@ -329,7 +337,10 @@ def render_sales_admin(supabase, user_data):
             if role in ['FINANCE_ADMIN', 'SUPER_USER']:
                 with st.expander(f"🛠️ ADMIN CONSOLE: {st.session_state.get('location_id')} DEMO UPLOAD", expanded=False):
                     raw_demo = st.text_area("PASTE RAW DATA ROWS HERE (DEMO)", height=150, key="demo_paste")
-                    if st.button("PROCESS OVERWRITE DEMO", key="process_demo_btn") and raw_demo.strip():
+                    proceed_demo_overwrite = st.button("PROCESS OVERWRITE DEMO", key="process_demo_btn") and raw_demo.strip()
+                    if proceed_demo_overwrite and st.session_state.get('presentation_mode'):
+                        st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to overwrite live stock.")
+                    if proceed_demo_overwrite and not st.session_state.get('presentation_mode'):
                         try:
                             mem_query = apply_matrix_filters(supabase.table("used_car_stock").select("vsb_no, comments"))
                             try: mem_res = mem_query.execute().data
@@ -406,12 +417,15 @@ def render_sales_admin(supabase, user_data):
                         edit_cols = ["VSB NUMBER", "VEHICLE DESCRIPTION", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)", "ADMIN COMMENTS"]
                         e_unenc = st.data_editor(unenc_df[edit_cols], disabled=["VSB NUMBER", "VEHICLE DESCRIPTION", "DAYS ON FLOOR", "CAPITAL VAL (ZAR)"], hide_index=True, use_container_width=True, key="u_edit")
                         if st.button("💾 SAVE COMMENTS", key="save_u_comments"):
-                            uc = 0
-                            for i in range(len(e_unenc)):
-                                if str(unenc_df.iloc[i]["ADMIN COMMENTS"]).strip() != str(e_unenc.iloc[i]["ADMIN COMMENTS"]).strip():
-                                    try: supabase.table("used_car_stock").update({"comments": str(e_unenc.iloc[i]["ADMIN COMMENTS"]).strip()}).eq("vsb_no", e_unenc.iloc[i]["VSB NUMBER"]).execute(); uc += 1
-                                    except: pass
-                            if uc > 0: st.success(f"✅ {uc} saved."); safe_rerun()
+                            if st.session_state.get('presentation_mode'):
+                                st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to save comments.")
+                            else:
+                                uc = 0
+                                for i in range(len(e_unenc)):
+                                    if str(unenc_df.iloc[i]["ADMIN COMMENTS"]).strip() != str(e_unenc.iloc[i]["ADMIN COMMENTS"]).strip():
+                                        try: supabase.table("used_car_stock").update({"comments": str(e_unenc.iloc[i]["ADMIN COMMENTS"]).strip()}).eq("vsb_no", e_unenc.iloc[i]["VSB NUMBER"]).execute(); uc += 1
+                                        except: pass
+                                if uc > 0: st.success(f"✅ {uc} saved."); safe_rerun()
 
     with t4:
         st.markdown(f"### 💼 {st.session_state.get('location_id', '').replace('_', ' ')} SALES PIPELINE")
@@ -572,7 +586,9 @@ def render_sales_admin(supabase, user_data):
             st.metric("NET RETAINED PROFIT", f"R {net_retained_profit:,.2f}")
 
             if st.button("💾 LOCK DEAL", use_container_width=True, key="fi_lock_deal_btn"):
-                if client_name and vehicle_desc:
+                if st.session_state.get('presentation_mode'):
+                    st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to lock a live deal.")
+                elif client_name and vehicle_desc:
                     deal_payload = {
                         "deal_source": origin, "client_name": client_name, "vehicle_vsb": vehicle_vsb,
                         "vehicle_desc": vehicle_desc, "capital_cost": capital_cost, "retail_price": retail_price,

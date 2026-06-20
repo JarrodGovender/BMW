@@ -3,8 +3,9 @@ import hashlib
 from datetime import datetime
 from config import apply_theme, get_supabase_client, safe_rerun, BMW_LOGO, SAST
 from utils.theme_engine import inject_custom_css
-from utils.helpers import get_role
-from views import auth_view, property_view, director_view, dealership_view, command_center, settings
+from utils.helpers import get_role, is_super_user
+from utils import demo_data
+from views import auth_view, property_view, director_view, dealership_view, command_center, settings, admin_console
 from views.route_d_crm import render_crm
 
 st.set_page_config(page_title="Phase V Enterprise Hub", layout="wide", initial_sidebar_state="expanded")
@@ -28,6 +29,9 @@ if 'theme' not in st.session_state:
 
 if 'presentation_mode' not in st.session_state:
     st.session_state['presentation_mode'] = True
+
+if st.session_state.get('presentation_mode'):
+    demo_data.init_presentation_session_state()
 
 # ====================================================================
 # ROUTER
@@ -67,11 +71,18 @@ else:
     else:
         # =========================================================
         # NAVIGATION FOR SUPER USERS (GOD MODE SIDEBAR)
+        # Granted to every role in SUPER_USER_ROLES (SUPER_USER, DIRECTOR,
+        # PROPERTY_MANAGER) -- full enterprise-wide nav, including a
+        # dedicated Admin/God Mode section, takes effect immediately on login.
         # =========================================================
-        if role == 'SUPER_USER':
+        if is_super_user():
             with st.sidebar:
                 st.markdown("### 👑 WORKSPACE")
-                nav_mode = st.radio("Select View:", ["📊 Executive Command Center", "🎯 CRM Pipeline", "🏢 Dealership Operations"], label_visibility="collapsed")
+                nav_mode = st.radio("Select View:", [
+                    "📊 Executive Command Center", "🎯 CRM Pipeline",
+                    "🏢 Dealership Operations", "🏗️ Property Portfolio",
+                    "👑 Admin / God Mode",
+                ], label_visibility="collapsed")
                 
                 if nav_mode == "🏢 Dealership Operations":
                     st.markdown("---")
@@ -134,16 +145,19 @@ else:
                 command_center.render(supabase)
             elif nav_mode == "🎯 CRM Pipeline":
                 render_crm(supabase)
+            elif nav_mode == "🏗️ Property Portfolio":
+                if role == 'PROPERTY_MANAGER':
+                    property_view.render(supabase, container_bg, text_color, theme)
+                else:
+                    director_view.render(supabase, container_bg, text_color, metric_label, theme)
+            elif nav_mode == "👑 Admin / God Mode":
+                admin_console.render(supabase)
             else:
                 st.markdown(f"**CURRENT ACTIVE NODE:** `{selected_div[4:].upper()}` — `{selected_dept[2:].upper()}`")
                 dealership_view.render(supabase, container_bg, text_color, metric_label, border_color, theme)
-        
+
         # =========================================================
         # NAVIGATION FOR STANDARD ROLES
         # =========================================================
-        elif role == 'PROPERTY_MANAGER':
-            property_view.render(supabase, container_bg, text_color, theme)
-        elif role == 'DIRECTOR':
-            director_view.render(supabase, container_bg, text_color, metric_label, theme)
         else:
             dealership_view.render(supabase, container_bg, text_color, metric_label, border_color, theme)

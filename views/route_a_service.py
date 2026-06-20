@@ -4,6 +4,7 @@ from datetime import datetime
 import re
 from config import safe_rerun, SAST
 from utils.helpers import get_role
+from utils import demo_data
 from views.shared_utils import apply_matrix_filters, apply_location_matrix_filters, _render_token_manager
 
 # ====================================================================
@@ -43,7 +44,9 @@ def render_service_parts(supabase, user_data):
             val = ca.number_input("EST. RO VALUE (ZAR)", min_value=0.0, step=500.0, key="ro_new_value")
 
             if st.button("CREATE RO", key="ro_create_btn"):
-                if ro_num and cname and veh_desc:
+                if st.session_state.get('presentation_mode'):
+                    st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to open a live RO.")
+                elif ro_num and cname and veh_desc:
                     payload = {
                         "ro_number": ro_num, "client_name": cname, "vehicle_details": veh_desc,
                         "status": status, "service_advisor": adv, "technician": tech,
@@ -58,10 +61,16 @@ def render_service_parts(supabase, user_data):
                     except Exception as e: st.error(f"Error: {e}")
                 else: st.warning("Please enter RO Number, Client, and Vehicle.")
 
-        try:
-            wip_query = apply_location_matrix_filters(supabase.table("service_wip").select("*").neq("status", "Invoiced / Closed"))
-            res = wip_query.order("id", desc=True).execute().data or []
-        except: res = []
+        if st.session_state.get('presentation_mode'):
+            res = sorted(
+                [r for r in demo_data.get_demo_wip() if r['location_id'] == st.session_state.get('location_id') and r['status'] != 'Invoiced / Closed'],
+                key=lambda r: r['id'], reverse=True,
+            )
+        else:
+            try:
+                wip_query = apply_location_matrix_filters(supabase.table("service_wip").select("*").neq("status", "Invoiced / Closed"))
+                res = wip_query.order("id", desc=True).execute().data or []
+            except: res = []
 
         if not res: st.info("No active Repair Orders in the workshop right now.")
         else:
@@ -96,9 +105,12 @@ def render_service_parts(supabase, user_data):
                             nps = st.selectbox("PARTS STATUS", PARTS_STAGES, index=PARTS_STAGES.index(current_ps) if current_ps in PARTS_STAGES else 0, key=f"ps_{r['id']}")
                             npn = st.text_area("PARTS NOTES", value=str(r.get('parts_notes', '')), height=130, key=f"pn_{r['id']}")
                         if st.button("💾 SAVE PARTS UPDATE", key=f"wu_{r['id']}"):
-                            try:
-                                apply_location_matrix_filters(supabase.table("service_wip").update({"parts_status": nps, "parts_notes": npn})).eq("id", r['id']).execute(); safe_rerun()
-                            except Exception as e: st.error(e)
+                            if st.session_state.get('presentation_mode'):
+                                st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to save changes.")
+                            else:
+                                try:
+                                    apply_location_matrix_filters(supabase.table("service_wip").update({"parts_status": nps, "parts_notes": npn})).eq("id", r['id']).execute(); safe_rerun()
+                                except Exception as e: st.error(e)
                     else:
                         # Service/Workshop staff: keep control of the RO, view parts updates read-only.
                         with c1:
@@ -111,16 +123,25 @@ def render_service_parts(supabase, user_data):
                             st.text_input("PARTS STATUS (READ-ONLY)", value=r.get('parts_status') or "—", disabled=True, key=f"ps_ro_{r['id']}")
                             st.text_area("PARTS NOTES (READ-ONLY)", value=str(r.get('parts_notes', '')), height=80, key=f"pn_ro_{r['id']}", disabled=True)
                         if st.button("💾 SAVE & UPDATE", key=f"wu_{r['id']}"):
-                            try:
-                                apply_location_matrix_filters(supabase.table("service_wip").update({"status": ns, "technician": nt, "notes": nn})).eq("id", r['id']).execute(); safe_rerun()
-                            except Exception as e: st.error(e)
+                            if st.session_state.get('presentation_mode'):
+                                st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to save changes.")
+                            else:
+                                try:
+                                    apply_location_matrix_filters(supabase.table("service_wip").update({"status": ns, "technician": nt, "notes": nn})).eq("id", r['id']).execute(); safe_rerun()
+                                except Exception as e: st.error(e)
 
     with t2:
         st.markdown(f"### 📦 {st.session_state.get('location_id', '').replace('_', ' ')} INVOICED / CLOSED RO ARCHIVE")
-        try:
-            arc_query = apply_location_matrix_filters(supabase.table("service_wip").select("*").eq("status", "Invoiced / Closed"))
-            ares = arc_query.order("id", desc=True).execute().data or []
-        except: ares = []
+        if st.session_state.get('presentation_mode'):
+            ares = sorted(
+                [r for r in demo_data.get_demo_wip() if r['location_id'] == st.session_state.get('location_id') and r['status'] == 'Invoiced / Closed'],
+                key=lambda r: r['id'], reverse=True,
+            )
+        else:
+            try:
+                arc_query = apply_location_matrix_filters(supabase.table("service_wip").select("*").eq("status", "Invoiced / Closed"))
+                ares = arc_query.order("id", desc=True).execute().data or []
+            except: ares = []
 
         if not ares: st.info(f"No closed Repair Orders in the archive for this branch.")
         else:
@@ -144,9 +165,12 @@ def render_service_parts(supabase, user_data):
                     with c2:
                         nn = st.text_area("ARCHIVE NOTES", value=str(r.get('notes', '')), height=130, key=f"awn_{r['id']}")
                     if st.button("REOPEN RO", key=f"awu_{r['id']}"):
-                        try:
-                            apply_location_matrix_filters(supabase.table("service_wip").update({"status": ns, "notes": nn})).eq("id", r['id']).execute(); safe_rerun()
-                        except Exception as e: st.error(e)
+                        if st.session_state.get('presentation_mode'):
+                            st.warning("✏️ Demo Mode is active — switch to Live Data in Settings to reopen a live RO.")
+                        else:
+                            try:
+                                apply_location_matrix_filters(supabase.table("service_wip").update({"status": ns, "notes": nn})).eq("id", r['id']).execute(); safe_rerun()
+                            except Exception as e: st.error(e)
 
     with t3:
         st.markdown(f"### 📊 {st.session_state.get('location_id', '').replace('_', ' ')} WORKSHOP REPORTING & EXTRACTION")

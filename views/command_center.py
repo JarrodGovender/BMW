@@ -448,7 +448,7 @@ def _render_division_department_matrix(presentation_mode):
 # collapsed section beneath the new mockup-aligned dashboard so no
 # existing capability is lost in the rebuild.
 # ====================================================================
-def _render_legacy_detail(data):
+def _render_legacy_detail(data, presentation_mode):
     df, wip_df, deal_df, otc_df, doc_df = data['stock'], data['wip'], data['deal'], data['otc'], data['doc']
 
     summary_data = []
@@ -629,6 +629,51 @@ def _render_legacy_detail(data):
         fc6.metric("Total DOC", fmt_currency(t_doc))
         fc7.metric("True Net Profit", fmt_currency(t_branch_profit - t_doc))
 
+    if presentation_mode:
+        _render_granular_ledgers(selected)
+
+
+def _render_granular_ledgers(selected):
+    """Per-transaction drill-down ledgers (Vehicle Sales / Stockbook / WIP) for
+    the selected dealership -- VIN/RO-level detail behind the rollup tiles
+    above, so an Exco question like "which units?" has a flawless answer
+    without leaving the Command Center."""
+    loc_id = demo_data.LOCATION_IDS.get(selected)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(f"#### 📋 GRANULAR LEDGERS: {selected}")
+
+    sales_rows = [r for r in demo_data.get_demo_vehicle_sales() if r['location_id'] == loc_id]
+    with st.expander(f"🚗 Vehicle Sales Ledger ({len(sales_rows)} units)"):
+        if sales_rows:
+            ledger = pd.DataFrame(sales_rows)[['vin', 'vehicle_desc', 'client_name', 'sales_exec', 'retail_price', 'net_retained_profit']]
+            ledger.columns = ['VIN', 'Vehicle', 'Client', 'Sales Exec', 'Retail Price', 'Net Profit']
+            ledger['Retail Price'] = ledger['Retail Price'].apply(fmt_currency)
+            ledger['Net Profit'] = ledger['Net Profit'].apply(fmt_currency)
+            st.dataframe(ledger, hide_index=True, use_container_width=True)
+        else:
+            st.info("No vehicle sales records for this dealership.")
+
+    stock_rows = [r for r in demo_data.get_demo_stockbook() if r['location_id'] == loc_id]
+    with st.expander(f"📦 Stockbook Ledger ({len(stock_rows)} units)"):
+        if stock_rows:
+            ledger = pd.DataFrame(stock_rows)[['vsb_no', 'description', 'days_in_stock', 'total_value', 'floorplan_status']]
+            ledger.columns = ['VSB Number', 'Vehicle', 'Days in Stock', 'Value', 'Floorplan Status']
+            ledger['Value'] = ledger['Value'].apply(fmt_currency)
+            st.dataframe(ledger.sort_values('Days in Stock', ascending=False), hide_index=True, use_container_width=True)
+        else:
+            st.info("No stock records for this dealership.")
+
+    wip_rows = [r for r in demo_data.get_demo_wip() if r['location_id'] == loc_id]
+    with st.expander(f"🔧 WIP Ledger ({len(wip_rows)} repair orders)"):
+        if wip_rows:
+            ledger = pd.DataFrame(wip_rows)[['ro_number', 'client_name', 'vehicle_details', 'service_advisor', 'status', 'estimated_value']]
+            ledger.columns = ['RO Number', 'Client', 'Vehicle', 'Advisor', 'Status', 'Value']
+            ledger['Value'] = ledger['Value'].apply(fmt_currency)
+            st.dataframe(ledger, hide_index=True, use_container_width=True)
+        else:
+            st.info("No repair orders for this dealership.")
+
 
 # ====================================================================
 # ENTRYPOINT
@@ -651,4 +696,4 @@ def render(supabase):
 
     st.markdown("---")
     with st.expander("📂 DETAILED ENTERPRISE ROLLUPS & DRILL-DOWN"):
-        _render_legacy_detail(data)
+        _render_legacy_detail(data, presentation_mode)

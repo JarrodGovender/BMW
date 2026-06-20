@@ -1,5 +1,5 @@
 """
-Presentation/Demo data layer for the Command Center.
+Presentation/Demo data layer for the Command Center and departmental views.
 
 Used whenever st.session_state['presentation_mode'] is True (the default --
 see app.py), entirely bypassing Supabase so Exco/Dealer Principal demos
@@ -17,6 +17,17 @@ disagreeing with a drill-down table during a live demo. Branch-level
 targets below were tuned so the totals land on Total Revenue ~R214.6M,
 Gross Profit ~R61.3M, and 312 Units Sold, and so the Stock Ageing donut's
 5 buckets sum to 884 units -- matching the supplied mockup.
+
+Granular layer (COMMAND 29): get_demo_vehicle_sales_records() /
+get_demo_stockbook_records() / get_demo_wip_records() generate one row per
+vehicle sale / stock unit / repair order, with VIN, make/model, branch and
+sales-exec-level detail for Exco drill-downs. The aggregate functions below
+(get_demo_deal_desk_rows / get_demo_stock_rows / get_demo_service_wip_rows)
+now simply project the granular records down to the columns the Command
+Center aggregation already expects -- so the headline tiles and the
+departmental drill-down tables are mathematically guaranteed to agree;
+they're reading the exact same underlying rows, not two independently
+tuned datasets.
 """
 import random
 from datetime import datetime, timedelta
@@ -73,6 +84,41 @@ DIVISION_MATRIX = [
     ("BMW Dalpark", ["red", "amber", "amber", "red"]),
 ]
 
+# Vehicle parc used for granular VIN-level rows -- realistic franchise mix.
+VEHICLE_MAKES_MODELS = [
+    ("BMW", "118i"), ("BMW", "120i M Sport"), ("BMW", "320i"), ("BMW", "330i"),
+    ("BMW", "M340i"), ("BMW", "520d"), ("BMW", "X1 sDrive18i"), ("BMW", "X3 xDrive20d"),
+    ("BMW", "X5 xDrive40d"), ("BMW", "X7 xDrive40i"), ("BMW", "M3 Competition"),
+    ("MINI", "Cooper S"), ("MINI", "Countryman"), ("MINI", "Clubman"),
+]
+
+SALES_EXEC_POOL = {
+    "BMW Sandton": ["T. Naidoo", "K. van der Berg", "S. Mokoena", "R. Patel"],
+    "BMW Bedfordview": ["L. Botha", "N. Dlamini", "C. Reddy"],
+    "MF Sandton": ["J. Coetzee", "A. Khumalo"],
+    "BMW East Rand": ["M. Joubert", "P. Sithole"],
+    "MF Fourways": ["D. Govender", "F. Nkosi"],
+    "BMW Dalpark": ["W. Smit", "Z. Mahlangu"],
+}
+
+SERVICE_ADVISOR_POOL = {
+    "BMW Sandton": ["B. Adams", "S. Mahlangu"],
+    "BMW Bedfordview": ["G. Pretorius", "T. Zulu"],
+    "MF Sandton": ["R. Naidu"],
+    "BMW East Rand": ["K. Moodley", "L. Fourie"],
+    "MF Fourways": ["P. Mthembu"],
+    "BMW Dalpark": ["H. Erasmus"],
+}
+
+TECHNICIAN_POOL = {
+    "BMW Sandton": ["Tech A. Sithole", "Tech B. Mokoena", "Tech C. van Wyk"],
+    "BMW Bedfordview": ["Tech D. Khoza", "Tech E. Steyn"],
+    "MF Sandton": ["Tech F. Ndlovu"],
+    "BMW East Rand": ["Tech G. Botha", "Tech H. Radebe"],
+    "MF Fourways": ["Tech I. Cele"],
+    "BMW Dalpark": ["Tech J. Venter"],
+}
+
 
 def _rng():
     return random.Random(_SEED)
@@ -102,11 +148,72 @@ def _split_int_exact(rng, total, weights):
     return parts
 
 
-def get_demo_stock_rows():
-    """Synthetic used_car_stock rows: 5 ageing buckets x 6 branches, 884 units total."""
+def _cached(key, generator):
+    """Generate once per session and cache -- every page reads the identical
+    rows so re-rendering a tab never reshuffles which exec/technician/VIN
+    landed on which figure. Falls back to a fresh (still deterministic)
+    generation outside a Streamlit run context, e.g. for standalone scripts."""
+    try:
+        import streamlit as st
+    except ImportError:
+        return generator()
+    if key not in st.session_state:
+        st.session_state[key] = generator()
+    return st.session_state[key]
+
+
+# ------------------------------------------------------------------
+# Granular, transaction-level generators (COMMAND 29)
+# ------------------------------------------------------------------
+
+def get_demo_vehicle_sales_records():
+    """One row per locked unit (312 total) -- VIN, make/model, branch, sales
+    exec, retail price and net profit. Sums exactly to vehicle_retail /
+    vaps / vehicle_margin*vehicle_retail per branch, by construction of
+    _split_exact -- so get_demo_deal_desk_rows() below can never disagree
+    with this ledger."""
     rng = _rng()
-    rows = []
+    records = []
+    seq = 1
+    for branch in DEALER_BRANCHES:
+        t = BRANCH_TARGETS[branch]
+        n = t['locked_units']
+        retail_vals = _split_exact(rng, t['vehicle_retail'], n)
+        vaps_vals = _split_exact(rng, t['vaps'], n)
+        profit_vals = _split_exact(rng, t['vehicle_retail'] * t['vehicle_margin'], n)
+        exec_pool = SALES_EXEC_POOL[branch]
+        for retail, vaps, profit in zip(retail_vals, vaps_vals, profit_vals):
+            make, model = rng.choice(VEHICLE_MAKES_MODELS)
+            year = rng.randint(2021, 2026)
+            vin = f"WBA{seq:07d}{rng.randint(0, 9)}"
+            exec_name = rng.choice(exec_pool)
+            capital_cost = max(0.0, retail + vaps - profit)
+            records.append({
+                "vin": vin, "vehicle_vsb": vin, "make": make, "model": model,
+                "vehicle_desc": f"{year} {make} {model}",
+                "branch": branch, "location_id": LOCATION_IDS[branch],
+                "department_id": "USED_SALES", "brand_id": "BMW" if make == "BMW" else "MINI",
+                "client_name": f"Client #{seq:04d}",
+                "sales_exec": exec_name, "created_by": exec_name,
+                "deal_source": "📥 Pipeline",
+                "capital_cost": round(capital_cost, 2),
+                "retail_price": round(retail, 2),
+                "fi_vaps_revenue": round(vaps, 2),
+                "net_retained_profit": round(profit, 2),
+            })
+            seq += 1
+    return records
+
+
+def get_demo_stockbook_records():
+    """One row per stock unit (884 total) -- VIN, age bracket, days in stock,
+    value -- exactly matching the Stock Ageing donut's bucket breakdown."""
+    rng = _rng()
+    records = []
+    seq = 1
     stock_weights = [BRANCH_TARGETS[b]['stock_value'] for b in DEALER_BRANCHES]
+    today = datetime.now()
+    bucket_total = sum(STOCK_AGEING_BUCKETS.values())
 
     for bucket, total_units in STOCK_AGEING_BUCKETS.items():
         per_branch_units = _split_int_exact(rng, total_units, stock_weights)
@@ -115,37 +222,142 @@ def get_demo_stock_rows():
             if n_units == 0:
                 continue
             t = BRANCH_TARGETS[branch]
-            bucket_value = t['stock_value'] * (total_units / sum(STOCK_AGEING_BUCKETS.values()))
+            bucket_value = t['stock_value'] * (total_units / bucket_total)
             values = _split_exact(rng, bucket_value, n_units)
             for v in values:
                 unencumbered = rng.random() < t['unencumbered_ratio']
-                rows.append({
-                    "location_id": LOCATION_IDS[branch],
+                days = rng.randint(lo, hi)
+                make, model = rng.choice(VEHICLE_MAKES_MODELS)
+                year = rng.randint(2021, 2026)
+                vin = f"WBS{seq:07d}{rng.randint(0, 9)}"
+                records.append({
+                    "vsb_no": f"V{seq:05d}", "vin": vin, "chassis_no": vin,
+                    "description": f"{year} {make} {model}", "make": make, "model": model,
+                    "into_stock": (today - timedelta(days=days)).strftime('%Y-%m-%d'),
+                    "days_in_stock": days, "age_bracket": bucket,
                     "total_value": round(v, 2),
-                    "days_in_stock": rng.randint(lo, hi),
-                    "floorplan_status": "UNENCUMBERED" if unencumbered else "FLOORPLANNED",
+                    "location": branch, "location_id": LOCATION_IDS[branch],
+                    "department_id": "USED_SALES", "brand_id": "BMW" if make == "BMW" else "MINI",
+                    "floorplan_status": "UNENCUMBERED" if unencumbered else "ON FLOORPLAN",
+                    "comments": "", "stock_type": "Used",
                 })
-    return rows
+                seq += 1
+    return records
+
+
+def get_demo_wip_records():
+    """One row per repair order -- RO number, client, vehicle, advisor,
+    technician, status. Open WIP rows sum to open_wip_value (with exactly
+    ROS_OPENED_TODAY_TOTAL dated today); closed rows sum to service_closed --
+    same totals get_demo_service_wip_rows() used to hand-roll, now derived
+    from these granular records instead."""
+    rng = _rng()
+    records = []
+    seq = 1
+    now = datetime.now()
+    today_counts = _split_int_exact(
+        rng, ROS_OPENED_TODAY_TOTAL, [BRANCH_TARGETS[b]['open_wips'] for b in DEALER_BRANCHES]
+    )
+
+    for branch, today_n in zip(DEALER_BRANCHES, today_counts):
+        t = BRANCH_TARGETS[branch]
+        loc = LOCATION_IDS[branch]
+        advisors = SERVICE_ADVISOR_POOL[branch]
+        techs = TECHNICIAN_POOL[branch]
+
+        n_open = t['open_wips']
+        open_vals = _split_exact(rng, t['open_wip_value'], n_open)
+        for i, v in enumerate(open_vals):
+            age_days = 0 if i < today_n else rng.randint(1, 9)
+            make, model = rng.choice(VEHICLE_MAKES_MODELS)
+            records.append({
+                "id": seq,
+                "ro_number": f"RO-{seq:06d}", "client_name": f"Client #{seq:04d}",
+                "vehicle_details": f"{make} {model}",
+                "status": rng.choice(["Awaiting Parts", "In Progress", "Awaiting Authorisation"]),
+                "service_advisor": rng.choice(advisors), "technician": rng.choice(techs),
+                "estimated_value": round(v, 2), "notes": "",
+                "parts_status": None, "parts_notes": None,
+                "location_id": loc, "department_id": "SERVICE", "brand_id": "BMW",
+                "created_at": (now - timedelta(days=age_days)).isoformat(),
+            })
+            seq += 1
+
+        n_closed = max(1, round(t['locked_units'] * 1.5))
+        closed_vals = _split_exact(rng, t['service_closed'], n_closed)
+        for v in closed_vals:
+            make, model = rng.choice(VEHICLE_MAKES_MODELS)
+            records.append({
+                "id": seq,
+                "ro_number": f"RO-{seq:06d}", "client_name": f"Client #{seq:04d}",
+                "vehicle_details": f"{make} {model}",
+                "status": "Invoiced / Closed",
+                "service_advisor": rng.choice(advisors), "technician": rng.choice(techs),
+                "estimated_value": round(v, 2), "notes": "",
+                "parts_status": None, "parts_notes": None,
+                "location_id": loc, "department_id": "SERVICE", "brand_id": "BMW",
+                "created_at": (now - timedelta(days=rng.randint(1, 28))).isoformat(),
+            })
+            seq += 1
+
+    return records
+
+
+def get_demo_vehicle_sales():
+    """Session-cached accessor for get_demo_vehicle_sales_records()."""
+    return _cached('demo_vehicle_sales', get_demo_vehicle_sales_records)
+
+
+def get_demo_stockbook():
+    """Session-cached accessor for get_demo_stockbook_records()."""
+    return _cached('demo_stockbook', get_demo_stockbook_records)
+
+
+def get_demo_wip():
+    """Session-cached accessor for get_demo_wip_records()."""
+    return _cached('demo_wip', get_demo_wip_records)
+
+
+def init_presentation_session_state():
+    """Populate st.session_state with the granular demo datasets as soon as
+    Presentation Mode is active, so every page -- Command Center down to
+    Stockroom/WIP drill-downs -- reads the exact same rows for the rest of
+    the session."""
+    get_demo_vehicle_sales()
+    get_demo_stockbook()
+    get_demo_wip()
+
+
+# ------------------------------------------------------------------
+# Aggregate projections (unchanged call signatures) -- now derived from the
+# granular records above instead of independently generated, so headline
+# tiles and departmental drill-downs are mathematically guaranteed to agree.
+# ------------------------------------------------------------------
+
+def get_demo_stock_rows():
+    """Synthetic used_car_stock rows: 5 ageing buckets x 6 branches, 884 units total."""
+    return [
+        {
+            "location_id": r["location_id"],
+            "total_value": r["total_value"],
+            "days_in_stock": r["days_in_stock"],
+            "floorplan_status": r["floorplan_status"],
+        }
+        for r in get_demo_stockbook()
+    ]
 
 
 def get_demo_deal_desk_rows():
     """Synthetic deal_desk rows -- one per locked unit, summing to vehicle_retail/vaps/profit targets."""
-    rng = _rng()
-    rows = []
-    for branch in DEALER_BRANCHES:
-        t = BRANCH_TARGETS[branch]
-        n = t['locked_units']
-        retail_vals = _split_exact(rng, t['vehicle_retail'], n)
-        vaps_vals = _split_exact(rng, t['vaps'], n)
-        profit_vals = _split_exact(rng, t['vehicle_retail'] * t['vehicle_margin'], n)
-        for retail, vaps, profit in zip(retail_vals, vaps_vals, profit_vals):
-            rows.append({
-                "location_id": LOCATION_IDS[branch],
-                "retail_price": round(retail, 2),
-                "fi_vaps_revenue": round(vaps, 2),
-                "net_retained_profit": round(profit, 2),
-            })
-    return rows
+    return [
+        {
+            "location_id": r["location_id"],
+            "retail_price": r["retail_price"],
+            "fi_vaps_revenue": r["fi_vaps_revenue"],
+            "net_retained_profit": r["net_retained_profit"],
+        }
+        for r in get_demo_vehicle_sales()
+    ]
 
 
 def get_demo_parts_otc_rows():
@@ -180,36 +392,12 @@ def get_demo_service_wip_rows():
     with exactly ROS_OPENED_TODAY_TOTAL of them dated today) plus closed/
     invoiced rows summing to each branch's service_closed target.
     """
-    rng = _rng()
-    rows = []
-    now = datetime.now()
-    today_counts = _split_int_exact(
-        rng, ROS_OPENED_TODAY_TOTAL, [BRANCH_TARGETS[b]['open_wips'] for b in DEALER_BRANCHES]
-    )
-
-    for branch, today_n in zip(DEALER_BRANCHES, today_counts):
-        t = BRANCH_TARGETS[branch]
-        loc = LOCATION_IDS[branch]
-
-        n_open = t['open_wips']
-        open_vals = _split_exact(rng, t['open_wip_value'], n_open)
-        for i, v in enumerate(open_vals):
-            age_days = 0 if i < today_n else rng.randint(1, 9)
-            rows.append({
-                "location_id": loc,
-                "estimated_value": round(v, 2),
-                "status": rng.choice(["Awaiting Parts", "In Progress", "Awaiting Authorisation"]),
-                "created_at": (now - timedelta(days=age_days)).isoformat(),
-            })
-
-        n_closed = max(1, round(t['locked_units'] * 1.5))
-        closed_vals = _split_exact(rng, t['service_closed'], n_closed)
-        for v in closed_vals:
-            rows.append({
-                "location_id": loc,
-                "estimated_value": round(v, 2),
-                "status": "Invoiced / Closed",
-                "created_at": (now - timedelta(days=rng.randint(1, 28))).isoformat(),
-            })
-
-    return rows
+    return [
+        {
+            "location_id": r["location_id"],
+            "estimated_value": r["estimated_value"],
+            "status": r["status"],
+            "created_at": r["created_at"],
+        }
+        for r in get_demo_wip()
+    ]
