@@ -6,9 +6,10 @@ import hashlib
 from datetime import datetime
 from config import apply_theme, get_supabase_client, safe_rerun, BMW_LOGO, SAST
 from utils.theme_engine import inject_custom_css
-from utils.helpers import get_role, is_super_user
+from utils.helpers import get_role
 from utils import demo_data, telemetry
 from views import auth_view, property_view, director_view, dealership_view, command_center, settings, admin_console
+from views import admin_telemetry, admin_users, admin_properties
 from views.route_d_crm import render_crm
 
 st.set_page_config(page_title="Phase V Enterprise Hub", layout="wide", initial_sidebar_state="expanded")
@@ -86,12 +87,30 @@ else:
     else:
         # =========================================================
         # NAVIGATION FOR SUPER USERS (GOD MODE SIDEBAR)
-        # Granted to every role in SUPER_USER_ROLES (SUPER_USER, DIRECTOR,
-        # PROPERTY_MANAGER) -- full enterprise-wide nav, including a
-        # dedicated Admin/God Mode section, takes effect immediately on login.
+        # HARD FIX: explicit, hardcoded role check on the literal session key
+        # ('role') instead of going through the is_super_user() abstraction --
+        # the previous refactor's God Mode sidebar silently failed to render
+        # and the indirection made that hard to see at a glance.
         # =========================================================
-        if is_super_user():
+        current_role = str(st.session_state.get('role', '')).upper()
+
+        if current_role in ['SUPER_USER', 'DIRECTOR', 'PROPERTY_MANAGER']:
             with st.sidebar:
+                # Explicit override for Super Users -- always the first thing
+                # rendered in the sidebar, directly above everything else.
+                st.markdown("---")
+                st.subheader("👑 GOD MODE | SOC")
+                if st.button("🔐 Admin Users", use_container_width=True, key="god_mode_users_btn"):
+                    st.session_state['_direct_admin_view'] = 'users'
+                    safe_rerun()
+                if st.button("🛰️ Telemetry", use_container_width=True, key="god_mode_telemetry_btn"):
+                    st.session_state['_direct_admin_view'] = 'telemetry'
+                    safe_rerun()
+                if st.button("🏗️ Property Management", use_container_width=True, key="god_mode_properties_btn"):
+                    st.session_state['_direct_admin_view'] = 'properties'
+                    safe_rerun()
+                st.markdown("---")
+
                 st.markdown("### 👑 WORKSPACE")
                 nav_mode = st.radio("Select View:", [
                     "📊 Executive Command Center", "🎯 CRM Pipeline",
@@ -155,8 +174,25 @@ else:
                 st.caption("DATA AS AT")
                 st.caption(f"**{datetime.now(SAST).strftime('%d %b %Y %H:%M')}** ↻")
 
+                st.markdown("---")
+                if st.button("🚪 LOGOUT", use_container_width=True, key="god_mode_sidebar_logout_btn"):
+                    st.session_state.update({'authenticated': False, 'role': None, 'page_view': 'dashboard'})
+                    safe_rerun()
+
+            # Direct one-click jumps from the GOD MODE | SOC block bypass the
+            # nav_mode radio entirely and render the target admin view straight away.
+            direct_admin_view = st.session_state.pop('_direct_admin_view', None)
+            if direct_admin_view == 'users':
+                if st.button("⬅️ BACK TO WORKSPACE", key="god_mode_back_from_users"): safe_rerun()
+                admin_users.render(supabase)
+            elif direct_admin_view == 'telemetry':
+                if st.button("⬅️ BACK TO WORKSPACE", key="god_mode_back_from_telemetry"): safe_rerun()
+                admin_telemetry.render(supabase, container_bg, text_color)
+            elif direct_admin_view == 'properties':
+                if st.button("⬅️ BACK TO WORKSPACE", key="god_mode_back_from_properties"): safe_rerun()
+                admin_properties.render(supabase, container_bg, text_color, theme)
             # Route to the selected view
-            if nav_mode == "📊 Executive Command Center":
+            elif nav_mode == "📊 Executive Command Center":
                 command_center.render(supabase)
             elif nav_mode == "🎯 CRM Pipeline":
                 render_crm(supabase)

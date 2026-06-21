@@ -29,6 +29,33 @@ PODIUM_RANK_COLORS = {1: "#FFD700", 2: "#C0C0C0", 3: "#CD7F32"}
 
 
 # ====================================================================
+# DRILL-DOWN DIALOG INFRASTRUCTURE — every metric card and podium below
+# is a gateway into the granular per-branch data behind it. st.dialog was
+# only added in Streamlit 1.31; experimental_dialog covers the 1.29-1.30
+# window. If neither exists on the installed version, fall back to
+# rendering the same content inline (a full-width container) instead of
+# in a popup, per the brief's explicit alternative.
+# ====================================================================
+def _dialog_decorator(title):
+    deco = getattr(st, "dialog", None) or getattr(st, "experimental_dialog", None)
+    if deco:
+        return deco(title)
+
+    def _inline_fallback(func):
+        def wrapper(*args, **kwargs):
+            st.markdown(f"#### {title}")
+            return func(*args, **kwargs)
+        return wrapper
+    return _inline_fallback
+
+
+def _safe_filter(df, dealer):
+    if df.empty or 'Dealership' not in df.columns:
+        return pd.DataFrame()
+    return df[df['Dealership'] == dealer]
+
+
+# ====================================================================
 # DATA LAYER — single round of fetches, reused by every panel below
 # (the mockup-aligned dashboard AND the legacy detail rollups). When
 # presentation_mode is on, Supabase is never called: synthetic rows from
@@ -227,16 +254,38 @@ def _podium_html(title, icon, totals):
     """, unsafe_allow_html=True)
 
 
+@_dialog_decorator("🏆 Full Branch Ranking")
+def _dialog_full_ranking(category_label, totals):
+    st.subheader(category_label)
+    ranked = sorted(totals.items(), key=lambda kv: kv[1], reverse=True)
+    medals = {0: "🥇", 1: "🥈", 2: "🥉"}
+    rows = [
+        {"Rank": medals.get(i, f"#{i + 1}"), "Dealership": name, "Value": fmt_currency(val, 0)}
+        for i, (name, val) in enumerate(ranked)
+    ]
+    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+
 def _render_sales_podiums(data):
+    veh_totals = _branch_totals(data['deal'], 'retail_price')
+    parts_totals = _branch_totals(data['otc'], 'retail_price')
+    svc_totals = _branch_totals(
+        data['wip'], 'estimated_value', extra_filter=lambda d: d['is_closed']
+    )
+
     p1, p2, p3 = st.columns(3)
     with p1:
-        _podium_html("VEHICLE SALES", "🚗", _branch_totals(data['deal'], 'retail_price'))
+        _podium_html("VEHICLE SALES", "🚗", veh_totals)
+        if st.button("View full ranking >", key="rank_veh", use_container_width=True):
+            _dialog_full_ranking("🚗 Vehicle Sales — Full Ranking", veh_totals)
     with p2:
-        _podium_html("PARTS SALES", "⚙️", _branch_totals(data['otc'], 'retail_price'))
+        _podium_html("PARTS SALES", "⚙️", parts_totals)
+        if st.button("View full ranking >", key="rank_parts", use_container_width=True):
+            _dialog_full_ranking("⚙️ Parts Sales — Full Ranking", parts_totals)
     with p3:
-        _podium_html("SERVICE SALES", "🔧", _branch_totals(
-            data['wip'], 'estimated_value', extra_filter=lambda d: d['is_closed']
-        ))
+        _podium_html("SERVICE SALES", "🔧", svc_totals)
+        if st.button("View full ranking >", key="rank_svc", use_container_width=True):
+            _dialog_full_ranking("🔧 Service Sales — Full Ranking", svc_totals)
 
 
 # ====================================================================
@@ -245,6 +294,44 @@ def _render_sales_podiums(data):
 # schema — rendered as clearly tagged placeholders, never as fabricated
 # real-looking figures, per the "strictly a mock up" instruction.
 # ====================================================================
+def _branch_key_metrics_table(data):
+    rows = []
+    for dealer in TARGET_DEALERS:
+        deal_d = _safe_filter(data['deal'], dealer)
+        otc_d = _safe_filter(data['otc'], dealer)
+        wip_closed_d = _safe_filter(data['wip'], dealer)
+        wip_closed_d = wip_closed_d[wip_closed_d['is_closed']] if not wip_closed_d.empty else wip_closed_d
+
+        revenue = (
+            (deal_d['retail_price'].sum() if not deal_d.empty else 0.0)
+            + (otc_d['retail_price'].sum() if not otc_d.empty else 0.0)
+            + (wip_closed_d['estimated_value'].sum() if not wip_closed_d.empty else 0.0)
+        )
+        gp = (
+            (deal_d['net_retained_profit'].sum() if not deal_d.empty else 0.0)
+            + (otc_d['net_profit'].sum() if not otc_d.empty else 0.0)
+        )
+        units = len(deal_d)
+        rows.append({
+            "Dealership": dealer,
+            "Revenue": revenue,
+            "Gross Profit": gp,
+            "GP %": (gp / revenue * 100) if revenue else 0.0,
+            "Units Sold": units,
+        })
+
+    df = pd.DataFrame(rows).sort_values("Revenue", ascending=False)
+    df["Revenue"] = df["Revenue"].apply(lambda v: fmt_currency(v, 0))
+    df["Gross Profit"] = df["Gross Profit"].apply(lambda v: fmt_currency(v, 0))
+    df["GP %"] = df["GP %"].apply(lambda v: f"{v:.1f}%")
+    return df
+
+
+@_dialog_decorator("🔍 Key Metrics — Branch Breakdown")
+def _dialog_key_metrics(data):
+    st.dataframe(_branch_key_metrics_table(data), hide_index=True, use_container_width=True)
+
+
 def _render_key_metrics_and_idea_board(data):
     col_metrics, col_idea = st.columns([2, 1])
 
@@ -267,10 +354,20 @@ def _render_key_metrics_and_idea_board(data):
 
         m1, m2 = st.columns(2)
         m1.metric("Total Revenue", fmt_currency(total_revenue, 0))
+        if m1.button("🔍 Inspect", key="drill_revenue", use_container_width=True):
+            _dialog_key_metrics(data)
         m2.metric("Gross Profit", fmt_currency(gross_profit, 0))
+        if m2.button("🔍 Inspect", key="drill_gp", use_container_width=True):
+            _dialog_key_metrics(data)
+
         m3, m4 = st.columns(2)
         m3.metric("Gross Profit %", f"{gp_pct:.1f}%")
+        if m3.button("🔍 Inspect", key="drill_gp_pct", use_container_width=True):
+            _dialog_key_metrics(data)
         m4.metric("Units Sold", f"{units_sold}")
+        if m4.button("🔍 Inspect", key="drill_units", use_container_width=True):
+            _dialog_key_metrics(data)
+
         m5, m6 = st.columns(2)
         m5.metric("RO Margin", "N/A", help="No backing column in this schema — placeholder.")
         m6.metric("CSI Score", "N/A", help="No backing column in this schema — placeholder.")
@@ -343,6 +440,75 @@ def _stock_ageing_donut_fig(stock_df):
     return fig
 
 
+@_dialog_decorator("⛽ DOC Ratio — Branch Breakdown")
+def _dialog_doc_ratio(data):
+    rows = []
+    for dealer in TARGET_DEALERS:
+        deal_d = _safe_filter(data['deal'], dealer)
+        otc_d = _safe_filter(data['otc'], dealer)
+        doc_d = _safe_filter(data['doc'], dealer)
+        branch_profit = (
+            (deal_d['net_retained_profit'].sum() if not deal_d.empty else 0.0)
+            + (otc_d['net_profit'].sum() if not otc_d.empty else 0.0)
+        )
+        doc_total = doc_d['amount'].sum() if not doc_d.empty else 0.0
+        rows.append({
+            "Dealership": dealer,
+            "DOC Total": doc_total,
+            "Branch Profit": branch_profit,
+            "DOC %": (doc_total / branch_profit * 100) if branch_profit else 0.0,
+        })
+    df = pd.DataFrame(rows).sort_values("DOC %", ascending=False)
+    df["DOC Total"] = df["DOC Total"].apply(lambda v: fmt_currency(v, 0))
+    df["Branch Profit"] = df["Branch Profit"].apply(lambda v: fmt_currency(v, 0))
+    df["DOC %"] = df["DOC %"].apply(lambda v: f"{v:.1f}%")
+    st.dataframe(df, hide_index=True, use_container_width=True)
+
+
+@_dialog_decorator("📦 Stock Ageing — Branch Breakdown")
+def _dialog_stock_ageing(stock_df):
+    bucket_order = ["0-30", "31-60", "61-90", "91-120", "120+"]
+
+    def bucket(d):
+        if d <= 30: return bucket_order[0]
+        if d <= 60: return bucket_order[1]
+        if d <= 90: return bucket_order[2]
+        if d <= 120: return bucket_order[3]
+        return bucket_order[4]
+
+    if stock_df.empty or 'Dealership' not in stock_df.columns:
+        st.info("No stock data to display.")
+        return
+    scoped = stock_df.copy()
+    scoped['Age Bucket'] = scoped['days_in_stock'].apply(bucket)
+    pivot = pd.crosstab(scoped['Dealership'], scoped['Age Bucket']).reindex(
+        index=TARGET_DEALERS, columns=bucket_order, fill_value=0
+    )
+    pivot['Total Units'] = pivot.sum(axis=1)
+    st.dataframe(pivot.reset_index().sort_values("Total Units", ascending=False), hide_index=True, use_container_width=True)
+
+
+@_dialog_decorator("🛠️ Daily WIP — Branch Breakdown")
+def _dialog_daily_wip(data):
+    wip = data['wip']
+    rows = []
+    for dealer in TARGET_DEALERS:
+        d_wip = _safe_filter(wip, dealer)
+        d_open = d_wip[~d_wip['is_closed']] if not d_wip.empty else d_wip
+        n_open = len(d_open)
+        v_open = d_open['estimated_value'].sum() if not d_open.empty else 0.0
+        rows.append({
+            "Dealership": dealer,
+            "Open ROs": n_open,
+            "Total WIP Value": v_open,
+            "Avg per RO": (v_open / n_open) if n_open else 0.0,
+        })
+    df = pd.DataFrame(rows).sort_values("Total WIP Value", ascending=False)
+    df["Total WIP Value"] = df["Total WIP Value"].apply(lambda v: fmt_currency(v, 0))
+    df["Avg per RO"] = df["Avg per RO"].apply(lambda v: fmt_currency(v, 0))
+    st.dataframe(df, hide_index=True, use_container_width=True)
+
+
 def _render_doc_stock_wip_row(data, presentation_mode):
     c1, c2, c3 = st.columns(3)
 
@@ -356,10 +522,14 @@ def _render_doc_stock_wip_row(data, presentation_mode):
         doc_pct = (doc_total / branch_profit * 100) if branch_profit else 0.0
         st.plotly_chart(_doc_gauge_fig(doc_pct), use_container_width=True)
         st.caption("Target < 65% of gross profit")
+        if st.button("🔍 Inspect", key="drill_doc_ratio", use_container_width=True):
+            _dialog_doc_ratio(data)
 
     with c2:
         st.markdown("##### 📦 STOCK AGEING (UNITS)")
         st.plotly_chart(_stock_ageing_donut_fig(data['stock']), use_container_width=True)
+        if st.button("🔍 Inspect", key="drill_stock_ageing", use_container_width=True):
+            _dialog_stock_ageing(data['stock'])
 
     with c3:
         st.markdown("##### 🛠️ DAILY WIP")
@@ -384,6 +554,8 @@ def _render_doc_stock_wip_row(data, presentation_mode):
             st.metric("ROs Closed Today", f"{demo_data.ROS_CLOSED_TODAY}")
         else:
             st.metric("ROs Closed Today", "N/A", help="No closed_at timestamp tracked in this schema — placeholder.")
+        if st.button("🔍 Inspect", key="drill_wip", use_container_width=True):
+            _dialog_daily_wip(data)
 
 
 # ====================================================================
