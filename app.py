@@ -43,21 +43,25 @@ if st.session_state.get('presentation_mode'):
 if not st.session_state['authenticated']:
     auth_view.render(supabase)
 else:
-    # Lightweight session invalidation check — boots a user out mid-session if HR
-    # deactivates them, a Super User forces a logout, or revokes the account outright.
+    # =========================================================
+    # FORCE LOGOUT POLLER — Streamlit can't push to clients, so the only
+    # way to actually eject a user is to re-check their DB row on their
+    # very next interaction. Reset the force_logout flag BEFORE clearing
+    # the session (so a flaky rerun can't trap them in a loop), then
+    # obliterate session_state completely -- not a partial reset -- so
+    # no stale role/department/location data can leak forward.
+    # =========================================================
     try:
-        active_check = supabase.table("users").select("is_active, force_logout, is_revoked").eq("username", st.session_state.get('user')).execute().data
-        if active_check:
-            row = active_check[0]
-            if row.get('is_active') is False or row.get('is_revoked') is True:
-                st.session_state.update({'authenticated': False, 'role': None, 'page_view': 'dashboard'})
+        current_username = st.session_state.get('user')
+        db_user_record = supabase.table("users").select("is_active, force_logout, is_revoked").eq("username", current_username).execute().data
+        if db_user_record:
+            row = db_user_record[0]
+            if row.get('is_revoked') is True or row.get('is_active') is False:
+                st.session_state.clear()
                 safe_rerun()
             elif row.get('force_logout') is True:
-                try:
-                    supabase.table("users").update({"force_logout": False}).eq("username", st.session_state.get('user')).execute()
-                except Exception:
-                    pass
-                st.session_state.update({'authenticated': False, 'role': None, 'page_view': 'dashboard'})
+                supabase.table("users").update({"force_logout": False}).eq("username", current_username).execute()
+                st.session_state.clear()
                 safe_rerun()
     except Exception:
         pass
@@ -72,7 +76,7 @@ else:
         if st.button("⚙️ SETTINGS"): st.session_state['page_view'] = 'settings'; safe_rerun()
     with h3:
         if st.button("🚪 LOGOUT"):
-            st.session_state.update({'authenticated': False, 'role': None, 'page_view': 'dashboard'})
+            st.session_state.clear()
             safe_rerun()
 
     st.markdown("---")
@@ -86,25 +90,42 @@ else:
 
     else:
         # =========================================================
-        # RBAC: strict, exact match against the confirmed Supabase role
-        # values ('role'/'role_id' both store SUPER_USER literally for
-        # elevated accounts). No fuzzy fallbacks, no username overrides --
-        # those were COMMAND 32/33 deployment-diagnostic scaffolding, now
-        # removed since the live app is confirmed to be running this code.
+        # STRICT RBAC ROUTING MATRIX — exact, exclusive role membership.
+        # No fuzzy fallbacks, no username overrides (those were COMMAND
+        # 32/33 diagnostic scaffolding, already removed). Every nav option
+        # below is opt-in: a role not listed for a given option simply
+        # never sees that button/link.
         # =========================================================
-        current_role = str(st.session_state.get('role', '')).upper()
-        is_elevated = current_role in ['SUPER_USER', 'DIRECTOR']
+        current_role = role  # already computed above via get_role()
+
+        LEADERSHIP_ROLES = ['SUPER_USER', 'DIRECTOR', 'DEALER_PRINCIPAL']
+        SALES_ROLES = ['SALES_REP', 'SALES_MANAGER']
+
+        # "God Mode" (Telemetry / Admin Users / Admin Properties / Admin
+        # console page) is exclusive to SUPER_USER -- Directors and Dealer
+        # Principals get the Command Center, not the SOC admin tools.
+        is_god_mode = current_role == 'SUPER_USER'
+        can_see_command_center = current_role in LEADERSHIP_ROLES
+        can_see_crm = current_role in LEADERSHIP_ROLES or current_role in SALES_ROLES
+        can_see_property_portfolio = current_role in LEADERSHIP_ROLES or current_role == 'PROPERTY_MANAGER'
 
         selected_div = selected_dept = None
 
         with st.sidebar:
-            # ---- 1. STANDARD USER NAVIGATION (every authenticated user) ----
+            # ---- 1. STANDARD USER NAVIGATION (role-filtered) ----
+            # "Dealership Operations" is the universal departmental silo --
+            # it dispatches internally (views/dealership_view.py) by
+            # department_id to Service/Parts, HR, or Sales/Finance/Admin,
+            # so every role always has at least this one option.
             st.markdown("### 👑 WORKSPACE")
-            nav_options = [
-                "📊 Executive Command Center", "🎯 CRM Pipeline",
-                "🏢 Dealership Operations", "🏗️ Property Portfolio",
-            ]
-            if is_elevated:
+            nav_options = ["🏢 Dealership Operations"]
+            if can_see_command_center:
+                nav_options.insert(0, "📊 Executive Command Center")
+            if can_see_crm:
+                nav_options.append("🎯 CRM Pipeline")
+            if can_see_property_portfolio:
+                nav_options.append("🏗️ Property Portfolio")
+            if is_god_mode:
                 nav_options.append("👑 Admin / God Mode")
             nav_mode = st.radio("Select View:", nav_options, label_visibility="collapsed")
 
@@ -160,8 +181,9 @@ else:
                     st.session_state['department_id'] = new_dept_id
                     safe_rerun()
 
-            # ---- 2. GOD MODE | SOC (SUPER_USER / DIRECTOR only) ----
-            if is_elevated:
+            # ---- 2. GOD MODE | SOC (SUPER_USER exclusive -- not Directors,
+            # not Dealer Principals, not Property Managers) ----
+            if is_god_mode:
                 st.markdown("---")
                 st.subheader("👑 GOD MODE | SOC")
                 if st.button("🔐 Admin Users", use_container_width=True, key="god_mode_users_btn"):
@@ -181,12 +203,12 @@ else:
             # ---- 3. LOGOUT (always the absolute bottom) ----
             st.markdown("---")
             if st.button("🚪 LOGOUT", use_container_width=True, key="god_mode_sidebar_logout_btn"):
-                st.session_state.update({'authenticated': False, 'role': None, 'page_view': 'dashboard'})
+                st.session_state.clear()
                 safe_rerun()
 
         # Direct one-click jumps from the GOD MODE | SOC block bypass the
         # nav_mode radio entirely and render the target admin view straight away.
-        direct_admin_view = st.session_state.pop('_direct_admin_view', None) if is_elevated else None
+        direct_admin_view = st.session_state.pop('_direct_admin_view', None) if is_god_mode else None
         if direct_admin_view == 'users':
             if st.button("⬅️ BACK TO WORKSPACE", key="god_mode_back_from_users"): safe_rerun()
             admin_users.render(supabase)
@@ -196,17 +218,20 @@ else:
         elif direct_admin_view == 'properties':
             if st.button("⬅️ BACK TO WORKSPACE", key="god_mode_back_from_properties"): safe_rerun()
             admin_properties.render(supabase, container_bg, text_color, theme)
-        # Route to the selected view
-        elif nav_mode == "📊 Executive Command Center":
+        # Route to the selected view -- every branch here is reachable only
+        # if its nav_mode option was actually added to nav_options above,
+        # so this elif chain can't be tricked into rendering an
+        # unauthorized view via a stale/forged nav_mode value.
+        elif nav_mode == "📊 Executive Command Center" and can_see_command_center:
             command_center.render(supabase)
-        elif nav_mode == "🎯 CRM Pipeline":
+        elif nav_mode == "🎯 CRM Pipeline" and can_see_crm:
             render_crm(supabase)
-        elif nav_mode == "🏗️ Property Portfolio":
+        elif nav_mode == "🏗️ Property Portfolio" and can_see_property_portfolio:
             if role == 'PROPERTY_MANAGER':
                 property_view.render(supabase, container_bg, text_color, theme)
             else:
                 director_view.render(supabase, container_bg, text_color, metric_label, theme)
-        elif is_elevated and nav_mode == "👑 Admin / God Mode":
+        elif is_god_mode and nav_mode == "👑 Admin / God Mode":
             admin_console.render(supabase, container_bg, text_color, theme)
         elif nav_mode == "🏢 Dealership Operations":
             st.markdown(f"**CURRENT ACTIVE NODE:** `{selected_div[4:].upper()}` — `{selected_dept[2:].upper()}`")
