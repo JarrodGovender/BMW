@@ -86,15 +86,34 @@ else:
 
     else:
         # =========================================================
-        # NAVIGATION FOR SUPER USERS (GOD MODE SIDEBAR)
-        # HARD FIX: explicit, hardcoded role check on the literal session key
-        # ('role') instead of going through the is_super_user() abstraction --
-        # the previous refactor's God Mode sidebar silently failed to render
-        # and the indirection made that hard to see at a glance.
+        # 🔍 TEMPORARY DEBUG: SESSION STATE X-RAY (COMMAND 32)
+        # Dumps the raw session_state so we can see, on screen, exactly
+        # what key names/values exist instead of guessing blind. Remove
+        # this block once the God Mode visibility issue is confirmed fixed.
         # =========================================================
-        current_role = str(st.session_state.get('role', '')).upper()
+        st.sidebar.markdown("---")
+        st.sidebar.caption("🔍 DEBUG: SESSION STATE X-RAY")
+        st.sidebar.write(st.session_state)
+        st.sidebar.markdown("---")
 
-        if current_role in ['SUPER_USER', 'DIRECTOR', 'PROPERTY_MANAGER']:
+        # =========================================================
+        # NAVIGATION FOR SUPER USERS (GOD MODE SIDEBAR)
+        # SKELETON KEY: extremely forgiving role/user matching. Checks the
+        # real session key ('role'/'user', set in views/auth_view.py) first,
+        # then falls back to every other plausible key name/casing, plus a
+        # direct admin-email override as a last resort.
+        # =========================================================
+        current_role = str(st.session_state.get('role', st.session_state.get('user_role', ''))).upper()
+        current_user = str(st.session_state.get(
+            'user', st.session_state.get('username', st.session_state.get('email', ''))
+        )).lower()
+
+        is_super_user = current_role in ['SUPER_USER', 'SUPER USER', 'DIRECTOR', 'PROPERTY_MANAGER']
+        # Confirmed login username (views/auth_view.py lowercases the
+        # Username field on login, so the session value is always 'jarrod').
+        is_admin_email = current_user == 'jarrod'
+
+        if is_super_user or is_admin_email:
             with st.sidebar:
                 # Explicit override for Super Users -- always the first thing
                 # rendered in the sidebar, directly above everything else.
