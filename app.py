@@ -15,6 +15,23 @@ from views.route_d_crm import render_crm
 st.set_page_config(page_title="Phase V Enterprise Hub", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css()
 
+# ====================================================================
+# 👑 GOD MODE — UNCONDITIONAL TEST INJECTION (COMMAND 33)
+# Zero role/session/auth checks. Renders before the router even decides
+# whether the user is logged in. If this block is not visible after a
+# hard refresh of the live URL, the code is not the problem -- the
+# deployed app is not running this commit (stale build / wrong branch /
+# crashed on a previous deploy). Remove once that's confirmed either way.
+# ====================================================================
+st.sidebar.markdown("---")
+st.sidebar.error("👑 GOD MODE (UNCONDITIONAL)")
+st.sidebar.write("SESSION STATE X-RAY:")
+st.sidebar.write(dict(st.session_state))
+st.sidebar.button("Admin: Telemetry", key="cmd33_unconditional_telemetry")
+st.sidebar.button("Admin: Users", key="cmd33_unconditional_users")
+st.sidebar.button("Admin: Properties", key="cmd33_unconditional_properties")
+st.sidebar.markdown("---")
+
 # Initialize Environment & Database
 text_color, container_bg, metric_label, border_color, theme = apply_theme()
 
